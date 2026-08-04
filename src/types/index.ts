@@ -270,9 +270,13 @@ export interface ChatResponse {
 }
 
 export interface LLMAdapter {
+  /** 当前使用的模型名 */
+  readonly model: string;
+  /** 当前使用的 Provider 标识 */
+  readonly provider: LLMProvider;
   chat(params: ChatParams): Promise<ChatResponse>;
   streamChat(params: StreamChatParams): Promise<void>;
-  embedding(text: string): Promise<Float32Array>;
+  embedding(text: string, model?: string): Promise<Float32Array>;
 }
 
 // ============ 记忆装配 ============

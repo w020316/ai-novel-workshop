@@ -5,6 +5,7 @@
 import { vi } from 'vitest';
 import type {
   LLMAdapter,
+  LLMProvider,
   ChatParams,
   StreamChatParams,
   ChatResponse,
@@ -39,6 +40,8 @@ const mockNovelText = `夜色沉沉，青石板长街在月色下泛着冷光。
 他知道，今夜之后，他要么踏着这些人的尸骨走出长街，要么，就永远留在这里。`;
 
 export const mockLLMAdapter: LLMAdapter = {
+  model: 'mock-model',
+  provider: 'deepseek' as LLMProvider,
   async chat({ messages }: ChatParams): Promise<ChatResponse> {
     const systemPrompt = messages[0]?.content ?? '';
     let content = '';
@@ -122,6 +125,7 @@ export function createScriptedLLMAdapter(responses: {
 // 构造会抛错的 LLM mock（用于测试重试逻辑）
 export function createFailingLLMAdapter(error: Error): LLMAdapter {
   return {
+    ...mockLLMAdapter,
     chat: vi.fn(async () => {
       throw error;
     }) as LLMAdapter['chat'],
@@ -138,6 +142,7 @@ export function createFailingLLMAdapter(error: Error): LLMAdapter {
 export function createFlakyLLMAdapter(failCount: number): LLMAdapter {
   let count = 0;
   return {
+    ...mockLLMAdapter,
     chat: vi.fn(async (params: ChatParams) => {
       count++;
       if (count <= failCount) {

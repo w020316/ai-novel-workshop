@@ -6,8 +6,7 @@ import Link from 'next/link';
 import { useProjectStore } from '@/lib/store/project-store';
 import { getProjectStats } from '@/lib/db/queries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { PenLine, Settings, Download, BookOpen } from 'lucide-react';
+import { PenLine, Settings, Download } from 'lucide-react';
 import { formatTime } from '@/lib/utils';
 
 export default function ProjectOverviewPage() {

@@ -13,6 +13,8 @@ import type {
   ChapterSummary,
   ConsistencyReport,
   LLMConfig,
+  StylePreset,
+  GenreTemplate,
 } from '@/types';
 
 // ============ 项目 ============
@@ -222,4 +224,52 @@ export async function updateProjectLLMConfig(
   config: LLMConfig
 ): Promise<void> {
   await updateProject(projectId, { llmConfig: config });
+}
+
+// ============ 文风预设 ============
+export async function listStylePresets(
+  includeProjectCustom = true
+): Promise<StylePreset[]> {
+  const all = await db.stylePresets.toArray();
+  if (!includeProjectCustom) {
+    return all.filter((s) => !s.id.startsWith('style-proj-'));
+  }
+  return all.sort((a, b) => {
+    // 项目专属排在前面
+    const aProj = a.id.startsWith('style-proj-') ? 0 : 1;
+    const bProj = b.id.startsWith('style-proj-') ? 0 : 1;
+    if (aProj !== bProj) return aProj - bProj;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+export async function getStylePreset(id: string): Promise<StylePreset | undefined> {
+  return db.stylePresets.get(id);
+}
+
+export async function getProjectStylePreset(
+  projectId: string
+): Promise<StylePreset | undefined> {
+  return db.stylePresets.get(`style-proj-${projectId}`);
+}
+
+export async function saveStylePreset(preset: StylePreset): Promise<void> {
+  await db.stylePresets.put(preset);
+}
+
+export async function deleteStylePreset(id: string): Promise<void> {
+  if (id.startsWith('style-preset-')) {
+    // 全局预设不可删除
+    throw new Error('全局预设不可删除');
+  }
+  await db.stylePresets.delete(id);
+}
+
+// ============ 题材模板 ============
+export async function listGenreTemplates(): Promise<GenreTemplate[]> {
+  return db.genreTemplates.toArray();
+}
+
+export async function getGenreTemplate(genre: string): Promise<GenreTemplate | undefined> {
+  return db.genreTemplates.where('genre').equals(genre).first();
 }

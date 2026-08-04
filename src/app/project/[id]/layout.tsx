@@ -7,15 +7,13 @@ import { DatabaseInitializer } from '@/components/providers';
 import { ProjectNav } from '@/components/project/project-nav';
 import { useProjectStore } from '@/lib/store/project-store';
 import { getProject } from '@/lib/db/queries';
-import { getProjectStats } from '@/lib/db/queries';
-import { ChevronLeft } from 'lucide-react';
-import { Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import type { NovelProject } from '@/types';
 
 export default function ProjectLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
-  const { setCurrentProject, currentProject } = useProjectStore();
+  const { setCurrentProject } = useProjectStore();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [project, setProject] = useState<NovelProject | null>(null);

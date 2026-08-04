@@ -9,7 +9,6 @@ import { EmptyState } from '@/components/project/empty-state';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { NovelProject } from '@/types';
 
 interface ProjectStatsMap {
   [projectId: string]: { totalWords: number; totalChapters: number; completedChapters: number };

@@ -8,7 +8,6 @@ import type {
   ChatParams,
   StreamChatParams,
   ChatResponse,
-  ChatMessage,
   SceneDesign,
   ConsistencyReport,
 } from '@/types';

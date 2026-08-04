@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { Toaster } from '@/components/providers';
+import { Toaster } from '@/components/toaster';
 
 export const metadata: Metadata = {
   title: 'AI 小说制作工坊',

@@ -15,6 +15,7 @@ import type {
   LLMConfig,
   StylePreset,
   GenreTemplate,
+  PlotThread,
 } from '@/types';
 
 // ============ 项目 ============
@@ -174,6 +175,15 @@ export async function markChapterNeedsRecheck(projectId: string): Promise<number
     await db.chapters.update(ch.id, { needsRecheck: true });
   }
   return chapters.length;
+}
+
+// ============ 支线剧情 ============
+export async function listPlotThreads(projectId: string): Promise<PlotThread[]> {
+  return db.plotThreads.where('projectId').equals(projectId).toArray();
+}
+
+export async function savePlotThread(t: PlotThread): Promise<void> {
+  await db.plotThreads.put(t);
 }
 
 // ============ 章节摘要（中期记忆） ============

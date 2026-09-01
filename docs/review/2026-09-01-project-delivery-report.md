@@ -251,7 +251,7 @@
 | 产品设计规格 | ✅ | `docs/specs/2026-08-04-ai-novel-workshop-design.md` |
 | 实施计划 | ✅ | `docs/plans/2026-08-04-implementation-plan.md` |
 | 设计系统规范 | ✅ | `docs/design/2026-09-01-design-system.md` |
-| 开源项目对比调研 | ✅ | `docs/research/2026-09-01-similar-projects-research.md` |
+| 开源项目对比调研 | ✅ | `docs/research/2026-09-01-similar-projects-research.md`（GitHub 5 项目 + 短视频/头条生态补充） |
 | UX 体验评估报告 | ✅ | `docs/ux/2026-09-01-ux-evaluation.md` |
 | 用户手册 / FAQ | ✅ | `docs/user-manual.md` |
 | 交付报告 | ✅ | 本文档 |

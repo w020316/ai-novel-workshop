@@ -8,11 +8,11 @@
 // 路径：POST /api/llm/generate-chapter
 // 响应格式：SSE (text/event-stream)
 // ============================================================================
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
 import { getDefaultProvider } from '@/lib/llm/providers';
-import { withRetry } from '@/lib/llm/retry';
 import { LLMApiError } from '@/lib/llm/openai-compatible';
+import { enforceRateLimit } from '@/lib/api/rate-limit';
 import type { ChatMessage, LLMProvider } from '@/types';
 
 export const runtime = 'nodejs';
@@ -35,7 +35,11 @@ function safeParseProvider(value: unknown): LLMProvider | undefined {
   return undefined;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // 0. 限流保护（防配额滥用）
+  const rateLimited = enforceRateLimit(request);
+  if (rateLimited) return rateLimited;
+
   // 1. 解析请求体
   let body: GenerateChapterBody;
   try {

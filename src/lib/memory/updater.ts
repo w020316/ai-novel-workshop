@@ -18,6 +18,10 @@ import {
   savePlotThread,
 } from '@/lib/db/queries';
 import { getDefaultEmbedder } from './embedding';
+import { truncateAtSentence } from '@/lib/utils';
+
+/** 章节摘要最大字符数（防止 AI 生成的超长摘要耗尽后续 token 预算） */
+const SUMMARY_MAX_CHARS = 300;
 
 /**
  * 章节完成后更新记忆库
@@ -54,7 +58,9 @@ export async function generateChapterSummary(
   chapter: Chapter,
   summaryText?: string
 ): Promise<ChapterSummary> {
-  const summary = summaryText ?? chapter.content.slice(0, 200);
+  const rawSummary = summaryText ?? chapter.content.slice(0, SUMMARY_MAX_CHARS);
+  // 压缩：超出上限时在句子边界截断，避免超长摘要侵占后续记忆预算
+  const summary = truncateAtSentence(rawSummary, SUMMARY_MAX_CHARS);
 
   // 尝试计算 Embedding
   let embedding: Float32Array;

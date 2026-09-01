@@ -9,10 +9,12 @@
 // 路径：POST /api/llm/embedding
 // 说明：transformers.js 本地计算失败或需特定 Provider 模型时降级使用
 // ============================================================================
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
 import { getDefaultProvider } from '@/lib/llm/providers';
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
+import { enforceRateLimit } from '@/lib/api/rate-limit';
+import { estimateTokens } from '@/lib/utils';
 import type { LLMProvider } from '@/types';
 
 export const runtime = 'nodejs';
@@ -36,7 +38,11 @@ function safeParseProvider(value: unknown): LLMProvider | undefined {
   return undefined;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // 0. 限流保护（防配额滥用）
+  const rateLimited = enforceRateLimit(request);
+  if (rateLimited) return rateLimited;
+
   // 1. 解析请求体
   let body: EmbeddingRequestBody;
   try {
@@ -97,7 +103,7 @@ export async function POST(request: Request) {
     for (const t of texts) {
       const vec = await adapter.embedding(t, body.model);
       vectors.push(Array.from(vec));
-      totalPromptTokens += Math.ceil(t.length / 4); // 近似估算
+      totalPromptTokens += estimateTokens(t); // 统一 token 估算口径
     }
 
     return NextResponse.json({

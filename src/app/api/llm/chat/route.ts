@@ -8,10 +8,11 @@
 // 4. 返回 content + usage
 // 路径：POST /api/llm/chat
 // ============================================================================
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
 import { getDefaultProvider } from '@/lib/llm/providers';
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
+import { enforceRateLimit } from '@/lib/api/rate-limit';
 import type { ChatMessage, LLMProvider } from '@/types';
 
 export const runtime = 'nodejs';
@@ -34,7 +35,11 @@ function safeParseProvider(value: unknown): LLMProvider | undefined {
   return undefined;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // 0. 限流保护（防配额滥用）
+  const rateLimited = enforceRateLimit(request);
+  if (rateLimited) return rateLimited;
+
   // 1. 解析请求体
   let body: ChatRequestBody;
   try {

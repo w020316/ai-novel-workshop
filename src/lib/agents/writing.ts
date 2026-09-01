@@ -113,7 +113,6 @@ export async function writeChapter(
   await streamChapter(
     { messages, signal: context.signal },
     {
-      onStream: undefined,
       onToken: (token: string) => {
         fullContent += token;
         context.onStream(token);

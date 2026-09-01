@@ -6,7 +6,7 @@
 // 2. Token 预算控制（压缩策略）
 // 3. 生成 Prompt 用的记忆文本
 // ============================================================================
-import { truncateAtSentence } from '@/lib/utils';
+import { estimateTokens, truncateAtSentence } from '@/lib/utils';
 import type { AssembledMemory, LongTermMemory, MidTermMemory, ShortTermMemory } from '@/types';
 
 /** 默认 Token 预算 */
@@ -303,8 +303,5 @@ export function memoryToPrompt(memory: AssembledMemory): string {
   return parts.join('\n');
 }
 
-function estimateStringTokens(text: string): number {
-  const chineseChars = (text.match(/[\u4e00-\u9fff]/g) ?? []).length;
-  const otherChars = text.length - chineseChars;
-  return Math.ceil(chineseChars * 1.5 + otherChars * 0.25);
-}
+/** 沿用全局统一的 token 估算口径（utils.estimateTokens） */
+const estimateStringTokens = estimateTokens;

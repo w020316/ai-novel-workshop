@@ -109,7 +109,10 @@ describe('assembleMemory', () => {
     expect(prompt).toContain('【世界观设定】');
     expect(prompt).toContain('世界架构');
     expect(prompt).toContain('【人物档案】');
-    expect(prompt).toContain('【大纲】');
+    // 大纲注入为主线锚点，包含主线程 / 高潮 / 结局归宿
+    expect(prompt).toContain('【主线锚点');
+    expect(prompt).toContain('主线程：主线剧情');
+    expect(prompt).toContain('结局归宿：结局');
     expect(prompt).toContain('【待回收伏笔】');
     expect(prompt).toContain('【文风要求】');
     expect(prompt).toContain('【相关章节回顾】');

@@ -201,8 +201,18 @@ function getShortTermFromStore(): ShortTermMemory {
 /**
  * 将记忆装配为 Prompt 文本
  * 供多智能体使用
+ *
+ * @param memory - 装配好的三级记忆
+ * @param opts - 可选：chapterNo 用于聚焦当前卷（主线锚点注入）；anchorMode 为 true 时要求必须输出主线锚点
  */
-export function memoryToPrompt(memory: AssembledMemory): string {
+export interface MemoryPromptOptions {
+  chapterNo?: number;
+}
+
+export function memoryToPrompt(
+  memory: AssembledMemory,
+  opts?: MemoryPromptOptions
+): string {
   const parts: string[] = [];
 
   // ===== 世界观 =====
@@ -238,10 +248,33 @@ export function memoryToPrompt(memory: AssembledMemory): string {
     parts.push('');
   }
 
-  // ===== 大纲 =====
+  // ===== 大纲（主线锚点 · 强制注入） =====
   if (memory.longTerm.outline) {
-    parts.push('【大纲】');
-    parts.push(memory.longTerm.outline.mainPlotline);
+    const outline = memory.longTerm.outline;
+    parts.push('【主线锚点（务必严格遵守，禁止偏离主线）】');
+    if (outline.mainPlotline) parts.push(`主线程：${outline.mainPlotline}`);
+    if (outline.climaxNodes?.length) {
+      parts.push(`关键高潮节点：${outline.climaxNodes.join(' → ')}`);
+    }
+    if (outline.ending) parts.push(`结局归宿：${outline.ending}`);
+
+    // 当前卷定位：本章应推进的目标/冲突
+    const curNo = opts?.chapterNo;
+    let activeVolume = outline.volumes.find((v) => {
+      if (curNo == null) return false;
+      const [lo, hi] = v.chapterRange;
+      return curNo >= lo && curNo <= hi;
+    });
+    if (!activeVolume && outline.volumes.length > 0) {
+      activeVolume = outline.volumes[0];
+    }
+    if (activeVolume) {
+      parts.push('');
+      parts.push('【当前创作进度定位】');
+      if (activeVolume.title) parts.push(`本卷：第${activeVolume.volumeNo}卷《${activeVolume.title}》${activeVolume.chapterRange ? `（章${activeVolume.chapterRange[0]}-${activeVolume.chapterRange[1]}）` : ''}`);
+      if (activeVolume.coreConflict) parts.push(`本卷核心冲突：${activeVolume.coreConflict}`);
+      if (activeVolume.summary) parts.push(`本卷剧情走向：${activeVolume.summary}`);
+    }
     parts.push('');
   }
 

@@ -31,7 +31,9 @@ const SYSTEM_PROMPT = `你是一位专业的网络小说剧情设计专家。你
 2. conflict 应明确且有张力
 3. highlight 应是本章最精彩的看点
 4. 伏笔铺设和回收要合理，保持剧情连贯性
-5. 出场人物要符合场景逻辑`;
+5. 出场人物要符合场景逻辑
+6. 始终服务并推进【主线锚点】中的主线程与结局归宿，严禁偏离主线、写跑题支线
+7. 本卷核心冲突必须是本章叙事的第一驱动力`;
 
 /**
  * 执行剧情设计
@@ -77,9 +79,9 @@ function buildPlotDesignPrompt(
 ): string {
   const parts: string[] = [];
 
-  // 记忆信息
+  // 记忆信息（带当前章号，注入主线锚点与当前卷定位）
   parts.push('【当前项目记忆】');
-  parts.push(memoryToPrompt(memory));
+  parts.push(memoryToPrompt(memory, { chapterNo: context.chapterNo }));
   parts.push('');
 
   // 剧情要点

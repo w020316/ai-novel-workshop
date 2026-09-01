@@ -21,10 +21,13 @@ import { useShortTermMemory } from '@/lib/store/short-term-memory';
 import { designPlot } from './plot-design';
 import { writeChapter } from './writing';
 import { checkConsistency, quickCheck } from './consistency';
+import { rewriteForConsistency } from './rewrite';
+import { generateChapterTitle } from '@/lib/llm/generators/chapter-title';
 import { updateMemoryAfterChapter } from '@/lib/memory/updater';
-import { saveChapter, getProject } from '@/lib/db/queries';
+import { saveChapter, getProject, getStylePreset } from '@/lib/db/queries';
 import { withRetry } from '@/lib/llm/retry';
 import { generateId } from '@/lib/utils';
+import type { StylePreset, ConsistencyReport } from '@/types';
 
 /**
  * 生成章节的完整流程
@@ -40,21 +43,34 @@ export async function generateChapter(
     context.onProgress('memory_assembling');
     const memory = await assembleMemoryWithFallback(context);
 
+    // 加载文风预设（剧情设计/创作/修正共用一次）
+    const stylePreset = await loadStylePreset(context.projectId);
+
     // ===== Stage 2: 剧情设计 =====
     context.onProgress('plot_designing');
     const sceneDesign = await designPlotWithRetry(context, memory);
 
+    // ===== 章节标题（LLM 生成，失败回退「第 N 章」）=====
+    const title = await resolveChapterTitle(context, sceneDesign);
+
     // ===== Stage 3: 文笔创作 =====
     context.onProgress('writing');
-    const content = await writeChapterWithRetry(sceneDesign, memory, context);
+    const content = await writeChapterWithRetry(sceneDesign, memory, context, stylePreset, title);
 
-    // ===== Stage 4: 一致性校验 =====
+    // ===== Stage 4: 一致性校验 + 修正闭环 =====
     context.onProgress('consistency_checking');
-    const chapter = await buildChapter(context, sceneDesign, content);
-    const consistencyReport = await checkConsistencyWithRetry(chapter, memory);
+    const { result, consistencyReport } = await consistencyAndRewriteLoop(
+      context,
+      sceneDesign,
+      content,
+      memory,
+      stylePreset,
+      title
+    );
 
     // ===== Stage 5: 记忆更新 =====
     context.onProgress('memory_updating');
+    const chapter = await buildChapter(context, sceneDesign, result.content, title);
     await updateMemoryAfterChapter(context.projectId, chapter);
 
     // ===== 保存章节 =====
@@ -63,7 +79,7 @@ export async function generateChapter(
     context.onProgress('completed');
 
     return {
-      content,
+      content: result.content,
       sceneDesign,
       consistencyReport,
       wordCount: chapter.wordCount,
@@ -72,6 +88,95 @@ export async function generateChapter(
     context.onProgress('failed');
     throw error;
   }
+}
+
+/**
+ * 加载项目文风预设（若配置）
+ */
+async function loadStylePreset(
+  projectId: string
+): Promise<StylePreset | null> {
+  const project = await getProject(projectId);
+  const stylePresetId = project?.stylePresetId;
+  if (!stylePresetId) return null;
+  try {
+    return (await getStylePreset(stylePresetId)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 生成章节标题（LLM 优先，失败/无效回退「第 N 章」）
+ */
+async function resolveChapterTitle(
+  context: GenerationContext,
+  sceneDesign: SceneDesign
+): Promise<string> {
+  try {
+    const title = await generateChapterTitle({
+      chapterNo: context.chapterNo,
+      plotPoints: context.plotPoints,
+      sceneDesign,
+    });
+    return title || `第${context.chapterNo}章`;
+  } catch {
+    return `第${context.chapterNo}章`;
+  }
+}
+
+/**
+ * 一致性校验 + 自动修正闭环
+ * 若存在 error 级问题，触发定向重写（最多 2 次），每次重写后重新校验；
+ * 重写失败或达到上限则采用当前稿与最新校验报告。
+ */
+async function consistencyAndRewriteLoop(
+  context: GenerationContext,
+  sceneDesign: SceneDesign,
+  content: string,
+  memory: AssembledMemory,
+  stylePreset: StylePreset | null,
+  title: string
+): Promise<{ result: { content: string }; consistencyReport: ConsistencyReport }> {
+  let current = content;
+  let chapter = await buildChapter(context, sceneDesign, current, title);
+  let report = await checkConsistencyWithRetry(chapter, memory);
+
+  const hasBlockingIssues = (r: ConsistencyReport) =>
+    !r.passed && r.issues.some((i) => i.severity === 'error');
+
+  let attempts = 0;
+  const MAX_REWRITES = 2;
+  while (hasBlockingIssues(report) && attempts < MAX_REWRITES) {
+    attempts++;
+    const stage: GenerationStage = attempts === 1 ? 'rewriting_1' : 'rewriting_2';
+    context.onProgress(stage);
+
+    const blockingIssues = report.issues.filter((i) => i.severity === 'error');
+    try {
+      const revised = await withRetry(
+        () =>
+          rewriteForConsistency({
+            content: current,
+            memory,
+            sceneDesign,
+            chapterNo: context.chapterNo,
+            title,
+            issues: blockingIssues,
+            stylePreset,
+          }),
+        { maxRetries: 1, baseDelayMs: 1000 }
+      );
+      current = revised;
+      chapter = await buildChapter(context, sceneDesign, current, title);
+      report = await checkConsistencyWithRetry(chapter, memory);
+    } catch (err) {
+      console.warn(`[Orchestrator] 一致性修正重写 #${attempts} 失败，沿用当前稿:`, err);
+      break;
+    }
+  }
+
+  return { result: { content: current }, consistencyReport: report };
 }
 
 /**
@@ -149,19 +254,12 @@ async function designPlotWithRetry(
 async function writeChapterWithRetry(
   sceneDesign: SceneDesign,
   memory: AssembledMemory,
-  context: GenerationContext
+  context: GenerationContext,
+  stylePreset: StylePreset | null,
+  title: string
 ): Promise<string> {
-  const project = await getProject(context.projectId);
-  const stylePresetId = project?.stylePresetId;
-
-  let stylePreset = null;
-  if (stylePresetId) {
-    const { getStylePreset } = await import('@/lib/db/queries');
-    stylePreset = await getStylePreset(stylePresetId);
-  }
-
   return withRetry(
-    () => writeChapter(sceneDesign, memory, context, stylePreset),
+    () => writeChapter(sceneDesign, memory, context, stylePreset, title),
     {
       maxRetries: 1,
       baseDelayMs: 2000,
@@ -206,7 +304,8 @@ async function checkConsistencyWithRetry(
 async function buildChapter(
   context: GenerationContext,
   sceneDesign: SceneDesign,
-  content: string
+  content: string,
+  title: string
 ): Promise<Chapter> {
   // 中文计数
   const chineseChars = (content.match(/[\u4e00-\u9fff]/g) ?? []).length;
@@ -216,7 +315,7 @@ async function buildChapter(
     projectId: context.projectId,
     volumeNo: 1, // 默认第一卷
     chapterNo: context.chapterNo,
-    title: `第${context.chapterNo}章`,
+    title: title || `第${context.chapterNo}章`,
     plotPoints: context.plotPoints,
     sceneDesign,
     content,

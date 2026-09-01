@@ -28,6 +28,14 @@ vi.mock('./writing', () => ({
   writeChapter: vi.fn().mockResolvedValue('生成的章节正文内容...'),
 }));
 
+vi.mock('@/lib/llm/generators/chapter-title', () => ({
+  generateChapterTitle: vi.fn().mockResolvedValue('灵犀一念'),
+}));
+
+vi.mock('./rewrite', () => ({
+  rewriteForConsistency: vi.fn().mockResolvedValue('修正后的章节正文内容...'),
+}));
+
 vi.mock('./consistency', () => ({
   checkConsistency: vi.fn().mockResolvedValue({
     chapterId: 'mock-ch',
@@ -172,6 +180,73 @@ describe('generateChapter', () => {
     const result = await generateChapter(context);
     expect(vi.mocked(consistency.quickCheck)).toHaveBeenCalled();
     expect(result.consistencyReport.passed).toBe(false);
+    warnSpy.mockRestore();
+  });
+
+  it('存在 error 级问题时触发一致性修正重写，二次校验通过后采用修正稿', async () => {
+    const consistency = await import('./consistency');
+    const invoke = vi.mocked(consistency.checkConsistency);
+    invoke
+      .mockResolvedValueOnce({
+        chapterId: 'mock-ch',
+        passed: false,
+        issues: [{ type: 'worldview', severity: 'error', description: '力量体系矛盾', suggestion: '修正' }],
+        checkedAt: Date.now(),
+      })
+      .mockResolvedValueOnce({
+        chapterId: 'mock-ch',
+        passed: true,
+        issues: [],
+        checkedAt: Date.now(),
+      });
+
+    const { rewriteForConsistency } = await import('./rewrite');
+    const expectTitle = expect.any(String);
+    vi.mocked(rewriteForConsistency).mockResolvedValue('修正后的章节正文内容...');
+
+    const context = {
+      projectId: 'proj-1',
+      chapterNo: 1,
+      plotPoints: ['测试要点'],
+      onStream: vi.fn(),
+      onProgress: vi.fn(),
+    };
+
+    const result = await generateChapter(context);
+    expect(rewriteForConsistency).toHaveBeenCalledTimes(1);
+    expect(rewriteForConsistency).toHaveBeenCalledWith(
+      expect.objectContaining({ issues: [{ type: 'worldview', severity: 'error', description: '力量体系矛盾', suggestion: '修正' }] })
+    );
+    // 修正稿被采用
+    expect(result.content).toBe('修正后的章节正文内容...');
+    const stages = context.onProgress.mock.calls.map((c) => c[0]);
+    expect(stages).toContain('rewriting_1');
+    expect(result.consistencyReport.passed).toBe(true);
+    void expectTitle;
+  });
+
+  it('一致性修正重写失败时沿用原稿并降级到快速校验', async () => {
+    const consistency = await import('./consistency');
+    vi.mocked(consistency.checkConsistency).mockResolvedValueOnce({
+      chapterId: 'mock-ch',
+      passed: false,
+      issues: [{ type: 'plot', severity: 'error', description: '剧情矛盾', suggestion: '修正' }],
+      checkedAt: Date.now(),
+    });
+    const { rewriteForConsistency } = await import('./rewrite');
+    vi.mocked(rewriteForConsistency).mockRejectedValueOnce(new Error('LLM 不可用'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const context = {
+      projectId: 'proj-1',
+      chapterNo: 2,
+      plotPoints: ['测试要点'],
+      onStream: vi.fn(),
+      onProgress: vi.fn(),
+    };
+
+    const result = await generateChapter(context);
+    expect(result.content).toBeTruthy();
     warnSpy.mockRestore();
   });
 });

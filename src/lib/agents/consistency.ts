@@ -42,7 +42,8 @@ const SYSTEM_PROMPT = `你是一位专业的网络小说质量审核编辑。你
 2. 世界观：地理/力量体系/规则是否与设定冲突
 3. 剧情：逻辑是否自洽、情节是否合理
 4. 伏笔：铺设后是否有回收、回收方式是否合理
-5. 文风：是否与预设风格一致`;
+5. 文风：是否与预设风格一致
+6. 主线：本章是否符合并推进主线锚点（主线程/高潮节点/结局归宿），是否出现明显偏离主线、跑题或注水`;
 
 /**
  * 执行一致性校验
@@ -90,6 +91,16 @@ function buildConsistencyPrompt(
   memory: AssembledMemory
 ): string {
   const parts: string[] = [];
+
+  // 主线锚点（首要校验基准：是否偏离主线）
+  if (memory.longTerm.outline) {
+    const o = memory.longTerm.outline;
+    parts.push('【主线锚点】');
+    if (o.mainPlotline) parts.push(`主线程：${o.mainPlotline}`);
+    if (o.climaxNodes?.length) parts.push(`关键高潮节点：${o.climaxNodes.join(' → ')}`);
+    if (o.ending) parts.push(`结局归宿：${o.ending}`);
+    parts.push('');
+  }
 
   // 世界观
   if (memory.longTerm.worldview) {

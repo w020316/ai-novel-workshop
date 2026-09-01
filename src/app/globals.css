@@ -2,11 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================================
+   砚斋·墨印（Ink Atelier）设计系统
+   文房美学：宣纸底 / 松烟墨黑 / 朱砂印红点睛 / 翰墨青副色
+   ========================================================================== */
+
 :root {
-  --background: #fafaf9;
-  --foreground: #1c1917;
-  --font-sans: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
-  --font-serif: 'Noto Serif SC', 'Source Han Serif SC', serif;
+  --background: #f5f0e6;          /* 宣纸暖底 */
+  --background-deep: #ece2ce;     /* 纸色加深 */
+  --foreground: #29231b;          /* 松烟墨 */
+  --ink-soft: #5d554a;            /* 次级墨色 */
+  --ink-faint: #8c8374;           /* 弱墨色 */
+  --line: #e4dbc8;                /* 分栏线 */
+  --brand: #2a6658;               /* 翰墨青 */
+  --accent: #c0332c;              /* 朱砂印 */
+  --paper: #f5f0e6;
+  /* 字体：舍弃通用 Inter，启用文学衬线 + 雅黑系 */
+  --font-sans: 'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', serif;
 }
 
 * {
@@ -23,39 +36,90 @@ body {
 
 body {
   color: var(--foreground);
-  background: var(--background);
+  background-color: var(--background);
   font-family: var(--font-sans);
+  letter-spacing: 0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 宣纸纹理：纸纤维的毫毛细点 + 柔和纸感，营造文房质感 */
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.5), transparent 42%),
+    radial-gradient(circle at 88% 90%, rgba(218, 200, 160, 0.18), transparent 48%),
+    var(--paper);
+  background-attachment: fixed;
+}
+
+/* 标题：文学衬线字重阶梯（供 h1-h4 使用） */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
 }
 
 a {
   color: inherit;
   text-decoration: none;
+  transition: color 0.18s ease;
 }
 
-/* 自定义滚动条 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* 选区：朱砂墨痕 */
+::selection {
+  background: rgba(192, 51, 44, 0.18);
+  color: #7e1f1c;
 }
 
-::-webkit-scrollbar-track {
-  background: #f5f5f4;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #d6d3d1;
+/* 焦点环：翰墨青 + 泛光 */
+*:focus-visible {
+  outline: 2px solid rgba(42, 102, 88, 0.55);
+  outline-offset: 2px;
   border-radius: 4px;
 }
 
+/* 自定义滚动条（宣纸灰） */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 2px solid var(--background);
+  border-radius: 8px;
+}
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a29e;
+  background: #d5c7a6;
 }
 
-/* 文学字体（小说正文用） */
+/* 文学正文（小说内容专用）：衬线 + 书法式行距 */
 .font-novel {
   font-family: var(--font-serif);
-  line-height: 1.9;
-  letter-spacing: 0.02em;
+  line-height: 2;
+  letter-spacing: 0.035em;
+  color: #2b251d;
+}
+
+/* 弱化文本 */
+.text-ink-soft { color: var(--ink-soft); }
+.text-ink-faint { color: var(--ink-faint); }
+
+/* 卡片细线——宣纸卡片 */
+.paper-card {
+  background: #fdfaf3;
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(41, 35, 27, 0.04), 0 8px 24px -18px rgba(41, 35, 27, 0.25);
+}
+
+/* 朱砂印章式主操作点缀 */
+.seal-accent {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

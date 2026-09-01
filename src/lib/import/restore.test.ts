@@ -134,7 +134,7 @@ describe('import/restore', () => {
       const backup = parseBackup(json);
       expect(backup.version).toBe(1);
       expect(backup.project.id).toBe('proj-1');
-      const vec = (backup as any).plotThreads[0].embedding as Float32Array;
+      const vec = (backup.plotThreads![0] as { embedding: Float32Array }).embedding;
       expect(Object.prototype.toString.call(vec)).toBe('[object Float32Array]');
       expect(vec.length).toBe(3);
       expect(Math.round(vec[0] * 10) / 10).toBe(0.1);
@@ -169,8 +169,9 @@ describe('import/restore', () => {
 
       // 向量应为 Float32Array（跨域 realm 使用 toString 判别）
       const report = await db.plotThreads.get('pt1');
-      expect(Object.prototype.toString.call((report as any)?.embedding)).toBe('[object Float32Array]');
-      expect(Math.round((report as any).embedding[0] * 10) / 10).toBe(0.3);
+      const embedding = (report as { embedding: unknown }).embedding;
+      expect(Object.prototype.toString.call(embedding)).toBe('[object Float32Array]');
+      expect(Math.round((embedding as Float32Array)[0] * 10) / 10).toBe(0.3);
     });
 
     it('已存在同名项目时应抛出错误', async () => {

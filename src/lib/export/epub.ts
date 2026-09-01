@@ -19,7 +19,6 @@ export async function exportEpub({
   const zip = new JSZip();
 
   const completed = chapters.filter((c) => c.status === 'completed');
-  const now = new Date().toISOString().replace(/[TZ]/g, '').slice(0, 8);
 
   // mimetype（必须无压缩，放在最前）
   zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });

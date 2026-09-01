@@ -6,8 +6,12 @@ import { exportEpub, downloadEpub } from './epub';
 import type { NovelProject, Chapter } from '@/types';
 
 // 捕获 jszip 实例以便断言写入的文件
+interface ZipInstance {
+  file: ReturnType<typeof vi.fn>;
+  generateAsync: ReturnType<typeof vi.fn>;
+}
 const { JZip, lastZip } = vi.hoisted(() => {
-  const lastZip: { inst: any } = { inst: null };
+  const lastZip: { inst: ZipInstance | null } = { inst: null };
   class JSZip {
     constructor() {
       lastZip.inst = this;
@@ -52,13 +56,13 @@ function makeChapter(overrides: Partial<Chapter>): Chapter {
   };
 }
 
-function fileNames(zip: any): string[] {
-  return zip.file.mock.calls.map((c: any[]) => c[0]);
+function fileNames(zip: ZipInstance): string[] {
+  return zip.file.mock.calls.map((c) => String(c[0]));
 }
 
-function fileContent(zip: any, name: string): string {
-  const call = zip.file.mock.calls.find((c: any[]) => c[0] === name);
-  return call ? call[1] : '';
+function fileContent(zip: ZipInstance, name: string): string {
+  const call = zip.file.mock.calls.find((c) => c[0] === name);
+  return call ? String(call[1]) : '';
 }
 
 describe('export/epub', () => {
@@ -85,7 +89,7 @@ describe('export/epub', () => {
     expect(names).toContain('OEBPS/toc.xhtml');
 
     // mimetype 使用 STORE 无压缩
-    const mimetypeCall = lastZip.inst.file.mock.calls.find((c: any[]) => c[0] === 'mimetype');
+    const mimetypeCall = lastZip.inst.file.mock.calls.find((c) => c[0] === 'mimetype');
     expect(mimetypeCall[2]).toEqual({ compression: 'STORE' });
 
     const container = fileContent(lastZip.inst, 'META-INF/container.xml');

@@ -8,7 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GenerationProgress } from '@/components/workbench/GenerationProgress';
 import { ConsistencyReportView } from '@/components/workbench/ConsistencyReportView';
 import { generateChapter } from '@/lib/agents/orchestrator';
-import { Loader2, Play, FileText, AlertCircle, RefreshCw } from 'lucide-react';
+import { detectAITraces, humanizeChapter } from '@/lib/humanize';
+import type { AiTraceReport } from '@/lib/humanize';
+import { Loader2, Play, FileText, AlertCircle, RefreshCw, Wand2, ScanSearch } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Chapter, GenerationStage, ConsistencyReport, SceneDesign, GenerationContext } from '@/types';
 
 export default function ChapterPage() {
@@ -27,6 +30,8 @@ export default function ChapterPage() {
   const [plotPoints, setPlotPoints] = useState<string[]>(['']);
   const [title, setTitle] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const [aiReport, setAiReport] = useState<AiTraceReport | null>(null);
+  const [humanizing, setHumanizing] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -118,6 +123,46 @@ export default function ChapterPage() {
     }
     router.push(`/project/${projectId}/workbench`);
   }, [chapter, projectId, chapterNo, title, plotPoints, streamingContent, router]);
+
+  // 先本地扫描 AI 痕迹，若命中再由 LLM 做点对点去AI味改写
+  const handleScan = useCallback(() => {
+    const report = detectAITraces(streamingContent);
+    setAiReport(report);
+    toast.info(
+      report.totalCount === 0
+        ? '未发现明显的 AI 痕迹'
+        : `检测到 ${report.totalCount} 处 AI 痕迹，可点击「一键去AI味」改写`
+    );
+  }, [streamingContent]);
+
+  const handleHumanize = useCallback(async () => {
+    if (humanizing || !streamingContent.trim()) return;
+    setHumanizing(true);
+    try {
+      const report = detectAITraces(streamingContent);
+      setAiReport(report);
+      if (report.totalCount === 0) {
+        toast.info('该章未发现明显的 AI 痕迹，无需改写');
+        return;
+      }
+      const result = await humanizeChapter({
+        content: streamingContent,
+        title,
+        chapterNo,
+      });
+      setStreamingContent(result.content);
+      toast.success(
+        result.changed
+          ? `已完成去AI味改写（原识别 ${report.totalCount} 处痕迹）`
+          : '改写结果未产生变化，已保留原文'
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error('去AI味处理失败');
+    } finally {
+      setHumanizing(false);
+    }
+  }, [humanizing, streamingContent, title, chapterNo]);
 
   const addPlotPoint = () => setPlotPoints((prev) => [...prev, '']);
   const updatePlotPoint = (index: number, value: string) => {
@@ -232,10 +277,38 @@ export default function ChapterPage() {
       {streamingContent && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FileText className="h-4 w-4 text-brand-500" />
-              章节正文
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-4 w-4 text-brand-500" />
+                章节正文
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleScan}
+                  disabled={humanizing}
+                  title="扫描正文中的 AI 痕迹"
+                >
+                  <ScanSearch className="mr-1 h-4 w-4" />
+                  扫描AI痕迹
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleHumanize}
+                  disabled={humanizing || !streamingContent.trim()}
+                  title="按检测结果点对点改写，去机器味、提过审概率"
+                >
+                  {humanizing ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Wand2 className="mr-1 h-4 w-4" />
+                  )}
+                  一键去AI味
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <textarea
@@ -247,6 +320,27 @@ export default function ChapterPage() {
             <p className="mt-2 text-xs text-stone-400">
               字数：{(streamingContent.match(/[\u4e00-\u9fff]/g) ?? []).length}
             </p>
+
+            {/* AI 痕迹检测结果 */}
+            {aiReport && (
+              <div className="mt-4 space-y-2 rounded-md border border-stone-200 bg-stone-50 p-3">
+                <p className="text-xs font-medium text-stone-600">
+                  AI 痕迹检测：
+                  {aiReport.totalCount === 0
+                    ? '未发现明显痕迹'
+                    : `共 ${aiReport.totalCount} 处，覆盖 ${aiReport.categoryCount} 类`}
+                </p>
+                {aiReport.categories.map((c) => (
+                  <div key={c.id} className="text-xs text-stone-500">
+                    <span className="font-medium text-stone-700">
+                      {c.label} ×{c.count}
+                    </span>
+                    <span className="ml-1">：{c.examples.join('、')}</span>
+                    <p className="mt-0.5 text-stone-400">建议：{c.hint}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

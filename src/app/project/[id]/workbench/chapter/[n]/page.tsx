@@ -10,7 +10,18 @@ import { ConsistencyReportView } from '@/components/workbench/ConsistencyReportV
 import { generateChapter } from '@/lib/agents/orchestrator';
 import { detectAITraces, humanizeChapter } from '@/lib/humanize';
 import type { AiTraceReport } from '@/lib/humanize';
-import { Loader2, Play, FileText, AlertCircle, RefreshCw, Wand2, ScanSearch } from 'lucide-react';
+import { reviewChapter, readerReviewVerdictLabel } from '@/lib/review/reader-review';
+import type { ReaderReview } from '@/lib/review/reader-review';
+import {
+  Loader2,
+  Play,
+  FileText,
+  AlertCircle,
+  RefreshCw,
+  Wand2,
+  ScanSearch,
+  Eye,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { Chapter, GenerationStage, ConsistencyReport, SceneDesign, GenerationContext } from '@/types';
 
@@ -32,6 +43,8 @@ export default function ChapterPage() {
   const abortRef = useRef<AbortController | null>(null);
   const [aiReport, setAiReport] = useState<AiTraceReport | null>(null);
   const [humanizing, setHumanizing] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [readerReview, setReaderReview] = useState<ReaderReview | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -163,6 +176,27 @@ export default function ChapterPage() {
       setHumanizing(false);
     }
   }, [humanizing, streamingContent, title, chapterNo]);
+
+  // 读者视角「冷读复核」：切到读者视角评估本章是否抓人
+  const handleReview = useCallback(async () => {
+    if (reviewing || !streamingContent.trim()) return;
+    setReviewing(true);
+    try {
+      // reviewChapter 内部已对 LLM 失败/非法结果做本地降级，通常不会抛出
+      const review = await reviewChapter({ content: streamingContent, title, chapterNo });
+      setReaderReview(review);
+      toast.info(
+        review.fromLLM
+          ? `读者冷读评分 ${review.score} 分（${readerReviewVerdictLabel[review.verdict]}）`
+          : `本地启发式评分 ${review.score} 分（LLM 不可用，仅按字数/节奏评估）`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error('冷读复核失败');
+    } finally {
+      setReviewing(false);
+    }
+  }, [reviewing, streamingContent, title, chapterNo]);
 
   const addPlotPoint = () => setPlotPoints((prev) => [...prev, '']);
   const updatePlotPoint = (index: number, value: string) => {
@@ -307,6 +341,20 @@ export default function ChapterPage() {
                   )}
                   一键去AI味
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReview}
+                  disabled={reviewing || !streamingContent.trim()}
+                  title="切到读者视角冷读复核本章：评分、优势、槽点与改法"
+                >
+                  {reviewing ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Eye className="mr-1 h-4 w-4" />
+                  )}
+                  读者冷读复核
+                </Button>
               </div>
             </div>
           </CardHeader>
@@ -339,6 +387,75 @@ export default function ChapterPage() {
                     <p className="mt-0.5 text-stone-400">建议：{c.hint}</p>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* 读者冷读复核结果 */}
+            {readerReview && (
+              <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-stone-700">读者冷读复核</p>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        readerReview.verdict === 'gripping'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : readerReview.verdict === 'ok'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {readerReviewVerdictLabel[readerReview.verdict]}
+                    </span>
+                    <span className="text-2xl font-bold text-brand-600">
+                      {readerReview.score}
+                      <span className="text-xs font-normal text-stone-400"> 分</span>
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-stone-400">
+                  {readerReview.fromLLM
+                    ? '由 LLM 以读者视角定性评估'
+                    : '本地启发式评估（LLM 暂不可用）：基于字数 / 对话占比 / 段位节奏 / 钩子 / 断章'}
+                </p>
+
+                <div className="mt-3 gap-3 md:grid md:grid-cols-2">
+                  <div className="text-xs">
+                    <p className="font-medium text-emerald-700">值得保留</p>
+                    {readerReview.strengths.length > 0 ? (
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4 text-stone-600">
+                        {readerReview.strengths.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-stone-400">暂无</p>
+                    )}
+                  </div>
+                  <div className="mt-2 text-xs md:mt-0">
+                    <p className="font-medium text-red-700">槽点 / 风险</p>
+                    {readerReview.weaknesses.length > 0 ? (
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4 text-stone-600">
+                        {readerReview.weaknesses.map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-stone-400">暂无</p>
+                    )}
+                  </div>
+                </div>
+
+                {readerReview.suggestions.length > 0 && (
+                  <div className="mt-3 border-t border-stone-200 pt-2 text-xs">
+                    <p className="font-medium text-stone-700">改进建议</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-stone-600">
+                      {readerReview.suggestions.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

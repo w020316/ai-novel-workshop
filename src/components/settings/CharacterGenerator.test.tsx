@@ -8,6 +8,7 @@ const {
   generateCharacterTemplateMock,
   getRoleLabelMock,
   toastMock,
+  generateCharacterLLMMock,
 } = vi.hoisted(() => ({
   saveCharacterMock: vi.fn(),
   generateCharacterTemplateMock: vi.fn(),
@@ -18,6 +19,7 @@ const {
     warning: vi.fn(),
     info: vi.fn(),
   },
+  generateCharacterLLMMock: vi.fn(),
 }));
 
 const ROLE_LABELS: Record<CharacterRole, string> = {
@@ -36,6 +38,10 @@ vi.mock('sonner', () => ({ toast: toastMock }));
 vi.mock('@/lib/character/template', () => ({
   generateCharacterTemplate: (...args: unknown[]) => generateCharacterTemplateMock(...args),
   getRoleLabel: (r: CharacterRole) => getRoleLabelMock(r),
+}));
+
+vi.mock('@/lib/llm/generators/character', () => ({
+  generateCharacterWithLLM: (args: unknown) => generateCharacterLLMMock(args),
 }));
 
 const generatedFixture: Character = {
@@ -63,6 +69,8 @@ describe('CharacterGenerator', () => {
     saveCharacterMock.mockResolvedValue(undefined);
     generateCharacterTemplateMock.mockReturnValue(generatedFixture);
     getRoleLabelMock.mockImplementation((r: CharacterRole) => ROLE_LABELS[r] ?? String(r));
+    // 默认：LLM 不可用 → 走本地模板兜底，保证既有测试语义
+    generateCharacterLLMMock.mockRejectedValue(new Error('llm down'));
   });
 
   it('渲染标题与角色定位选项', () => {

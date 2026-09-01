@@ -7,6 +7,7 @@ import { Input, Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { saveCharacter } from '@/lib/db/queries';
 import { generateCharacterTemplate, getRoleLabel } from '@/lib/character/template';
+import { generateCharacterWithLLM } from '@/lib/llm/generators/character';
 import type { Character, CharacterRole } from '@/types';
 import { Wand2, Loader2 } from 'lucide-react';
 
@@ -30,19 +31,31 @@ export function CharacterGenerator({ projectId, onGenerated }: CharacterGenerato
     }
     setGenerating(true);
     try {
-      // 模拟生成延迟（P3 完成后切换为真实 LLM）
-      await new Promise((r) => setTimeout(r, 600));
-
-      const generated = generateCharacterTemplate({
-        projectId,
-        keywords: keywords.trim(),
-        name: name.trim(),
-        role,
-      });
+      // LLM 主生成，失败降级为本地角色模板（兼容离线/无配额场景），保证始终产出可保存档案
+      let generated: Character;
+      let usedTemplate = false;
+      try {
+        generated = await generateCharacterWithLLM({
+          projectId,
+          keywords: keywords.trim(),
+          name: name.trim(),
+          role,
+        });
+      } catch {
+        generated = generateCharacterTemplate({
+          projectId,
+          keywords: keywords.trim(),
+          name: name.trim(),
+          role,
+        });
+        usedTemplate = true;
+      }
 
       await saveCharacter(generated);
       toast.success('人物档案已生成', {
-        description: `${generated.name} · ${getRoleLabel(role)}`,
+        description: usedTemplate
+          ? `${generated.name} · LLM 暂不可用，已用模板生成`
+          : `${generated.name} · 由 AI 生成`,
       });
       onGenerated(generated);
 
@@ -84,11 +97,11 @@ export function CharacterGenerator({ projectId, onGenerated }: CharacterGenerato
               AI 关键词生成
             </CardTitle>
             <CardDescription>
-              输入关键词与角色定位，一键生成完整人物档案
+              输入关键词与角色定位，调用 AI 一键生成完整人物档案（失败时自动回退模板）
             </CardDescription>
           </div>
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-            本地模板 · P3 后接入 LLM
+            LLM 生成 · 模板兜底
           </span>
         </div>
       </CardHeader>

@@ -8,6 +8,7 @@
 // ============================================================================
 import type { SceneDesign, AssembledMemory, GenerationContext, StylePreset } from '@/types';
 import { memoryToPrompt } from '@/lib/memory/assembler';
+import { streamChapter } from '@/lib/llm/client-stream';
 
 /**
  * 文笔创作 Agent 的默认 System Prompt
@@ -107,47 +108,29 @@ export async function writeChapter(
   let fullContent = '';
   await context.onStream(''); // 触发开始信号
 
-  // 通过服务端 API 流式生成
-  const response = await fetch('/api/llm/generate-chapter', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, chapterNo: context.chapterNo }),
-  });
+  // 通过服务端 API 流式生成（复用统一 SSE 解析，支持 signal 中断）
+  let streamError: string | null = null;
+  await streamChapter(
+    { messages, signal: context.signal },
+    {
+      onStream: undefined,
+      onToken: (token: string) => {
+        fullContent += token;
+        context.onStream(token);
+      },
+      onError: (err: string) => {
+        streamError = err;
+      },
+    }
+  );
 
-  if (!response.ok) {
-    throw new Error(`写作生成失败：HTTP ${response.status}`);
+  // 用户主动中断：返回已生成部分，交由上层决定
+  if (context.signal?.aborted) {
+    return fullContent;
   }
 
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('响应体不可读');
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6);
-        if (data === '[DONE]') continue;
-
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.token) {
-            fullContent += parsed.token;
-            context.onStream(parsed.token);
-          }
-        } catch {
-          // 非 JSON 数据行，忽略
-        }
-      }
-    }
+  if (streamError) {
+    throw new Error(streamError);
   }
 
   return fullContent;

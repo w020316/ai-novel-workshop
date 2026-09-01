@@ -15,12 +15,13 @@ describe('writeChapter', () => {
   });
 
   it('应返回章节内容', async () => {
-    // Mock SSE response
+    // Mock SSE response（与生成接口真实协议一致：event + data）
     const encoder = new TextEncoder();
     const mockStream = new ReadableStream({
       start(controller) {
-        controller.enqueue(encoder.encode('data: {"token":"模拟文本"}\n\n'));
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.enqueue(encoder.encode('event: start\ndata: {"provider":"zhipu","model":"glm-4-flash"}\n\n'));
+        controller.enqueue(encoder.encode('event: token\ndata: {"token":"模拟文本"}\n\n'));
+        controller.enqueue(encoder.encode('event: done\ndata: {"totalTokens":4}\n\n'));
         controller.close();
       },
     });

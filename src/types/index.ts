@@ -259,6 +259,8 @@ export interface ChatParams {
 
 export interface StreamChatParams extends ChatParams {
   onToken: (token: string) => void;
+  /** 中止信号，用于主动中断生成 */
+  signal?: AbortSignal;
 }
 
 export interface ChatResponse {
@@ -334,6 +336,8 @@ export interface GenerationContext {
   userIntervention?: UserIntervention;
   onStream: (chunk: string) => void;
   onProgress: (stage: GenerationStage) => void;
+  /** 中止信号，用户点击「停止生成」时触发，贯通到写作 Agent 与上游请求 */
+  signal?: AbortSignal;
 }
 
 export interface GenerationResult {

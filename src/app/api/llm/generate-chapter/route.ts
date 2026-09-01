@@ -79,6 +79,7 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       let totalTokens = 0;
+      let tokenSent = false;
 
       // 发送开始事件
       controller.enqueue(
@@ -88,39 +89,24 @@ export async function POST(request: Request) {
       );
 
       try {
-        // 使用重试机制调用流式 chat
-        await withRetry(
-          () =>
-            adapter.streamChat({
-              messages,
-              temperature: body.temperature,
-              topP: body.topP,
-              maxTokens: body.maxTokens,
-              onToken: (token: string) => {
-                totalTokens++;
-                controller.enqueue(
-                  encoder.encode(
-                    `event: token\ndata: ${JSON.stringify({ token })}\n\n`
-                  )
-                );
-              },
-            }),
-          {
-            maxRetries: 2,
-            onRetry: (attempt, err) => {
-              // 重试前发送进度事件
-              controller.enqueue(
-                encoder.encode(
-                  `event: progress\ndata: ${JSON.stringify({
-                    status: 'retrying',
-                    attempt,
-                    error: err instanceof Error ? err.message : String(err),
-                  })}\n\n`
-                )
-              );
-            },
-          }
-        );
+        // 流式调用：一旦已经输出 token 就不允许整体重试（否则客户端会收到拼接的重复章节）
+        // 故不在此处使用 withRetry 包裹整个流；仅在连接建立阶段抛错时，交由上层 orchestrator 重试。
+        await adapter.streamChat({
+          messages,
+          temperature: body.temperature,
+          topP: body.topP,
+          maxTokens: body.maxTokens,
+          signal: request.signal,
+          onToken: (token: string) => {
+            tokenSent = true;
+            totalTokens++;
+            controller.enqueue(
+              encoder.encode(
+                `event: token\ndata: ${JSON.stringify({ token })}\n\n`
+              )
+            );
+          },
+        });
 
         // 发送完成事件
         controller.enqueue(
@@ -133,6 +119,11 @@ export async function POST(request: Request) {
           )
         );
       } catch (err) {
+        // 用户主动中断：不做为错误上报，normal 关闭
+        if (request.signal.aborted) {
+          controller.close();
+          return;
+        }
         // 发送错误事件
         const errorMessage =
           err instanceof LLMApiError
@@ -142,12 +133,17 @@ export async function POST(request: Request) {
               : '生成失败';
         controller.enqueue(
           encoder.encode(
-            `event: error\ndata: ${JSON.stringify({ error: errorMessage })}\n\n`
+            `event: error\ndata: ${JSON.stringify({ error: errorMessage, tokenSent })}\n\n`
           )
         );
       } finally {
-        controller.close();
+        if (!request.signal.aborted) {
+          controller.close();
+        }
       }
+    },
+    cancel() {
+      // 客户端断开（如 abort）时清理
     },
   });
 

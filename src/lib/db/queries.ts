@@ -58,7 +58,8 @@ export async function archiveProject(projectId: string): Promise<void> {
 
 export async function deleteProject(projectId: string): Promise<void> {
   // 级联删除关联数据（Dexie transaction 最多 7 个表参数，分两步处理）
-  // Step 1: 删除关联表数据
+  // Step 1: 删除关联表数据；删除 chapters 前先取出其 id 列表，供 Step 2 清理一致性报告
+  let chapterIds: string[] = [];
   await db.transaction(
     'rw',
     [db.worldviews, db.characters, db.outlines, db.foreshadowings, db.chapters, db.chapterSummaries, db.plotThreads],
@@ -67,19 +68,19 @@ export async function deleteProject(projectId: string): Promise<void> {
       await db.characters.where('projectId').equals(projectId).delete();
       await db.outlines.where('projectId').equals(projectId).delete();
       await db.foreshadowings.where('projectId').equals(projectId).delete();
+      chapterIds = (await db.chapters.where('projectId').equals(projectId).toArray()).map((c) => c.id);
       await db.chapters.where('projectId').equals(projectId).delete();
       await db.chapterSummaries.where('projectId').equals(projectId).delete();
       await db.plotThreads.where('projectId').equals(projectId).delete();
     }
   );
   // Step 2: 删除一致性报告 + 项目本体
-  const chapters = await db.chapters.where('projectId').equals(projectId).toArray();
   await db.transaction(
     'rw',
     [db.consistencyReports, db.projects],
     async () => {
-      for (const ch of chapters) {
-        await db.consistencyReports.where('chapterId').equals(ch.id).delete();
+      for (const chapterId of chapterIds) {
+        await db.consistencyReports.where('chapterId').equals(chapterId).delete();
       }
       await db.projects.delete(projectId);
     }

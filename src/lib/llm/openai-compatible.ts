@@ -141,7 +141,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
       method: 'POST',
       headers: this.buildHeaders(params.responseFormat === 'json'),
       body: JSON.stringify(body),
-    });
+    }, params.signal);
 
     if (!res.ok || !res.body) {
       const text = res.body ? await res.text() : '';
@@ -246,14 +246,27 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
 
   private async requestWithTimeout(
     url: string,
-    init: RequestInit
+    init: RequestInit,
+    externalSignal?: AbortSignal
   ): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    // 外部信号合并：任一中止即中止请求
+    const onAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+
     try {
       return await this.fetchImpl(url, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timer);
+      externalSignal?.removeEventListener('abort', onAbort);
     }
   }
 

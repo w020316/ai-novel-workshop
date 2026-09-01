@@ -81,9 +81,19 @@ export const PROVIDER_CONFIGS: Record<LLMProvider, ProviderConfig> = {
 
 /**
  * 获取 Provider 配置
+ * 支持通过环境变量覆盖 baseURL 与默认模型（用于自建 OpenAI 兼容网关 / 备用站）：
+ * - {PROVIDER}_BASE_URL（如 DEEPSEEK_BASE_URL）覆盖 baseURL
+ * - {PROVIDER}_DEFAULT_MODEL（如 DEEPSEEK_DEFAULT_MODEL）覆盖 defaultModel
  */
 export function getProviderConfig(provider: LLMProvider): ProviderConfig {
-  return PROVIDER_CONFIGS[provider];
+  const base = PROVIDER_CONFIGS[provider];
+  const envBaseURL = process.env[`${provider.toUpperCase()}_BASE_URL`];
+  const envModel = process.env[`${provider.toUpperCase()}_DEFAULT_MODEL`];
+  return {
+    ...base,
+    baseURL: envBaseURL ?? base.baseURL,
+    defaultModel: envModel ?? base.defaultModel,
+  };
 }
 
 /**
@@ -102,15 +112,21 @@ export function isProviderConfigured(provider: LLMProvider): boolean {
 }
 
 /**
- * 列出所有已配置的 Provider（按优先级排序，DeepSeek 优先）
+ * 列出所有已配置的 Provider（按优先级排序）
+ * 可通过环境变量 LLM_PROVIDER_ORDER 自定义顺序（逗号分隔），默认为 deepseek > zhipu > qwen
  */
 export function listConfiguredProviders(): LLMProvider[] {
-  const order: LLMProvider[] = ['deepseek', 'zhipu', 'qwen'];
+  const envOrder = process.env['LLM_PROVIDER_ORDER'];
+  const order: LLMProvider[] = envOrder
+    ? (envOrder.split(',').map((s) => s.trim()) as LLMProvider[]).filter(
+        (p) => p === 'deepseek' || p === 'zhipu' || p === 'qwen'
+      )
+    : ['deepseek', 'zhipu', 'qwen'];
   return order.filter((p) => isProviderConfigured(p));
 }
 
 /**
- * 选择默认 Provider：优先级 deepseek > zhipu > qwen
+ * 选择默认 Provider：优先级遵循 listConfiguredProviders 的顺序
  */
 export function getDefaultProvider(): LLMProvider | null {
   const configured = listConfiguredProviders();

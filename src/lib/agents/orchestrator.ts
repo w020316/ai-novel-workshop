@@ -27,7 +27,7 @@ import { updateMemoryAfterChapter } from '@/lib/memory/updater';
 import { saveChapter, getProject, getStylePreset } from '@/lib/db/queries';
 import { withRetry } from '@/lib/llm/retry';
 import { generateId } from '@/lib/utils';
-import type { StylePreset, ConsistencyReport } from '@/types';
+import type { StylePreset, ConsistencyReport, GenerationStage } from '@/types';
 
 /**
  * 生成章节的完整流程

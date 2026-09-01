@@ -45,7 +45,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
 
   return (
     <DatabaseInitializer>
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen flex-col md:flex-row">
         {loading ? (
           <div className="flex flex-1 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-brand-500" />

@@ -218,7 +218,7 @@
 - 浏览器端走查因代理预算中断未走完整章，故改以**直接调用 production `http://localhost:4321/api/llm/chat`** 做真实端到端验证，结果：**HTTP 200**，返回 `{"provider":"zhipu","model":"glm-4-flash","content":"链路验证成功！","usage":{"promptTokens":14,"completionTokens":7}}`——为**真实模型回复**并含 token 计费，非本地模板。
 - 同时 `/api/llm/providers` 返回 `configured: 2, ready: true`（智谱 glm-4-flash + deepseek 均配置），首页 200。
 - **结论**：核心 AI 生成链路（请求→鉴权→限流→Provider→真实回复→token 计费）在 production 下完整可用，UX 待办闭环。
-- 📝 **产品确认点**：走查中发现「一键生成世界观」按钮入口当前表现为**本地题材模板/规则填充**而非真实 LLM 请求（真实 LLM 可用但该按钮未触发），建议产品确认该按钮预期是否应为"调用 LLM 生成"。流式/停止交互已在 dev 下由单测覆盖（AbortSignal 端到端）。
+- ✅ **世界观一键生成已升级为真实 LLM 主生成 + 模板兜底**（提交 `e08b288`）：原纯本地模板（代码留有"P3 后接入"占位）已落地为新 `src/lib/llm/generators/worldview.ts`，优先调用 LLM 依据题材/书名/简介生成个性化设定，字段缺失用模板补齐、核心为空则整体回退模板；新增 8 个单测，全量 513 项测试通过、build 通过，生产服务已加载新版本。
 
 **终版补充（生产模式 `localhost:4321` 真实走查）—— ✅ 通过**
 - 覆盖首页/新建/设定四页（世界观/人物/文风/题材）/工作台/记忆/导出：视觉一致（宣纸暖底 rgb 245,240,230、衬线标题 Noto Serif SC、墨青主按钮 rgb 42,102,88、卡片圆角统一），桌面各页 `scrollWidth === clientWidth` 无横向溢出。

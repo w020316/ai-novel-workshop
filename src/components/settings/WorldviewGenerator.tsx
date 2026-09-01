@@ -12,7 +12,8 @@ import {
   generateWorldviewTemplate,
   isWorldviewEmpty,
 } from '@/lib/worldview/template';
-import type { Genre } from '@/types';
+import { generateWorldviewWithLLM } from '@/lib/llm/generators/worldview';
+import type { Genre, Worldview } from '@/types';
 import { Sparkles, Wand2, Loader2, RotateCcw } from 'lucide-react';
 
 interface WorldviewGeneratorProps {
@@ -47,15 +48,15 @@ export function WorldviewGenerator({
         return;
       }
 
-      // 模拟"生成"过程（本地模板，P3 完成后切换为真实 LLM 调用）
-      await new Promise((r) => setTimeout(r, 600));
-
-      const generated = generateWorldviewTemplate({
-        projectId,
-        genre,
-        title,
-        summary,
-      });
+      // LLM 主生成，失败降级为本地题材模板（兼容离线/无配额场景），保证始终产出可保存内容
+      let generated: Worldview;
+      let usedTemplate = false;
+      try {
+        generated = await generateWorldviewWithLLM({ projectId, genre, title, summary });
+      } catch {
+        generated = generateWorldviewTemplate({ projectId, genre, title, summary });
+        usedTemplate = true;
+      }
 
       // 若已有数据，保留 id 与 locked 状态，仅替换内容
       if (existing) {
@@ -65,7 +66,9 @@ export function WorldviewGenerator({
 
       await saveWorldview(generated);
       toast.success('世界观已生成', {
-        description: `基于「${genre}」题材模板生成 · 可在下方编辑器中修改`,
+        description: usedTemplate
+          ? `LLM 暂不可用，已用题材模板生成 · 可在下方编辑器中修改`
+          : `已根据「${title || genre}」与简介由 AI 生成 · 可在下方编辑器中修改`,
       });
       onGenerated?.();
       setOverwriteOpen(false);
@@ -91,11 +94,11 @@ export function WorldviewGenerator({
               AI 一键生成
             </CardTitle>
             <CardDescription className="mt-1">
-              基于项目题材与简介，自动生成世界观模板
+              结合题材、书名与简介，由 AI 生成世界观（失败时自动回退题材模板）
             </CardDescription>
           </div>
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-            本地模板 · P3 后接入 LLM
+            LLM 生成 · 模板兜底
           </span>
         </div>
       </CardHeader>
@@ -176,7 +179,7 @@ export function WorldviewGenerator({
         )}
 
         <p className="text-[10px] text-stone-400">
-          当前为本地模板生成（基于题材匹配内置模板）。P3 LLM 适配层完成后，将自动升级为基于项目简介的真实 AI 生成。
+          优先调用已配置的 LLM 基于简介生成个性化设定；当 LLM 不可用或未配置时，自动回退到基于题材的内置模板，确保一键生成始终可用。
         </p>
       </CardContent>
     </Card>

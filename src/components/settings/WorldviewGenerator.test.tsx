@@ -9,6 +9,7 @@ const {
   generateTemplateMock,
   isWorldviewEmptyMock,
   toastMock,
+  generateLLMMock,
 } = vi.hoisted(() => ({
   getWorldviewMock: vi.fn(),
   saveWorldviewMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
     warning: vi.fn(),
     info: vi.fn(),
   },
+  generateLLMMock: vi.fn(),
 }));
 
 vi.mock('@/lib/db/queries', () => ({
@@ -32,6 +34,10 @@ vi.mock('sonner', () => ({ toast: toastMock }));
 vi.mock('@/lib/worldview/template', () => ({
   generateWorldviewTemplate: (args: unknown) => generateTemplateMock(args),
   isWorldviewEmpty: (wv: Worldview | null) => isWorldviewEmptyMock(wv),
+}));
+
+vi.mock('@/lib/llm/generators/worldview', () => ({
+  generateWorldviewWithLLM: (args: unknown) => generateLLMMock(args),
 }));
 
 const baseProps = {
@@ -62,6 +68,8 @@ describe('WorldviewGenerator', () => {
     saveWorldviewMock.mockResolvedValue(undefined);
     isWorldviewEmptyMock.mockReturnValue(true);
     generateTemplateMock.mockReturnValue({ ...existingFixture, id: 'wv_new' });
+    // 默认：LLM 不可用 → 走本地模板兜底，保证既有测试语义
+    generateLLMMock.mockRejectedValue(new Error('llm down'));
   });
 
   it('渲染题材、项目名与简介信息', () => {
@@ -92,6 +100,33 @@ describe('WorldviewGenerator', () => {
       expect.any(Object)
     );
     expect(onGenerated).toHaveBeenCalledTimes(1);
+  });
+
+  it('LLM 可用时优先采用 AI 结果、不调用本地模板', async () => {
+    const llmWorldview: Worldview = {
+      ...existingFixture,
+      id: 'llm_wv',
+      worldStructure: 'AI 生成的世界观',
+      updatedAt: 9,
+    };
+    generateLLMMock.mockResolvedValue(llmWorldview);
+    render(<WorldviewGenerator {...baseProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '一键生成世界观' }));
+
+    await waitFor(() => expect(generateLLMMock).toHaveBeenCalled(), { timeout: 3000 });
+    expect(generateLLMMock).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'p1', genre: '玄幻' })
+    );
+    await waitFor(() => expect(saveWorldviewMock).toHaveBeenCalledTimes(1), {
+      timeout: 3000,
+    });
+    expect(saveWorldviewMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'llm_wv' })
+    );
+    expect(generateTemplateMock).not.toHaveBeenCalled();
+    expect(toastMock.success).toHaveBeenCalledWith('世界观已生成', expect.any(Object));
+    expect(toastMock.success.mock.calls[0][1].description).toContain('AI 生成');
   });
 
   it('存在已有内容时弹出覆盖确认，取消后不保存', async () => {

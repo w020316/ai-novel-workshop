@@ -125,6 +125,28 @@ describe('agents/consistency', () => {
       const issues = quickCheck(chapterWithUnknown, mockMemory);
       expect(issues.some((i) => i.type === 'character')).toBe(true);
     });
+
+    it('伏笔不在待回收档案中时应报 error', () => {
+      const chapterWithBadForeshadow = {
+        ...mockChapter,
+        sceneDesign: {
+          ...mockSceneDesign,
+          foreshadowingToRecover: ['missing_fx'],
+        },
+      };
+      const issues = quickCheck(chapterWithBadForeshadow, mockMemory);
+      const foreshadowingIssue = issues.find(
+        (i) => i.type === 'foreshadowing'
+      );
+      expect(foreshadowingIssue).toBeDefined();
+      expect(foreshadowingIssue?.severity).toBe('error');
+      expect(foreshadowingIssue?.description).toContain('missing_fx');
+    });
+
+    it('场景不存在时应返回空 issues', () => {
+      const chapterNoDesign = { ...mockChapter, sceneDesign: undefined };
+      expect(quickCheck(chapterNoDesign, mockMemory)).toEqual([]);
+    });
   });
 
   describe('checkConsistency', () => {
@@ -133,6 +155,28 @@ describe('agents/consistency', () => {
       expect(report).toBeDefined();
       expect(report.chapterId).toBe('ch1');
       expect(report.checkedAt).toBeGreaterThan(0);
+    });
+
+    it('记忆含文风预设时应正常生成报告', async () => {
+      const memoryWithStyle: AssembledMemory = {
+        ...mockMemory,
+        longTerm: {
+          ...mockMemory.longTerm,
+          stylePreset: {
+            id: 'sp1',
+            name: '古风仙侠',
+            narrativePerspective: 'third-limited',
+            pacing: 'medium',
+            descriptionDensity: 'medium',
+            dialogueRatio: 0.4,
+            sampleText: '夜色沉沉，青石板上月光清冷。',
+          },
+        },
+      };
+
+      const report = await checkConsistency(mockChapter, memoryWithStyle);
+      expect(report).toBeDefined();
+      expect(report.chapterId).toBe('ch1');
     });
   });
 });

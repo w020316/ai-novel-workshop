@@ -34,7 +34,7 @@ export function ForeshadowingBoard({ projectId }: ForeshadowingBoardProps) {
   useEffect(() => { load(); }, [projectId]);
 
   const moveTo = async (id: string, newStatus: ForeshadowingStatus) => {
-    await saveForeshadowing({ ...foreshadowings.find((f) => f.id)!, status: newStatus });
+    await saveForeshadowing({ ...foreshadowings.find((f) => f.id === id)!, status: newStatus });
     toast.success('伏笔状态已更新');
     load();
   };

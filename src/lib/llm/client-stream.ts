@@ -79,6 +79,9 @@ export async function streamChapter(
 
   const decoder = new TextDecoder();
   let buffer = '';
+  // eventType 必须在循环外声明：SSE 事件的 event: 头与 data: 体可能被拆到
+  // 不同的 read 分块，若在循环内重置会丢失事件关联，导致 token 丢失
+  let eventType = '';
 
   try {
     while (true) {
@@ -89,10 +92,13 @@ export async function streamChapter(
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
 
-      let eventType = '';
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed) continue;
+        // 空行表示一个 SSE 事件的结束，重置事件类型，避免跨事件泄漏
+        if (!trimmed) {
+          eventType = '';
+          continue;
+        }
 
         if (trimmed.startsWith('event:')) {
           eventType = trimmed.slice(6).trim();

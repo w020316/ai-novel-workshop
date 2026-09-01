@@ -168,5 +168,74 @@ describe('memory/long-term', () => {
 
       expect(estimateLongTermTokens(emptyMemory)).toBe(0);
     });
+
+    it('应正确估算中英文混合文本 token（中文1.5/字、非中文0.25/字符，向上取整）', () => {
+      const memory = {
+        worldview: {
+          id: 'w1',
+          projectId: 'p',
+          worldStructure: '你好abc',
+          powerSystem: '',
+          geography: '',
+          era: '',
+          factions: '',
+          rules: [],
+          locked: false,
+          updatedAt: 0,
+        },
+        characters: [],
+        outline: null,
+        pendingForeshadowings: [],
+        stylePreset: null,
+      };
+      // 中文2字*1.5=3，英文3字符*0.25=0.75，合计3.75向上取整=4
+      expect(estimateLongTermTokens(memory)).toBe(4);
+    });
+
+    it('人物为空字符串字段不应计入 token', () => {
+      const memory = {
+        worldview: null,
+        characters: [
+          {
+            id: 'c1',
+            projectId: 'p',
+            name: '张三',
+            role: 'protagonist' as const,
+            appearance: '',
+            personality: '',
+            catchphrase: '',
+            background: '',
+            motivation: '',
+            weakness: '',
+            growthArc: '',
+            relationships: [],
+            speechStyle: '',
+            behaviorPattern: '',
+            locked: false,
+            updatedAt: 0,
+          },
+        ],
+        outline: null,
+        pendingForeshadowings: [],
+        stylePreset: null,
+      };
+      // 仅 name「张三」计入：2*1.5=3
+      expect(estimateLongTermTokens(memory)).toBe(3);
+    });
+
+    it('多个伏笔应按描述累加 token', () => {
+      const memory = {
+        worldview: null,
+        characters: [],
+        outline: null,
+        pendingForeshadowings: [
+          { id: 'f1', projectId: 'p', description: '伏笔一', setupChapter: 1, importance: 'high' as const, status: 'pending' as const, relatedCharacters: [], createdAt: 0 },
+          { id: 'f2', projectId: 'p', description: '伏笔二', setupChapter: 2, importance: 'low' as const, status: 'pending' as const, relatedCharacters: [], createdAt: 0 },
+        ],
+        stylePreset: null,
+      };
+      // 「伏笔一」「伏笔二」各 3 个汉字 → 各 4.5 → ceil 5；两个合计 10
+      expect(estimateLongTermTokens(memory)).toBe(10);
+    });
   });
 });

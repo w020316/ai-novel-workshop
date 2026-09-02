@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { ForeshadowingBoard } from '@/components/memory/ForeshadowingBoard';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { AlertTriangle } from 'lucide-react';
 
 export default function ForeshadowingPage() {

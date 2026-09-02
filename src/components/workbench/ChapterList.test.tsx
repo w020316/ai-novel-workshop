@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ChapterList } from './ChapterList';
-import type { Chapter, ChapterStatus } from '@/types';
+import type { Chapter } from '@/types';
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({

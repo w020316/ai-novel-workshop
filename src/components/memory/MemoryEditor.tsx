@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Loader2, Save, Edit3 } from 'lucide-react';
 import { listChapterSummaries, saveChapterSummary, listForeshadowings, saveForeshadowing } from '@/lib/db/queries';
 import { toast } from 'sonner';

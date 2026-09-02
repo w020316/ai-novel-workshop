@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getChapter, saveChapter, getProject } from '@/lib/db/queries';
+import { getChapter, saveChapter } from '@/lib/db/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GenerationProgress } from '@/components/workbench/GenerationProgress';
@@ -17,13 +17,12 @@ import {
   Play,
   FileText,
   AlertCircle,
-  RefreshCw,
   Wand2,
   ScanSearch,
   Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Chapter, GenerationStage, ConsistencyReport, SceneDesign, GenerationContext } from '@/types';
+import type { Chapter, GenerationStage, ConsistencyReport, GenerationContext } from '@/types';
 
 export default function ChapterPage() {
   const params = useParams<{ id: string; n: string }>();
@@ -46,6 +45,7 @@ export default function ChapterPage() {
   const [humanizing, setHumanizing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [readerReview, setReaderReview] = useState<ReaderReview | null>(null);
+  const [candidateCount, setCandidateCount] = useState(1);
 
   useEffect(() => {
     setLoading(true);
@@ -85,6 +85,7 @@ export default function ChapterPage() {
       projectId,
       chapterNo,
       plotPoints: validPlotPoints,
+      candidateCount,
       onStream: handleStream,
       onProgress: handleProgress,
     };
@@ -100,7 +101,7 @@ export default function ChapterPage() {
     } finally {
       setGenerating(false);
     }
-  }, [projectId, chapterNo, plotPoints, handleStream, handleProgress]);
+  }, [projectId, chapterNo, plotPoints, candidateCount, handleStream, handleProgress]);
 
   const handleAbort = useCallback(() => {
     abortRef.current?.abort();
@@ -286,6 +287,21 @@ export default function ChapterPage() {
             </>
           )}
         </Button>
+        <div className="flex items-center gap-2 text-xs text-stone-500">
+          <label htmlFor="candidate-count" className="flex items-center gap-1.5">
+            生成模式
+            <select
+              id="candidate-count"
+              value={candidateCount}
+              onChange={(e) => setCandidateCount(Number(e.target.value))}
+              disabled={generating}
+              className="rounded-md border border-stone-200 bg-white px-2 py-1 text-sm disabled:opacity-50"
+            >
+              <option value={1}>单稿</option>
+              <option value={3}>抽卡3版（择优）</option>
+            </select>
+          </label>
+        </div>
         {generating && (
           <Button variant="outline" onClick={handleAbort}>
             停止生成

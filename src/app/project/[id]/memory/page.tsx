@@ -3,8 +3,8 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { MemoryBrowser } from '@/components/memory/MemoryBrowser';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Brain, Info, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Info, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 export default function MemoryPage() {
   const params = useParams<{ id: string }>();

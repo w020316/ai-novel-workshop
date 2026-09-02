@@ -78,7 +78,7 @@ describe('rewriteForConsistency', () => {
     expect(result).toContain('一剑劈开山门');
     expect(result).not.toBe(input.content);
     expect(chatMock).toHaveBeenCalledTimes(1);
-    const [messages] = chatMock.mock.calls[0] as [[{ role: string; content: string }[], unknown]];
+    const [messages] = chatMock.mock.calls[0] as [{ role: string; content: string }[]];
     const userPrompt = messages[1].content;
     // 主线锚点与待修正问题必须随修正指示进入 prompt
     expect(userPrompt).toContain('主线锚点');

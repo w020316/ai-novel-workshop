@@ -74,14 +74,14 @@ describe('export/epub', () => {
   it('应生成 Blob 并调用 generateAsync', async () => {
     const blob = await exportEpub({ project: mockProject, chapters: [] });
     expect(blob).toBeInstanceOf(Blob);
-    expect(lastZip.inst.generateAsync).toHaveBeenCalledWith(
+    expect(lastZip.inst!.generateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'blob', compression: 'DEFLATE' })
     );
   });
 
   it('应写入 mimetype / container / content.opf / cover / toc', async () => {
     await exportEpub({ project: mockProject, chapters: [] });
-    const names = fileNames(lastZip.inst);
+    const names = fileNames(lastZip.inst!);
     expect(names).toContain('mimetype');
     expect(names).toContain('META-INF/container.xml');
     expect(names).toContain('OEBPS/content.opf');
@@ -89,10 +89,10 @@ describe('export/epub', () => {
     expect(names).toContain('OEBPS/toc.xhtml');
 
     // mimetype 使用 STORE 无压缩
-    const mimetypeCall = lastZip.inst.file.mock.calls.find((c) => c[0] === 'mimetype');
+    const mimetypeCall = lastZip.inst!.file.mock.calls.find((c) => c[0] === 'mimetype')!;
     expect(mimetypeCall[2]).toEqual({ compression: 'STORE' });
 
-    const container = fileContent(lastZip.inst, 'META-INF/container.xml');
+    const container = fileContent(lastZip.inst!, 'META-INF/container.xml');
     expect(container).toContain('content.opf');
   });
 
@@ -103,17 +103,17 @@ describe('export/epub', () => {
       makeChapter({ id: 'c3', status: 'completed', chapterNo: 2 }),
     ];
     await exportEpub({ project: mockProject, chapters });
-    const chaptersFiles = fileNames(lastZip.inst).filter((n) => n.startsWith('OEBPS/chapter_'));
+    const chaptersFiles = fileNames(lastZip.inst!).filter((n) => n.startsWith('OEBPS/chapter_'));
     expect(chaptersFiles).toEqual(['OEBPS/chapter_0.xhtml', 'OEBPS/chapter_1.xhtml']);
 
-    const chapterBody = fileContent(lastZip.inst, 'OEBPS/chapter_0.xhtml');
+    const chapterBody = fileContent(lastZip.inst!, 'OEBPS/chapter_0.xhtml');
     expect(chapterBody).toContain('第1章 第一章 序章');
   });
 
   it('正文应按行转换为 <p> 段落', async () => {
     const chapters = [makeChapter({ content: '第一段\n第二段\n第三段' })];
     await exportEpub({ project: mockProject, chapters });
-    const body = fileContent(lastZip.inst, 'OEBPS/chapter_0.xhtml');
+    const body = fileContent(lastZip.inst!, 'OEBPS/chapter_0.xhtml');
     expect(body).toContain('<p>第一段</p>');
     expect(body).toContain('<p>第二段</p>');
     expect(body).toContain('<p>第三段</p>');
@@ -124,9 +124,9 @@ describe('export/epub', () => {
     const chapters = [makeChapter({ title: '第1章 "引" & <上>' })];
     await exportEpub({ project, chapters });
 
-    const opf = fileContent(lastZip.inst, 'OEBPS/content.opf');
+    const opf = fileContent(lastZip.inst!, 'OEBPS/content.opf');
     expect(opf).toContain('&lt;玄幻&gt; &amp; 测试&quot;');
-    const chapterBody = fileContent(lastZip.inst, 'OEBPS/chapter_0.xhtml');
+    const chapterBody = fileContent(lastZip.inst!, 'OEBPS/chapter_0.xhtml');
     expect(chapterBody).toContain('&quot;引&quot; &amp; &lt;上&gt;');
     expect(chapterBody).not.toContain('<玄幻>');
   });
@@ -138,7 +138,7 @@ describe('export/epub', () => {
       makeChapter({ wordCount: 5000 }),
     ];
     await exportEpub({ project: mockProject, chapters });
-    const cover = fileContent(lastZip.inst, 'OEBPS/cover.xhtml');
+    const cover = fileContent(lastZip.inst!, 'OEBPS/cover.xhtml');
     expect(cover).toContain('题材：玄幻');
     expect(cover).toContain('17,000');
   });
@@ -150,7 +150,7 @@ describe('export/epub', () => {
       revokeObjectURL: vi.fn(),
     });
     const click = vi.fn();
-    const anchor = { href: '', download: '', click } as unknown as HTMLElement;
+    const anchor = { href: '', download: '', click } as unknown as HTMLAnchorElement;
     vi.spyOn(document, 'createElement').mockReturnValue(anchor);
 
     const blob = new Blob(['x']);
@@ -165,7 +165,7 @@ describe('export/epub', () => {
   it('downloadEpub 文件名已带 .epub 时不重复追加', () => {
     vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn().mockReturnValue('blob:y'), revokeObjectURL: vi.fn() });
     const click = vi.fn();
-    const anchor = { href: '', download: '', click } as unknown as HTMLElement;
+    const anchor = { href: '', download: '', click } as unknown as HTMLAnchorElement;
     vi.spyOn(document, 'createElement').mockReturnValue(anchor);
     const blob = new Blob(['x']);
     downloadEpub(blob, 'book.epub');

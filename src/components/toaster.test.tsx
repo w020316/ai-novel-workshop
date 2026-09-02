@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { Toaster } from './toaster';
 
 const { ToasterMock } = vi.hoisted(() => ({
-  ToasterMock: vi.fn((props: Record<string, unknown>) => (
-    <div data-testid="toaster" />
-  )),
+  ToasterMock: vi.fn((props: Record<string, unknown>) => {
+    void props;
+    return <div data-testid="toaster" />;
+  }),
 }));
 
 vi.mock('sonner', () => ({

@@ -72,7 +72,7 @@ describe('downloadBackup', () => {
     const createObjectURL = vi.fn().mockReturnValue('blob:ref');
     vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL: vi.fn() });
     const click = vi.fn();
-    const anchor = { href: '', download: '', click } as unknown as HTMLElement;
+    const anchor = { href: '', download: '', click } as unknown as HTMLAnchorElement;
     vi.spyOn(document, 'createElement').mockReturnValue(anchor);
 
     downloadBackup(makeBackup());
@@ -85,7 +85,7 @@ describe('downloadBackup', () => {
 
   it('未指定文件名时应生成默认文件名', () => {
     vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn().mockReturnValue('blob:1'), revokeObjectURL: vi.fn() });
-    const anchor = { href: '', download: '', click: vi.fn() } as unknown as HTMLElement;
+    const anchor = { href: '', download: '', click: vi.fn() } as unknown as HTMLAnchorElement;
     vi.spyOn(document, 'createElement').mockReturnValue(anchor);
 
     downloadBackup(makeBackup());
@@ -95,7 +95,7 @@ describe('downloadBackup', () => {
 
   it('指定文件名时应使用自定义文件名', () => {
     vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn().mockReturnValue('blob:2'), revokeObjectURL: vi.fn() });
-    const anchor = { href: '', download: '', click: vi.fn() } as unknown as HTMLElement;
+    const anchor = { href: '', download: '', click: vi.fn() } as unknown as HTMLAnchorElement;
     vi.spyOn(document, 'createElement').mockReturnValue(anchor);
 
     downloadBackup(makeBackup(), '我的备份.json');

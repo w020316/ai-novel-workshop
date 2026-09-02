@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Play, StopCircle, Loader2, Plus, Trash2, Settings2 } from 'lucide-react';
-import type { GenerationStage, UserIntervention } from '@/types';
+import type { GenerationStage } from '@/types';
 
 interface PlotPointInputProps {
   plotPoints: string[];
@@ -119,7 +119,6 @@ export function ChapterGenerator({
   title,
   plotPoints,
   generating,
-  stage,
   onTitleChange,
   onPlotPointsChange,
   onGenerate,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConsistencyReportView } from '@/components/workbench/ConsistencyReportView';
 import { listChapters, getConsistencyReport, markChapterNeedsRecheck } from '@/lib/db/queries';

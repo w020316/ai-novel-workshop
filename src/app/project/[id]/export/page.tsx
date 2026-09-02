@@ -46,7 +46,7 @@ export default function ExportPage() {
       const content = exportTxt({ project, chapters });
       downloadTxt(content, `${project.title}_全文`);
       toast.success('TXT 导出成功');
-    } catch (err) {
+    } catch {
       toast.error('TXT 导出失败');
     }
     setExporting(null);
@@ -59,7 +59,7 @@ export default function ExportPage() {
       const content = exportMarkdown({ project, chapters });
       downloadMarkdown(content, `${project.title}_全文`);
       toast.success('Markdown 导出成功');
-    } catch (err) {
+    } catch {
       toast.error('Markdown 导出失败');
     }
     setExporting(null);
@@ -72,7 +72,7 @@ export default function ExportPage() {
       const blob = await exportEpub({ project, chapters });
       downloadEpub(blob, `${project.title}_全文`);
       toast.success('EPUB 导出成功');
-    } catch (err) {
+    } catch {
       toast.error('EPUB 导出失败，请确认已安装 jszip 依赖');
     }
     setExporting(null);
@@ -113,7 +113,7 @@ export default function ExportPage() {
       });
       downloadBackup(backup);
       toast.success('JSON 备份导出成功');
-    } catch (err) {
+    } catch {
       toast.error('备份导出失败');
     }
     setExporting(null);

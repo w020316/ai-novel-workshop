@@ -410,6 +410,8 @@ export interface GenerationContext {
   chapterNo: number;
   plotPoints: string[];
   userIntervention?: UserIntervention;
+  /** Q3 抽卡模式：并行生成 N 个候选正文，按读者评分自动择优（默认 1，即不抽卡） */
+  candidateCount?: number;
   onStream: (chunk: string) => void;
   onProgress: (stage: GenerationStage) => void;
   /** 中止信号，用户点击「停止生成」时触发，贯通到写作 Agent 与上游请求 */

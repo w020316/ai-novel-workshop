@@ -194,7 +194,7 @@ describe('import/restore', () => {
 
     it('文件读取失败时应 reject', async () => {
       vi.spyOn(FileReader.prototype, 'readAsText').mockImplementation(function (this: FileReader) {
-        this.onerror?.(new Event('error'));
+        this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
       });
       const file = new File(['x'], 'backup.json');
       await expect(readBackupFile(file)).rejects.toThrow('文件读取失败');

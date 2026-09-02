@@ -99,7 +99,7 @@ describe('generateCharacterWithLLM', () => {
   it('prompt 包含角色定位、关键词、姓名与题材', async () => {
     chatMock.mockResolvedValue(chatResult(JSON.stringify({ personality: 'x' })));
     await generateCharacterWithLLM(input);
-    const [messages] = chatMock.mock.calls[0] as [[{ content?: string }[], unknown]];
+    const [messages] = chatMock.mock.calls[0] as [{ content?: string }[]];
     const combined = messages.map((m: { content?: string }) => m.content ?? '').join('\n');
     expect(combined).toContain('主角');
     expect(combined).toContain('冷酷剑修');

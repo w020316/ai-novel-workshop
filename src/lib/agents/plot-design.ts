@@ -72,7 +72,7 @@ export async function designPlot(
   const sceneDesign = parseSceneDesign(response.content);
 
   // 4. 校验并补充默认值
-  return validateSceneDesign(sceneDesign, context.projectId);
+  return validateSceneDesign(sceneDesign);
 }
 
 /**
@@ -143,8 +143,7 @@ function parseSceneDesign(content: string): SceneDesign {
  * 校验并补充 SceneDesign 默认值
  */
 function validateSceneDesign(
-  design: SceneDesign,
-  _projectId: string
+  design: SceneDesign
 ): SceneDesign {
   return {
     setting: design.setting || '默认场景',

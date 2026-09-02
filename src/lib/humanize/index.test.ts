@@ -3,7 +3,6 @@
 // ============================================================================
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { humanizeChapter } from './index';
-import { detectAITraces } from './detect';
 
 const chatMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/llm/client', () => ({ chat: chatMock }));

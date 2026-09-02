@@ -1,7 +1,7 @@
 // ============================================================================
 // 记忆装配器测试
 // ============================================================================
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { assembleMemory, memoryToPrompt } from './assembler';
 import type { LongTermMemory, MidTermMemory, ShortTermMemory, ChapterSummary, Foreshadowing } from '@/types';
 

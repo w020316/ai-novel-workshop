@@ -66,7 +66,7 @@ describe('Button', () => {
   });
 
   it('透传原生 button 属性', () => {
-    renderButton({ type: 'submit', 'data-testid': 'submit-btn' });
+    renderButton({ type: 'submit', ...({ 'data-testid': 'submit-btn' }) });
     const btn = screen.getByRole('button');
     expect(btn).toHaveAttribute('type', 'submit');
     expect(btn).toHaveAttribute('data-testid', 'submit-btn');

@@ -2,7 +2,7 @@
 // 编排器测试
 // ============================================================================
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { generateChapter } from './orchestrator';
+import { generateChapter, pickBestCandidate } from './orchestrator';
 
 vi.mock('@/lib/memory/assembler', () => ({
   assembleMemory: vi.fn().mockResolvedValue({
@@ -248,5 +248,25 @@ describe('generateChapter', () => {
     const result = await generateChapter(context);
     expect(result.content).toBeTruthy();
     warnSpy.mockRestore();
+  });
+});
+
+describe('pickBestCandidate（Q3 抽卡择优）', () => {
+  it('选择读者评分更高的候选稿', () => {
+    const weak = '太短，毫无展开。'; // <200 字 → 评分明显偏低
+    const strong = '突然有人闯入，血光四溅！\n'.repeat(200); // 篇幅充足 + 开篇钩子 → 评分更高
+    expect(pickBestCandidate([weak, strong])).toBe(strong);
+  });
+
+  it('候选顺序不影响择优结果（评分制稳定）', () => {
+    const weak = '太短，毫无展开。';
+    const strong = '突然有人闯入，血光四溅！\n'.repeat(200);
+    expect(pickBestCandidate([strong, weak])).toBe(strong);
+    expect(pickBestCandidate([weak, strong])).toBe(strong);
+  });
+
+  it('仅一个候选时直接返回该候选', () => {
+    const draft = '突然有人闯入，血光四溅！\n'.repeat(200);
+    expect(pickBestCandidate([draft])).toBe(draft);
   });
 });

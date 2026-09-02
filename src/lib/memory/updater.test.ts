@@ -7,7 +7,7 @@ import {
   syncSettingsChanged,
   batchUpdateForeshadowings,
 } from './updater';
-import type { Chapter, Foreshadowing, PlotThread, ChapterSummary, SceneDesign } from '@/types';
+import type { Chapter, Foreshadowing, PlotThread, SceneDesign } from '@/types';
 
 // 模拟 queries 模块
 vi.mock('@/lib/db/queries', () => ({

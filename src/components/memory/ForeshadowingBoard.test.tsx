@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ForeshadowingBoard } from './ForeshadowingBoard';
 import * as queries from '@/lib/db/queries';
 import * as sonner from 'sonner';
-import type { Foreshadowing, ForeshadowingStatus } from '@/types';
+import type { Foreshadowing } from '@/types';
 
 vi.mock('@/lib/db/queries', () => ({
   listForeshadowings: vi.fn(),

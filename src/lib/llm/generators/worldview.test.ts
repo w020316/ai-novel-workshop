@@ -113,7 +113,7 @@ describe('generateWorldviewWithLLM', () => {
     chatMock.mockResolvedValue(chatResult(JSON.stringify({ worldStructure: 'x' })));
     await generateWorldviewWithLLM(input);
     expect(chatMock).toHaveBeenCalledTimes(1);
-    const [messages] = chatMock.mock.calls[0] as [[{ content?: string }[], unknown]];
+    const [messages] = chatMock.mock.calls[0] as [{ content?: string }[]];
     const combined = messages.map((m: { content?: string }) => m.content ?? '').join('\n');
     expect(combined).toContain('玄幻');
     expect(combined).toContain('星河黎明');

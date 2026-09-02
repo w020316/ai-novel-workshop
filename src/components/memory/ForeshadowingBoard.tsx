@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Plus, GripVertical } from 'lucide-react';
+import { Loader2, GripVertical } from 'lucide-react';
 import { listForeshadowings, saveForeshadowing } from '@/lib/db/queries';
 import { toast } from 'sonner';
 import type { Foreshadowing, ForeshadowingStatus } from '@/types';

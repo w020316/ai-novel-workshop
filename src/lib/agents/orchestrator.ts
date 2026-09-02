@@ -27,6 +27,7 @@ import { updateMemoryAfterChapter } from '@/lib/memory/updater';
 import { saveChapter, getProject, getStylePreset } from '@/lib/db/queries';
 import { withRetry } from '@/lib/llm/retry';
 import { generateId } from '@/lib/utils';
+import { localReaderReview } from '@/lib/review/reader-review';
 import type { StylePreset, ConsistencyReport, GenerationStage } from '@/types';
 
 /**
@@ -55,7 +56,18 @@ export async function generateChapter(
 
     // ===== Stage 3: 文笔创作 =====
     context.onProgress('writing');
-    const content = await writeChapterWithRetry(sceneDesign, memory, context, stylePreset, title);
+    const candidateCount = Math.min(3, Math.max(1, context.candidateCount ?? 1));
+    const content =
+      candidateCount > 1
+        ? await writeChapterCandidates(
+            sceneDesign,
+            memory,
+            context,
+            stylePreset,
+            title,
+            candidateCount
+          )
+        : await writeChapterWithRetry(sceneDesign, memory, context, stylePreset, title);
 
     // ===== Stage 4: 一致性校验 + 修正闭环 =====
     context.onProgress('consistency_checking');
@@ -268,6 +280,65 @@ async function writeChapterWithRetry(
       },
     }
   );
+}
+
+/**
+ * Q3 抽卡模式：并行生成 candidateCount 个候选正文，用确定性读者评分（localReaderReview，
+ * 不消耗额外 LLM 配额）自动评选最优，再把最优稿一次性回放到流。
+ * 生成期间候选稿不注入 onStream，仅把最终选中稿推送前端。
+ */
+async function writeChapterCandidates(
+  sceneDesign: SceneDesign,
+  memory: AssembledMemory,
+  context: GenerationContext,
+  stylePreset: StylePreset | null,
+  title: string,
+  candidateCount: number
+): Promise<string> {
+  // 每个候选用独立的 onStream/onProgress 空实现，避免候选 token 串流到 UI
+  const silentContext: GenerationContext = {
+    ...context,
+    onStream: () => {},
+    onProgress: () => {},
+  };
+
+  const settled = await Promise.allSettled(
+    Array.from({ length: candidateCount }, () =>
+      writeChapter(sceneDesign, memory, silentContext, stylePreset, title)
+    )
+  );
+
+  const drafts = settled
+    .filter((s): s is PromiseFulfilledResult<string> => s.status === 'fulfilled')
+    .map((s) => s.value)
+    .filter((c) => c && c.trim().length > 0);
+  if (drafts.length === 0) {
+    throw new Error('抽卡模式：所有候选均生成失败');
+  }
+
+  // 读者评分择优
+  const best = pickBestCandidate(drafts);
+
+  // 把选中稿一次性回放给前端（居中评分仅作内部证据，不展示给用户）
+  context.onStream(best);
+  return best;
+}
+
+/**
+ * 抽卡择优：用确定性读者评分（localReaderReview，不消耗 LLM）选出得分最高的候选稿。
+ * 纯函数，便于单测。
+ */
+export function pickBestCandidate(drafts: string[]): string {
+  let best = drafts[0];
+  let bestScore = -1;
+  for (const draft of drafts) {
+    const score = localReaderReview(draft).score;
+    if (score > bestScore) {
+      bestScore = score;
+      best = draft;
+    }
+  }
+  return best;
 }
 
 /**

@@ -64,7 +64,7 @@ function composeName(category: NameCategory, topicSeed: number, offset: number):
 }
 
 /** 生成的 name 若与主题关键词相关，则拼接展示，否则仅用类别语义 */
-function buildMeaning(category: NameCategory, topic: string, base: string, offset: number): string {
+function buildMeaning(category: NameCategory, topic: string, base: string): string {
   const label = NAME_CATEGORY_LABEL[category];
   const ctx = topic.trim();
   return ctx
@@ -88,7 +88,7 @@ export function generateNameTemplate(input: NameLLMInput): NameIdea[] {
   const result: NameIdea[] = [];
   for (let i = 0; i < count; i++) {
     const name = composeName(input.category, seed, i);
-    const meaning = buildMeaning(input.category, topic, pool.meanings[i % pool.meanings.length], i);
+    const meaning = buildMeaning(input.category, topic, pool.meanings[i % pool.meanings.length]);
     result.push({ id: generateId('name'), name, meaning });
   }
   return result;

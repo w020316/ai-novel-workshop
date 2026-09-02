@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { GenerationProgress } from './GenerationProgress';
-import type { GenerationStage } from '@/types';
 
 describe('GenerationProgress', () => {
   it('非完成状态显示"正在生成..."', () => {

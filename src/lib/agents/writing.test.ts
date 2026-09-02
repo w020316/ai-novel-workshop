@@ -3,7 +3,7 @@
 // ============================================================================
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writeChapter, rewriteParagraph } from './writing';
-import type { SceneDesign, AssembledMemory, GenerationContext } from '@/types';
+import type { SceneDesign, AssembledMemory, GenerationContext, StylePreset } from '@/types';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -95,7 +95,15 @@ describe('writeChapter', () => {
       onStream: vi.fn(),
       onProgress: vi.fn(),
     };
-    const stylePreset = { id: 'sp1', name: '古风', sampleText: '山巅残雪，寸寸入骨。' };
+    const stylePreset: StylePreset = {
+      id: 'sp1',
+      name: '古风',
+      narrativePerspective: 'third-limited',
+      pacing: 'medium',
+      descriptionDensity: 'medium',
+      dialogueRatio: 0.3,
+      sampleText: '山巅残雪，寸寸入骨。',
+    };
 
     const result = await writeChapter(sceneDesign, memory, context, stylePreset);
 
@@ -134,9 +142,13 @@ describe('writeChapter', () => {
       onStream: vi.fn(),
       onProgress: vi.fn(),
     };
-    const stylePreset = {
+    const stylePreset: StylePreset = {
       id: 'sp2',
       name: '冷硬风格',
+      narrativePerspective: 'third-limited',
+      pacing: 'fast',
+      descriptionDensity: 'sparse',
+      dialogueRatio: 0.4,
       styleGuide: {
         summary: '冷峻克制的都市悬疑笔法',
         rhythm: '短句卡点',

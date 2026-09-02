@@ -42,4 +42,42 @@ describe('detectAITraces', () => {
     const report = detectAITraces('他点了点头，缓缓说道："这事就这样吧。"');
     expect(summarizeTraces(report)).toContain('AI 痕迹');
   });
+
+  it('v2 新规则：识别「不是而是」/ 破折号 / 连续了 / 排比堆砌', () => {
+    const content = [
+      '这不是他不想救，而是来不及了。',
+      '风声呼啸——他猛地回头。',
+      '他吃了饭，洗了碗，拖了地，睡了觉。',
+      '像火，像风，像雷。',
+    ].join('\n');
+    const report = detectAITraces(content);
+    const ids = report.categories.map((c) => c.id);
+    expect(ids).toContain('not_but_cliche');
+    expect(ids).toContain('dash_abuse');
+    expect(ids).toContain('consecutive_le');
+    expect(ids).toContain('parallelism_density');
+  });
+
+  it('超长段落命中，且位置信息覆盖整段', () => {
+    const long = '他挥出一拳。'.repeat(60); // 360 字，超过 350 上限
+    const report = detectAITraces(long);
+    const lp = report.categories.find((c) => c.id === 'long_paragraph');
+    expect(lp).toBeDefined();
+    expect(lp!.count).toBe(1);
+    expect(lp!.matches[0].start).toBe(0);
+    expect(lp!.matches[0].end).toBe(long.length);
+  });
+
+  it('每个命中类别都携带位置信息（供定点修复）', () => {
+    const content = '他笑了笑，然后转身离开。这不是巧合，而是有人安排。';
+    const report = detectAITraces(content);
+    expect(report.categories.length).toBeGreaterThan(0);
+    for (const cat of report.categories) {
+      expect(cat.matches.length).toBeGreaterThan(0);
+      for (const m of cat.matches) {
+        expect(m.end).toBeGreaterThan(m.start);
+        expect(content.slice(m.start, m.end)).toBe(m.text);
+      }
+    }
+  });
 });

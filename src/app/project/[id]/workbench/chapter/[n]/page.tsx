@@ -9,7 +9,7 @@ import { GenerationProgress } from '@/components/workbench/GenerationProgress';
 import { ConsistencyReportView } from '@/components/workbench/ConsistencyReportView';
 import { generateChapter } from '@/lib/agents/orchestrator';
 import { detectAITraces, humanizeChapter } from '@/lib/humanize';
-import type { AiTraceReport } from '@/lib/humanize';
+import type { AiTraceReport, HumanizeSpotFix } from '@/lib/humanize';
 import { reviewChapter, readerReviewVerdictLabel } from '@/lib/review/reader-review';
 import type { ReaderReview } from '@/lib/review/reader-review';
 import {
@@ -42,6 +42,7 @@ export default function ChapterPage() {
   const [title, setTitle] = useState('');
   const abortRef = useRef<AbortController | null>(null);
   const [aiReport, setAiReport] = useState<AiTraceReport | null>(null);
+  const [spotFixes, setSpotFixes] = useState<HumanizeSpotFix[]>([]);
   const [humanizing, setHumanizing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [readerReview, setReaderReview] = useState<ReaderReview | null>(null);
@@ -137,14 +138,15 @@ export default function ChapterPage() {
     router.push(`/project/${projectId}/workbench`);
   }, [chapter, projectId, chapterNo, title, plotPoints, streamingContent, router]);
 
-  // 先本地扫描 AI 痕迹，若命中再由 LLM 做点对点去AI味改写
+  // 先本地扫描 AI 痕迹，若命中再由 LLM 做定点去AI味修复
   const handleScan = useCallback(() => {
     const report = detectAITraces(streamingContent);
     setAiReport(report);
+    setSpotFixes([]);
     toast.info(
       report.totalCount === 0
         ? '未发现明显的 AI 痕迹'
-        : `检测到 ${report.totalCount} 处 AI 痕迹，可点击「一键去AI味」改写`
+        : `检测到 ${report.totalCount} 处 AI 痕迹，可点击「一键去AI味」定点修复`
     );
   }, [streamingContent]);
 
@@ -154,6 +156,7 @@ export default function ChapterPage() {
     try {
       const report = detectAITraces(streamingContent);
       setAiReport(report);
+      setSpotFixes([]);
       if (report.totalCount === 0) {
         toast.info('该章未发现明显的 AI 痕迹，无需改写');
         return;
@@ -164,9 +167,12 @@ export default function ChapterPage() {
         chapterNo,
       });
       setStreamingContent(result.content);
+      setSpotFixes(result.spots);
       toast.success(
         result.changed
-          ? `已完成去AI味改写（原识别 ${report.totalCount} 处痕迹）`
+          ? result.mode === 'spot'
+            ? `定点修复 ${result.spots.length} 处命中句（共识别 ${report.totalCount} 处痕迹），其余正文保持原样`
+            : `已完成去AI味改写（原识别 ${report.totalCount} 处痕迹）`
           : '改写结果未产生变化，已保留原文'
       );
     } catch (err) {
@@ -387,6 +393,24 @@ export default function ChapterPage() {
                     <p className="mt-0.5 text-stone-400">建议：{c.hint}</p>
                   </div>
                 ))}
+
+                {/* 定点修复明细（spot-fix） */}
+                {spotFixes.length > 0 && (
+                  <div className="mt-2 border-t border-stone-200 pt-2">
+                    <p className="text-xs font-medium text-emerald-700">
+                      已定点修复 {spotFixes.length} 处命中句：
+                    </p>
+                    <ul className="mt-1 space-y-1">
+                      {spotFixes.map((s, i) => (
+                        <li key={i} className="text-xs text-stone-500">
+                          <span className="text-stone-400 line-through">{s.original}</span>
+                          <span className="mx-1">→</span>
+                          <span className="text-emerald-700">{s.rewritten}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 

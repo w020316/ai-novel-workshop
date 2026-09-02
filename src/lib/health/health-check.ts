@@ -1,8 +1,9 @@
 // ============================================================================
 // 卷级健康体检
-// 依据：计划「卷级健康体检」
+// 依据：计划「卷级健康体检」+ 调研 P4（Webnovel Writer 追读力量纲）
 // 职责：对标亿字长篇「不烂文」四大杀手做全局体检——
-//       主线进度、伏笔积压/超期、角色活跃/遗忘、平均字数与战斗通胀信号。
+//       主线进度、伏笔积压/超期、角色活跃/遗忘、平均字数与战斗通胀信号；
+//       并新增爽点密度（Cool-point）追读指标，量化长文追读性。
 // 说明：此项为确定性启发式聚合，不依赖 LLM，稳定可测；LLM 深入审查由上层按需触发。
 // ============================================================================
 import type {
@@ -30,7 +31,8 @@ export interface HealthIssue {
     | 'character'
     | 'power'
     | 'pacing'
-    | 'words';
+    | 'words'
+    | 'coolpoint';
   severity: HealthSeverity;
   title: string;
   detail: string;
@@ -54,6 +56,8 @@ export interface HealthMetrics {
   inactiveMainCharacters: number;
   /** 平均每章字数 */
   avgWordsPerChapter: number;
+  /** 爽点密度：平均每章的爽点/高潮关键词命中次数（Cool-point 追读指标） */
+  coolPointPerChapter: number;
 }
 
 export interface ProjectHealthReport {
@@ -71,6 +75,14 @@ const POWER_WORD_RATIO = 0.3;
 
 /** 升级/战力提升高频词（警惕战力通胀、升级流水账） */
 const POWER_WORDS = ['突破', '晋级', '重修', '顿悟', '觉醒', '凝神', '神格'];
+
+/** 爽点/高潮关键词（打脸、反转、扬名等 payoff 时刻，用于追读密度量化） */
+const COOL_POINT_WORDS = [
+  '打脸', '反转', '逆袭', '翻盘', '揭穿', '反杀', '大胜', '报了仇',
+  '扬眉吐气', '一鸣惊人', '刮目相看', '震惊全场', '当众', '跪下道歉',
+];
+/** 爽点密度下限：平均每章低于该值提示追读力不足（约每 5 章至少 1 个爽点） */
+const COOL_POINT_MIN_DENSITY = 0.2;
 
 /**
  * 运行项目的健康体检
@@ -108,6 +120,7 @@ export async function runHealthCheck(projectId: string): Promise<ProjectHealthRe
     ).length,
     avgWordsPerChapter:
       stats.totalChapters > 0 ? Math.round(stats.totalWords / stats.totalChapters) : 0,
+    coolPointPerChapter: computeCoolPointDensity(summaries, stats.totalChapters),
   };
 
   const issues: HealthIssue[] = [
@@ -115,6 +128,7 @@ export async function runHealthCheck(projectId: string): Promise<ProjectHealthRe
     ...buildForeshadowingIssues(foreshadowings, currentMaxChapter),
     ...buildCharacterIssues(characters, summaries, currentMaxChapter),
     ...buildPowerIssues(summaries, stats.totalChapters),
+    ...buildCoolPointIssues(summaries, stats.totalChapters),
     ...buildPacingIssues(metrics, targetWords),
   ].sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
 
@@ -274,6 +288,44 @@ function buildPowerIssues(
       title: '力量升级过于频繁，警惕战力通胀',
       detail: `升级/突破类关键词出现约 ${powerCount} 次（均每章 ${(powerCount / totalChapters).toFixed(1)} 次）。`,
       suggestion: '放缓升级节奏，多聚焦人设、博弈与主线推进，避免战力求爽导致设定崩坏。',
+    });
+  }
+  return issues;
+}
+
+/** ===== 爽点密度 / 追读力（Cool-point） ===== */
+function countCoolPointHits(summaries: ChapterSummary[]): number {
+  const texts = summaries.map((s) => `${s.summary} ${s.keyEvents.join(' ')}`).join(' ');
+  let hits = 0;
+  for (const w of COOL_POINT_WORDS) {
+    const re = new RegExp(w, 'g');
+    hits += texts.match(re)?.length ?? 0;
+  }
+  return hits;
+}
+
+function computeCoolPointDensity(summaries: ChapterSummary[], totalChapters: number): number {
+  if (totalChapters === 0) return 0;
+  return Math.round((countCoolPointHits(summaries) / totalChapters) * 100) / 100;
+}
+
+function buildCoolPointIssues(
+  summaries: ChapterSummary[],
+  totalChapters: number
+): HealthIssue[] {
+  const issues: HealthIssue[] = [];
+  // 章节过少时不评估（开局铺垫期爽点天然稀疏）
+  if (totalChapters < 5 || summaries.length === 0) return issues;
+
+  const density = computeCoolPointDensity(summaries, totalChapters);
+  if (density < COOL_POINT_MIN_DENSITY) {
+    issues.push({
+      dimension: 'coolpoint',
+      severity: 'warning',
+      title: '爽点密度偏低，追读力可能不足',
+      detail: `近 ${totalChapters} 章中爽点/高潮关键词仅出现约 ${density}/章（建议 ≥ ${COOL_POINT_MIN_DENSITY}/章，即约每 5 章一个 payoff 时刻）。`,
+      suggestion:
+        '在后续章节安排打脸、反转、扬名等具象爽点，并配合章末断章钩子提升追读；可在大纲中为每卷预设爽点节拍。',
     });
   }
   return issues;

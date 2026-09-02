@@ -48,10 +48,10 @@ const minorRole: Character = {
   ...protagonist, id: 'c2', name: '店小二', role: 'minor', locked: false,
 };
 
-function summary(n: number, states: Record<string, string> = {}): ChapterSummary {
+function summary(n: number, states: Record<string, string> = {}, text = '本章内容'): ChapterSummary {
   return {
     id: `s${n}`, projectId: 'p1', chapterId: `ch${n}`, chapterNo: n, volumeNo: 1,
-    summary: '本章内容', keyEvents: [], characterStates: states,
+    summary: text, keyEvents: [], characterStates: states,
     embedding: new Float32Array(), createdAt: 0,
   };
 }
@@ -128,5 +128,37 @@ describe('runHealthCheck', () => {
     const charIssue = report.issues.find((i) => i.dimension === 'character');
     expect(charIssue?.detail).toContain('林渊');
     expect(charIssue?.detail).not.toContain('店小二');
+  });
+
+  it('爽点密度：命中爽点时指标大于 0 且不预警', async () => {
+    q.getOutline.mockResolvedValue(outline);
+    q.listCharacters.mockResolvedValue([protagonist]);
+    q.listForeshadowings.mockResolvedValue([]);
+    // 10 章，其中 3 章含爽点 → 密度 0.3/章 ≥ 0.2
+    const summaries = Array.from({ length: 10 }, (_, i) =>
+      i < 3 ? summary(i + 1, {}, '当众打脸，全场震惊') : summary(i + 1)
+    );
+    q.listChapterSummaries.mockResolvedValue(summaries);
+    q.getProjectStats.mockResolvedValue({ totalWords: 25000, totalChapters: 10, completedChapters: 10 });
+
+    const report = await runHealthCheck('p1');
+    expect(report.metrics.coolPointPerChapter).toBeGreaterThanOrEqual(0.2);
+    expect(report.issues.some((i) => i.dimension === 'coolpoint')).toBe(false);
+  });
+
+  it('爽点密度：长期无爽点时触发追读力预警', async () => {
+    q.getOutline.mockResolvedValue(outline);
+    q.listCharacters.mockResolvedValue([protagonist]);
+    q.listForeshadowings.mockResolvedValue([]);
+    const summaries = Array.from({ length: 20 }, (_, i) => summary(i + 1));
+    q.listChapterSummaries.mockResolvedValue(summaries);
+    q.getProjectStats.mockResolvedValue({ totalWords: 50000, totalChapters: 20, completedChapters: 20 });
+
+    const report = await runHealthCheck('p1');
+    expect(report.metrics.coolPointPerChapter).toBe(0);
+    const issue = report.issues.find((i) => i.dimension === 'coolpoint');
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe('warning');
+    expect(issue?.title).toContain('爽点密度');
   });
 });

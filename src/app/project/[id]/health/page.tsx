@@ -36,6 +36,7 @@ const DIMENSION_LABEL: Record<HealthIssue['dimension'], string> = {
   power: '战力',
   pacing: '节奏',
   words: '篇幅',
+  coolpoint: '追读',
 };
 
 export default function HealthPage() {
@@ -91,7 +92,7 @@ export default function HealthPage() {
             <HeartPulse className="h-5 w-5 text-brand-500" /> 卷级健康体检
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            面向长篇连载的全局体检：主线进度、伏笔积压、角色遗忘、力量升级与节奏厚度，提前预警「烂文」信号。
+            面向长篇连载的全局体检：主线进度、伏笔积压、角色遗忘、力量升级、节奏厚度与爽点密度（追读力），提前预警「烂文」信号。
           </p>
         </div>
         <Button variant="outline" onClick={load}>
@@ -114,7 +115,7 @@ export default function HealthPage() {
       </Card>
 
       {/* 指标网格 */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-7">
         <Metric label="已完成章节" value={String(report.metrics.completedChapters)} unit="章" />
         <Metric
           label="规划总章"
@@ -133,6 +134,11 @@ export default function HealthPage() {
           unit="字"
         />
         <Metric label="待回收伏笔" value={String(report.metrics.foreshadowingBacklog)} unit="条" />
+        <Metric
+          label="爽点密度"
+          value={String(report.metrics.coolPointPerChapter)}
+          unit="/章"
+        />
       </div>
 
       {/* 问题列表 */}

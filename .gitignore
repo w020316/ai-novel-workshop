@@ -37,6 +37,8 @@ yarn-error.log*
 
 # vercel
 .vercel
+.vercel-cache/
+.vercel-config/
 
 # npm cache (本地重定向)
 .npm-cache/

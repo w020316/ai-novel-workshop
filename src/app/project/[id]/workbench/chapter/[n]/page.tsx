@@ -12,6 +12,8 @@ import { detectAITraces, humanizeChapter } from '@/lib/humanize';
 import type { AiTraceReport, HumanizeSpotFix } from '@/lib/humanize';
 import { reviewChapter, readerReviewVerdictLabel } from '@/lib/review/reader-review';
 import type { ReaderReview } from '@/lib/review/reader-review';
+import { checkContentCompliance } from '@/lib/compliance/check';
+import type { ComplianceReport } from '@/lib/compliance/check';
 import {
   Loader2,
   Play,
@@ -20,6 +22,7 @@ import {
   Wand2,
   ScanSearch,
   Eye,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Chapter, GenerationStage, ConsistencyReport, GenerationContext } from '@/types';
@@ -46,6 +49,7 @@ export default function ChapterPage() {
   const [reviewing, setReviewing] = useState(false);
   const [readerReview, setReaderReview] = useState<ReaderReview | null>(null);
   const [candidateCount, setCandidateCount] = useState(1);
+  const [compliance, setCompliance] = useState<ComplianceReport | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -204,6 +208,21 @@ export default function ChapterPage() {
       setReviewing(false);
     }
   }, [reviewing, streamingContent, title, chapterNo]);
+
+  // 投稿合规体检：投递前一次性自查违规/敏感/广告/格式残留/AI痕迹/章节尺度
+  const handleCompliance = useCallback(() => {
+    const report = checkContentCompliance(streamingContent);
+    setCompliance(report);
+    toast.info(
+      report.passed
+        ? `合规体检 ${report.score}/100，建议可提交自检`
+        : `合规体检 ${report.score}/100，存在 ${
+            report.priorities.filter((p) => p.startsWith('必改')).length
+          } 项必改、${
+            report.priorities.filter((p) => p.startsWith('需处理')).length
+          } 项需处理`
+    );
+  }, [streamingContent]);
 
   const addPlotPoint = () => setPlotPoints((prev) => [...prev, '']);
   const updatePlotPoint = (index: number, value: string) => {
@@ -377,6 +396,16 @@ export default function ChapterPage() {
                   )}
                   读者冷读复核
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCompliance}
+                  disabled={!streamingContent.trim()}
+                  title="投递前一次性自查：违规/敏感、广告引流、格式残留、AI痕迹、章节尺度"
+                >
+                  <ShieldCheck className="mr-1 h-4 w-4" />
+                  投稿合规体检
+                </Button>
               </div>
             </div>
           </CardHeader>
@@ -492,6 +521,64 @@ export default function ChapterPage() {
                     <ul className="mt-1 list-disc space-y-0.5 pl-4 text-stone-600">
                       {readerReview.suggestions.map((s, i) => (
                         <li key={i}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 投稿合规体检结果 */}
+            {compliance && (
+              <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-stone-700">投稿合规体检</p>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        compliance.passed
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {compliance.passed ? '建议可提交自检' : '建议处理后再投'}
+                    </span>
+                    <span className="text-2xl font-bold text-brand-600">
+                      {compliance.score}
+                      <span className="text-xs font-normal text-stone-400"> /100（过审友好度）</span>
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-stone-400">
+                  确定性规则离线自检（不消耗模型额度）。体检仅作自查提示，并不承诺通过平台审核，投稿请以各家平台规则为准。
+                </p>
+
+                <div className="mt-3 space-y-2">
+                  {compliance.categories.map((c) => (
+                    <div key={c.id} className="text-xs text-stone-500">
+                      <span
+                        className={`font-medium ${
+                          c.status === 'danger' ? 'text-red-700' : c.status === 'warn' ? 'text-amber-700' : 'text-emerald-700'
+                        }`}
+                      >
+                        {c.status === 'danger' ? '必改' : c.status === 'warn' ? '需处理' : '通过'}
+                        ·{c.label}
+                        {c.count > 0 ? ` ×${c.count}` : ''}
+                      </span>
+                      {c.examples.length > 0 && (
+                        <span className="ml-1">：{c.examples.join('、')}</span>
+                      )}
+                      <p className="mt-0.5 text-stone-400">{c.hint}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {compliance.priorities.length > 0 && (
+                  <div className="mt-3 border-t border-stone-200 pt-2 text-xs">
+                    <p className="font-medium text-stone-700">处理优先级</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-stone-600">
+                      {compliance.priorities.map((p, i) => (
+                        <li key={i}>{p}</li>
                       ))}
                     </ul>
                   </div>

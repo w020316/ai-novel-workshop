@@ -290,6 +290,23 @@ export interface InspirationCard {
   createdAt: number;
 }
 
+// ============ 起名工具 ============
+export type NameCategory = 'person' | 'place' | 'skill' | 'sect' | 'weapon' | 'treasure';
+
+export interface NameIdea {
+  id: string;
+  name: string;
+  meaning: string;
+}
+
+export interface NameLLMInput {
+  projectId: string;
+  category: NameCategory;
+  topic: string;
+  genre?: Genre;
+  count: number;
+}
+
 /** 一次拆文结果（样本 + 指标 + 灵感卡） */
 export interface Deconstruction {
   id: string;

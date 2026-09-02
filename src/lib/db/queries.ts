@@ -16,6 +16,8 @@ import type {
   StylePreset,
   GenreTemplate,
   PlotThread,
+  Deconstruction,
+  InspirationCard,
 } from '@/types';
 
 // ============ 项目 ============
@@ -283,4 +285,45 @@ export async function listGenreTemplates(): Promise<GenreTemplate[]> {
 
 export async function getGenreTemplate(genre: string): Promise<GenreTemplate | undefined> {
   return db.genreTemplates.where('genre').equals(genre).first();
+}
+
+// ============ 拆书工坊（P5'） ============
+export async function saveDeconstruction(d: Deconstruction): Promise<void> {
+  await db.deconstructions.put(d);
+}
+
+export async function getDeconstruction(id: string): Promise<Deconstruction | undefined> {
+  return db.deconstructions.get(id);
+}
+
+export async function listDeconstructions(projectId: string): Promise<Deconstruction[]> {
+  return db.deconstructions
+    .where('projectId')
+    .equals(projectId)
+    .reverse()
+    .sortBy('createdAt');
+}
+
+export async function deleteDeconstruction(id: string): Promise<void> {
+  await db.transaction('rw', db.deconstructions, db.inspirationCards, async () => {
+    await db.deconstructions.delete(id);
+    await db.inspirationCards.where('sourceDeconstructionId').equals(id).delete();
+  });
+}
+
+export async function saveInspirationCards(cards: InspirationCard[]): Promise<void> {
+  if (cards.length === 0) return;
+  await db.inspirationCards.bulkPut(cards);
+}
+
+export async function listInspirationCards(projectId: string): Promise<InspirationCard[]> {
+  return db.inspirationCards
+    .where('projectId')
+    .equals(projectId)
+    .reverse()
+    .sortBy('createdAt');
+}
+
+export async function deleteInspirationCard(id: string): Promise<void> {
+  await db.inspirationCards.delete(id);
 }

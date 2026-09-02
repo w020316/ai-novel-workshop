@@ -262,6 +262,46 @@ export interface GenreTemplate {
   typicalArcs: string[];
 }
 
+// ============ 拆书工坊（P5' 粘贴拆文 + 灵感沉淀） ============
+/** 拆文确定性指标：从参考文本中提取的量化特征 */
+export interface DeconstructionMetrics {
+  wordCount: number; // 中文字数
+  sentenceCount: number;
+  avgSentenceLength: number; // 中文字符/句
+  dialogueRatio: number; // 0-1
+  hookCount: number; // 开篇/转折钩子关键词数
+  cliffhangerCount: number; // 断章悬念数
+  coolPointHits: string[]; // 命中的爽点关键词
+  coolPointDensity: number; // 爽点/千字
+  hasOpeningHook: boolean;
+  hasCliffhanger: boolean;
+  rhythm: 'fast' | 'medium' | 'slow'; // 由句长推断的节奏
+  topTrigrams: string[]; // 高频三字词组
+}
+
+/** 一条可收藏的拆书灵感 */
+export interface InspirationCard {
+  id: string;
+  projectId: string;
+  kind: 'golden-three' | 'hook' | 'coolpoint' | 'pacing' | 'character' | 'structure' | 'other';
+  title: string;
+  content: string;
+  sourceDeconstructionId: string;
+  createdAt: number;
+}
+
+/** 一次拆文结果（样本 + 指标 + 灵感卡） */
+export interface Deconstruction {
+  id: string;
+  projectId: string;
+  sourceTitle: string; // 参考书/片段名（用户填）
+  samplePreview: string; // 样本前 200 字预览
+  metrics: DeconstructionMetrics;
+  suggestions: string[]; // LLM 综合改进建议（可降级为指标衍生）
+  fromLLM: boolean; // suggestions 是否来自 LLM
+  createdAt: number;
+}
+
 // ============ LLM 适配层（spec 6.4 节） ============
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';

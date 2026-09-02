@@ -15,6 +15,8 @@ import type {
   StylePreset,
   GenreTemplate,
   ConsistencyReport,
+  Deconstruction,
+  InspirationCard,
 } from '@/types';
 
 export class NovelDB extends Dexie {
@@ -29,6 +31,8 @@ export class NovelDB extends Dexie {
   stylePresets!: Table<StylePreset, string>;
   genreTemplates!: Table<GenreTemplate, string>;
   consistencyReports!: Table<ConsistencyReport, string>;
+  deconstructions!: Table<Deconstruction, string>;
+  inspirationCards!: Table<InspirationCard, string>;
 
   constructor() {
     super('ai_novel_workshop');
@@ -44,6 +48,11 @@ export class NovelDB extends Dexie {
       stylePresets: 'id, name',
       genreTemplates: 'id, genre',
       consistencyReports: 'chapterId',
+    });
+    // 拆书工坊表：作为独立索引字段追加，避免影响既有 version(1) 数据
+    this.version(2).stores({
+      deconstructions: 'id, projectId, createdAt',
+      inspirationCards: 'id, projectId, kind, sourceDeconstructionId',
     });
   }
 }

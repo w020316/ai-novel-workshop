@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Globe, Users, Palette, Library, Lock } from 'lucide-react';
+import { Globe, Users, Palette, Library, Lock, BookOpen } from 'lucide-react';
 
 const SETTINGS_TABS = [
   {
@@ -29,6 +29,12 @@ const SETTINGS_TABS = [
     label: '题材模板',
     icon: Library,
     desc: '节奏规律 · 爽点设计',
+  },
+  {
+    slug: 'deconstruct',
+    label: '拆书工坊',
+    icon: BookOpen,
+    desc: '粘贴参考书拆解 · 灵感卡',
   },
 ] as const;
 

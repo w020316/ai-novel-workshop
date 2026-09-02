@@ -40,6 +40,18 @@ vi.mock('@/lib/style/profile', () => ({
   validateSampleText: (t: string) => validateSampleTextMock(t),
 }));
 
+vi.mock('@/lib/style/clone', () => ({
+  generateStyleGuide: (t: string) =>
+    Promise.resolve({
+      summary: `指南:${String(t).slice(0, 6)}`,
+      rhythm: '节奏',
+      tone: '语气',
+      wordPreferences: '用词',
+      taboos: '禁忌',
+    }),
+  styleGuideToPrompt: (g: { summary: string }) => `指南:${g.summary}`,
+}));
+
 const statsFixture = {
   sentenceCount: 5,
   avgSentenceLength: 12,
@@ -132,7 +144,8 @@ describe('StyleSampleUploader', () => {
     fireEvent.click(screen.getByRole('button', { name: '生成并应用' }));
 
     await waitFor(() => expect(saveStylePresetMock).toHaveBeenCalledTimes(1));
-    expect(saveStylePresetMock).toHaveBeenCalledWith(presetFixture);
+    const saved = saveStylePresetMock.mock.calls[0][0] as StylePreset;
+    expect(saved.styleGuide?.summary).toContain('指南:');
     expect(updateProjectMock).toHaveBeenCalledWith('p1', { stylePresetId: 'style-proj-p1' });
     await waitFor(() =>
       expect(toastMock.success).toHaveBeenCalledWith(
@@ -141,8 +154,9 @@ describe('StyleSampleUploader', () => {
       )
     );
     expect(onSaved).toHaveBeenCalledTimes(1);
-    // 保存后显示专属预设标识
+    // 保存后显示专属预设标识与文风仿写指南
     expect(screen.getByText('已有专属预设')).toBeInTheDocument();
+    expect(screen.getByText('文风仿写指南')).toBeInTheDocument();
   });
 
   it('样本偏少但有警告时仍可继续保存', async () => {

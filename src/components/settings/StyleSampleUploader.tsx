@@ -18,8 +18,9 @@ import {
   validateSampleText,
   type StyleStats,
 } from '@/lib/style/profile';
+import { generateStyleGuide } from '@/lib/style/clone';
 import { countChineseWords } from '@/lib/utils';
-import type { StylePreset } from '@/types';
+import type { StyleGuide, StylePreset } from '@/types';
 import {
   Upload,
   Loader2,
@@ -27,6 +28,7 @@ import {
   Trash2,
   Sparkles,
   BarChart3,
+  BookOpenText,
 } from 'lucide-react';
 
 interface StyleSampleUploaderProps {
@@ -39,6 +41,7 @@ export function StyleSampleUploader({ projectId, onSaved }: StyleSampleUploaderP
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [stats, setStats] = useState<StyleStats | null>(null);
+  const [styleGuide, setStyleGuide] = useState<StyleGuide | null>(null);
   const [existingPreset, setExistingPreset] = useState<StylePreset | null>(null);
 
   const loadExisting = async () => {
@@ -48,6 +51,7 @@ export function StyleSampleUploader({ projectId, onSaved }: StyleSampleUploaderP
       if (existing?.sampleText) {
         setText(existing.sampleText);
         setStats(analyzeTextStyle(existing.sampleText));
+        if (existing.styleGuide) setStyleGuide(existing.styleGuide);
       }
     } catch {
       // 静默失败，首次上传时无需展示
@@ -96,13 +100,15 @@ export function StyleSampleUploader({ projectId, onSaved }: StyleSampleUploaderP
         projectId,
         sampleText: text,
       });
-      await saveStylePreset(preset);
-      await updateProject(projectId, { stylePresetId: preset.id });
-      setExistingPreset(preset);
+      // P3：LLM 从样本凝练文风仿写指南；失败自动降级为统计指纹派生，不打断保存
+      const guide = await generateStyleGuide(text);
+      const enriched = { ...preset, styleGuide: guide };
+      await saveStylePreset(enriched);
+      await updateProject(projectId, { stylePresetId: enriched.id });
+      setExistingPreset(enriched);
+      setStyleGuide(guide);
       toast.success('项目专属文风已生成并应用', {
-        description: `${preset.narrativePerspective} · ${preset.pacing} · 对话 ${Math.round(
-          preset.dialogueRatio * 100
-        )}%`,
+        description: `${enriched.narrativePerspective} · ${enriched.pacing} · 文风仿写指南已生成`,
       });
       onSaved();
     } catch (e) {
@@ -115,6 +121,7 @@ export function StyleSampleUploader({ projectId, onSaved }: StyleSampleUploaderP
   const handleClear = () => {
     setText('');
     setStats(null);
+    setStyleGuide(null);
   };
 
   return (
@@ -151,6 +158,7 @@ export function StyleSampleUploader({ projectId, onSaved }: StyleSampleUploaderP
             onChange={(e) => {
               setText(e.target.value);
               setStats(null);
+              setStyleGuide(null);
             }}
             placeholder="粘贴 1-5 章正文文本…&#10;支持任意题材，最好与目标小说风格一致。"
             disabled={saving}
@@ -239,6 +247,38 @@ export function StyleSampleUploader({ projectId, onSaved }: StyleSampleUploaderP
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* 文风仿写指南（P3） */}
+        {styleGuide && (
+          <div className="rounded-md border border-brand-200 bg-brand-50/40 p-3">
+            <p className="mb-2 flex items-center gap-1 text-xs font-medium text-brand-700">
+              <BookOpenText className="h-3 w-3" />
+              文风仿写指南
+            </p>
+            <p className="text-[12px] leading-relaxed text-stone-700">{styleGuide.summary}</p>
+            <div className="mt-2 grid gap-2 text-[11px] text-stone-600 md:grid-cols-2">
+              <div>
+                <p className="font-medium text-stone-700">节奏句式</p>
+                <p className="mt-0.5 leading-relaxed">{styleGuide.rhythm}</p>
+              </div>
+              <div>
+                <p className="font-medium text-stone-700">语气刻画</p>
+                <p className="mt-0.5 leading-relaxed">{styleGuide.tone}</p>
+              </div>
+              <div>
+                <p className="font-medium text-stone-700">用词偏好</p>
+                <p className="mt-0.5 leading-relaxed">{styleGuide.wordPreferences}</p>
+              </div>
+              <div>
+                <p className="font-medium text-stone-700">绝对避免</p>
+                <p className="mt-0.5 leading-relaxed">{styleGuide.taboos}</p>
+              </div>
+            </div>
+            <p className="mt-2 text-[10px] text-stone-400">
+              该指南已随预设入库，章节生成时会注入写作提示词；LLM 不可用时自动降级为统计指纹派生，不影响使用
+            </p>
           </div>
         )}
       </CardContent>

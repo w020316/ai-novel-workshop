@@ -223,6 +223,23 @@ export interface VocabularyProfile {
   commonPhrases: string[];
 }
 
+/**
+ * 文风仿写集成（P3）：LLM 从样本文本凝练的定性风格指南。
+ * 与统计指纹（VocabularyProfile）互补——指纹给量化约束，指南给可操作的写作规则。
+ */
+export interface StyleGuide {
+  /** 一句话总括文风（如"冷峻克制的都市悬疑笔法，长句铺陈+短句收束"） */
+  summary: string;
+  /** 节奏与句式特征（具体的可执行规则） */
+  rhythm: string;
+  /** 语气与人物刻画方式 */
+  tone: string;
+  /** 高频用词/表达偏好（直接照搬的词与句式） */
+  wordPreferences: string;
+  /** 必须避免的表达（反 AI 味 + 样本中不出现的写法） */
+  taboos: string;
+}
+
 export interface StylePreset {
   id: string;
   name: string; // 如"细腻言情"、"硬核爽文"
@@ -232,6 +249,8 @@ export interface StylePreset {
   dialogueRatio: number; // 对话占比 0-1
   sampleText?: string; // Few-shot 样本（3-5章）
   vocabularyProfile?: VocabularyProfile;
+  /** P3：LLM 定性文风仿写指南（缺省时回落纯统计指纹） */
+  styleGuide?: StyleGuide;
 }
 
 export interface GenreTemplate {

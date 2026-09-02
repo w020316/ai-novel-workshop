@@ -9,6 +9,11 @@ import type { SceneDesign, AssembledMemory, GenerationContext } from '@/types';
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
+// Mock 文风仿写指南，验证注入写作提示词
+vi.mock('@/lib/style/clone', () => ({
+  styleGuideToPrompt: (g: { summary: string }) => `【文风仿写指南（严格模仿）】\n总括：${g.summary}`,
+}));
+
 describe('writeChapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,6 +100,61 @@ describe('writeChapter', () => {
     const result = await writeChapter(sceneDesign, memory, context, stylePreset);
 
     expect(result).toContain('带文风正文');
+  });
+
+  it('带 styleGuide 文风仿写指南时注入写作提示词（请求体中含保证文本）', async () => {
+    const encoder = new TextEncoder();
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('event: token\ndata: {"token":"仿写正文"}\n\n'));
+        controller.enqueue(encoder.encode('event: done\ndata: {"totalTokens":5}\n\n'));
+        controller.close();
+      },
+    });
+    mockFetch.mockResolvedValue({ ok: true, body: mockStream });
+
+    const sceneDesign: SceneDesign = {
+      setting: '场景',
+      conflict: '冲突',
+      highlight: '爽点',
+      foreshadowingToPlant: [],
+      foreshadowingToRecover: [],
+      characterAppearances: [],
+    };
+    const memory: AssembledMemory = {
+      longTerm: { worldview: null, characters: [], outline: null, pendingForeshadowings: [], stylePreset: null },
+      midTerm: { relevantSummaries: [], activePlotThreads: [], foreshadowingsToRecover: [], characterStates: {} },
+      shortTerm: { prevChapters: [], currentPlotPoints: [] },
+      tokenEstimate: 0,
+    };
+    const context: GenerationContext = {
+      projectId: 'proj-1',
+      chapterNo: 5,
+      plotPoints: [],
+      onStream: vi.fn(),
+      onProgress: vi.fn(),
+    };
+    const stylePreset = {
+      id: 'sp2',
+      name: '冷硬风格',
+      styleGuide: {
+        summary: '冷峻克制的都市悬疑笔法',
+        rhythm: '短句卡点',
+        tone: '冷叙',
+        wordPreferences: '动作词',
+        taboos: '禁抒情',
+      },
+    };
+
+    const result = await writeChapter(sceneDesign, memory, context, stylePreset);
+    expect(result).toContain('仿写正文');
+
+    // 请求体应包含文风仿写指南文本
+    const body = mockFetch.mock.calls[0][1]?.body as string | undefined;
+    const parsed = body ? JSON.parse(body) : null;
+    const userPrompt = parsed?.messages?.find((m: { role: string }) => m.role === 'user')?.content ?? '';
+    expect(userPrompt).toContain('文风仿写指南（严格模仿）');
+    expect(userPrompt).toContain('冷峻克制的都市悬疑笔法');
   });
 
   it('用户主动中断 signal 时应返回已生成的部分内容', async () => {

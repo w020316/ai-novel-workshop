@@ -9,6 +9,7 @@
 import type { SceneDesign, AssembledMemory, GenerationContext, StylePreset } from '@/types';
 import { memoryToPrompt } from '@/lib/memory/assembler';
 import { streamChapter } from '@/lib/llm/client-stream';
+import { styleGuideToPrompt } from '@/lib/style/clone';
 
 /**
  * 文笔创作 Agent 的默认 System Prompt
@@ -67,6 +68,12 @@ function buildWritingPrompt(
   if (sceneDesign.characterAppearances.length > 0) {
     parts.push('【出场人物】');
     parts.push(sceneDesign.characterAppearances.join('、'));
+    parts.push('');
+  }
+
+  // 文风指南（LLM 定性，优先于样本展示，直接给出可执行规则）
+  if (stylePreset?.styleGuide) {
+    parts.push(styleGuideToPrompt(stylePreset.styleGuide));
     parts.push('');
   }
 

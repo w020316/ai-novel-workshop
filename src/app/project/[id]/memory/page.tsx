@@ -1,9 +1,10 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { MemoryBrowser } from '@/components/memory/MemoryBrowser';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Brain, Info } from 'lucide-react';
+import { Brain, Info, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 export default function MemoryPage() {
   const params = useParams<{ id: string }>();
@@ -16,6 +17,24 @@ export default function MemoryPage() {
           <h1 className="font-serif text-xl text-stone-800">记忆管理</h1>
           <p className="text-sm text-stone-500">浏览和管理三级记忆体系</p>
         </div>
+      </div>
+
+      {/* 子导航：伏笔看板 / 一致性报告 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href={`/project/${projectId}/memory/foreshadowing`}
+          className="flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-3 py-1.5 text-sm text-stone-600 transition-colors hover:border-brand-300 hover:text-brand-700"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" />
+          伏笔看板
+        </Link>
+        <Link
+          href={`/project/${projectId}/memory/consistency`}
+          className="flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-3 py-1.5 text-sm text-stone-600 transition-colors hover:border-brand-300 hover:text-brand-700"
+        >
+          <ShieldAlert className="h-3.5 w-3.5" />
+          一致性报告
+        </Link>
       </div>
 
       {/* 提示卡 */}

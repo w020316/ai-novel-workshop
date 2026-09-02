@@ -13,9 +13,7 @@ export default function WorkbenchLayout({ children }: { children: React.ReactNod
     { href: '/outline', label: '大纲视图', icon: BookText },
   ];
 
-  // 从路径中提取 workbench 后的子路径
-  const basePath = pathname.replace(/\/project\/[^/]+\/workbench(\/.*)?$/, '/project/$1/workbench');
-  // 简化：直接用 pathname 判断
+  // 用当前路径判断当前子页签
   const currentPath = pathname.split('/workbench')[1] || '/chapters';
 
   return (

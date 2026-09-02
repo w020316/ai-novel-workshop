@@ -195,41 +195,45 @@ export default function DeconstructPage() {
           <CardContent className="space-y-4">
             {/* 指标 */}
             <div className="grid grid-cols-2 gap-2 text-[11px] md:grid-cols-4">
-              <div className="rounded border border-stone-200 p-2">
-                <p className="flex items-center gap-1 text-stone-400">
-                  <MessageSquare className="h-3 w-3" /> 对话占比
+              <div className="min-w-0 rounded border border-stone-200 p-2">
+                <p className="flex items-center gap-1 truncate text-stone-400">
+                  <MessageSquare className="h-3 w-3 shrink-0" /> 对话占比
                 </p>
-                <p className="mt-0.5 text-base font-semibold text-stone-800">
+                <p className="mt-0.5 text-base font-semibold leading-tight text-stone-800">
                   {Math.round(deconstruction.metrics.dialogueRatio * 100)}%
                 </p>
               </div>
-              <div className="rounded border border-stone-200 p-2">
-                <p className="flex items-center gap-1 text-stone-400">
-                  <Clock3 className="h-3 w-3" /> 节奏
+              <div className="min-w-0 rounded border border-stone-200 p-2">
+                <p className="flex items-center gap-1 truncate text-stone-400">
+                  <Clock3 className="h-3 w-3 shrink-0" /> 节奏
                 </p>
-                <p className="mt-0.5 text-base font-semibold text-stone-800">
-                  {RHYTHM_LABEL[deconstruction.metrics.rhythm]} ·{' '}
+                <p className="mt-0.5 text-base font-semibold leading-tight text-stone-800">
+                  {RHYTHM_LABEL[deconstruction.metrics.rhythm]}
+                </p>
+                <p className="truncate text-[10px] text-stone-500">
                   {deconstruction.metrics.avgSentenceLength}字/句
                 </p>
               </div>
-              <div className="rounded border border-stone-200 p-2">
-                <p className="flex items-center gap-1 text-stone-400">
-                  <Zap className="h-3 w-3" /> 爽点密度
+              <div className="min-w-0 rounded border border-stone-200 p-2">
+                <p className="flex items-center gap-1 truncate text-stone-400">
+                  <Zap className="h-3 w-3 shrink-0" /> 爽点密度
                 </p>
-                <p className="mt-0.5 text-base font-semibold text-stone-800">
+                <p className="mt-0.5 text-base font-semibold leading-tight text-stone-800">
                   {deconstruction.metrics.coolPointDensity}/千字
-                  {deconstruction.metrics.coolPointHits.length > 0 && (
-                    <span className="ml-1 text-xs text-stone-500">
-                      ({deconstruction.metrics.coolPointHits.join('、')})
-                    </span>
-                  )}
                 </p>
+                {deconstruction.metrics.coolPointHits.length > 0 && (
+                  <p className="mt-0.5 truncate text-[10px] text-stone-500">
+                    {deconstruction.metrics.coolPointHits.join('、')}
+                  </p>
+                )}
               </div>
-              <div className="rounded border border-stone-200 p-2">
-                <p className="text-stone-400">钩子 / 断章</p>
-                <p className="mt-0.5 text-base font-semibold text-stone-800">
+              <div className="min-w-0 rounded border border-stone-200 p-2">
+                <p className="truncate text-stone-400">钩子 / 断章</p>
+                <p className="mt-0.5 text-base font-semibold leading-tight text-stone-800">
                   {deconstruction.metrics.hookCount} 处钩子
-                  <span className="text-xs text-stone-500"> · 结尾{deconstruction.metrics.hasCliffhanger ? '留钩' : '无钩'}</span>
+                </p>
+                <p className="truncate text-[10px] text-stone-500">
+                  结尾{deconstruction.metrics.hasCliffhanger ? '留钩' : '无钩'}
                 </p>
               </div>
             </div>

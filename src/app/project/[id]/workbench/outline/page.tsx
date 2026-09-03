@@ -2,15 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useProjectStore } from '@/lib/store/project-store';
 import { getOutline, saveOutline } from '@/lib/db/queries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, BookText, Plus } from 'lucide-react';
+import { generateOutlineTemplate } from '@/lib/outline/template';
+import { toast } from 'sonner';
+import { Loader2, BookText, Plus, Wand2 } from 'lucide-react';
 import type { Outline, Volume } from '@/types';
 
 export default function OutlinePage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
+  const { currentProject } = useProjectStore();
+  const genre = currentProject?.genre;
   const [outline, setOutline] = useState<Outline | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -65,6 +70,35 @@ export default function OutlinePage() {
     setVolumes((prev) => prev.map((v, i) => (i === index ? { ...v, ...patch } : v)));
   };
 
+  /** 从题材模板起底：仅填空为主线/结局/分卷（不覆盖已有人工内容），并进入编辑态 */
+  const applyTemplate = () => {
+    if (!genre) return;
+    if (
+      !window.confirm(`确定用「${genre}」题材模板补充空白大纲？仅填充为空的内容，已有内容不受影响。`)
+    ) return;
+    const tpl = generateOutlineTemplate(genre);
+    let filled = 0;
+    if (!mainPlotline.trim()) {
+      setMainPlotline(tpl.mainPlotline);
+      filled++;
+    }
+    if (!ending.trim()) {
+      setEnding(tpl.ending);
+      filled++;
+    }
+    setVolumes((prev) => {
+      if (prev.length > 0) return prev;
+      filled += tpl.volumes.length;
+      return tpl.volumes;
+    });
+    if (filled > 0) {
+      toast.success(`已用题材模板补充 ${filled} 项`, { description: '只填充空白内容，可继续编辑后保存' });
+    } else {
+      toast.info('大纲已有内容，未做改动');
+    }
+    setEditing(true);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -80,9 +114,17 @@ export default function OutlinePage() {
           <h1 className="font-serif text-xl text-stone-800">大纲视图</h1>
           <p className="text-sm text-stone-500">管理故事的主线、分卷和结局</p>
         </div>
-        <Button onClick={() => (editing ? handleSave() : setEditing(true))}>
-          {editing ? '保存' : '编辑'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {genre && (
+            <Button variant="outline" onClick={applyTemplate} title={`用「${genre}」题材模板补充空白大纲（不覆盖已有内容）`}>
+              <Wand2 className="mr-2 h-4 w-4" />
+              从题材模板起底
+            </Button>
+          )}
+          <Button onClick={() => (editing ? handleSave() : setEditing(true))}>
+            {editing ? '保存' : '编辑'}
+          </Button>
+        </div>
       </div>
 
       {!outline && !editing ? (

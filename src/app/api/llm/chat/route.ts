@@ -10,7 +10,7 @@
 // ============================================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
-import { getDefaultProvider } from '@/lib/llm/providers';
+import { resolveProvider } from '@/lib/llm/providers';
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import type { ChatMessage, LLMProvider } from '@/types';
@@ -29,7 +29,7 @@ interface ChatRequestBody {
 }
 
 function safeParseProvider(value: unknown): LLMProvider | undefined {
-  if (value === 'deepseek' || value === 'zhipu' || value === 'qwen') {
+  if (value === 'gemini' || value === 'zhipu' || value === 'deepseek' || value === 'qwen') {
     return value;
   }
   return undefined;
@@ -74,19 +74,19 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 3. 选择 Provider：请求显式指定 → 默认 Provider → 第一个可用
-  const provider = safeParseProvider(body.provider) ?? getDefaultProvider();
+  // 3. 选择 Provider：请求显式指定（已配置才采用）→ 默认 Provider；模型随之回退
+  const resolved = resolveProvider(safeParseProvider(body.provider), body.model);
 
   try {
-    const adapter = provider
-      ? createAdapter(provider, { model: body.model })
+    const adapter = resolved
+      ? createAdapter(resolved.provider, { model: resolved.model })
       : createFirstAvailableAdapter();
 
     if (!adapter) {
       return NextResponse.json(
         {
           error:
-            '服务端未配置任何 LLM Provider，请在 .env.local 中设置 DEEPSEEK_API_KEY / ZHIPU_API_KEY / QWEN_API_KEY',
+            '服务端未配置任何 LLM Provider，请在 .env.local 中设置 GEMINI_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY / QWEN_API_KEY',
         },
         { status: 503 }
       );
@@ -104,8 +104,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       content: result.content,
       usage: result.usage,
-      provider: provider ?? 'auto',
-      model: body.model ?? adapter.model,
+      provider: resolved?.provider ?? 'auto',
+      model: resolved?.model ?? adapter.model,
     });
   } catch (err) {
     // 5. 错误处理

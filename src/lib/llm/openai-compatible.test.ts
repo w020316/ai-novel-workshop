@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OpenAICompatibleAdapter, LLMApiError, isRetryableError } from './openai-compatible';
-import { getProviderConfig, listConfiguredProviders, getDefaultProvider } from './providers';
+import { getProviderConfig, listConfiguredProviders, getDefaultProvider, resolveProvider } from './providers';
 import { createAdapter, createFirstAvailableAdapter } from './adapter';
 import type { ChatMessage } from '@/types';
 
@@ -61,8 +61,18 @@ describe('llm/providers', () => {
       expect(c.baseURL).toContain('aliyuncs.com');
     });
 
+    it('应返回 Gemini 配置（免费 OpenAI 兼容端点，主用）', () => {
+      const c = getProviderConfig('gemini');
+      expect(c.provider).toBe('gemini');
+      expect(c.baseURL).toContain('generativelanguage.googleapis.com');
+      expect(c.baseURL.endsWith('/openai')).toBe(true);
+      expect(c.envKey).toBe('GEMINI_API_KEY');
+      expect(c.defaultModel).toMatch(/^gemini-/);
+      expect(c.supportsJSON).toBe(true);
+    });
+
     it('所有 Provider 应支持 JSON 与 Stream', () => {
-      const providers = ['deepseek', 'zhipu', 'qwen'] as const;
+      const providers = ['gemini', 'zhipu', 'deepseek', 'qwen'] as const;
       for (const p of providers) {
         const c = getProviderConfig(p);
         expect(c.supportsJSON).toBe(true);
@@ -71,7 +81,7 @@ describe('llm/providers', () => {
     });
 
     it('所有 Provider 应有合理的 maxOutputTokens', () => {
-      const providers = ['deepseek', 'zhipu', 'qwen'] as const;
+      const providers = ['gemini', 'zhipu', 'deepseek', 'qwen'] as const;
       for (const p of providers) {
         const c = getProviderConfig(p);
         expect(c.maxOutputTokens).toBeGreaterThanOrEqual(2048);
@@ -84,6 +94,7 @@ describe('llm/providers', () => {
 
     beforeEach(() => {
       process.env = { ...originalEnv };
+      delete process.env.GEMINI_API_KEY;
       delete process.env.DEEPSEEK_API_KEY;
       delete process.env.ZHIPU_API_KEY;
       delete process.env.QWEN_API_KEY;
@@ -107,16 +118,59 @@ describe('llm/providers', () => {
       expect(list).not.toContain('zhipu');
     });
 
-    it('默认 Provider 应优先选择 DeepSeek', () => {
+    it('默认 Provider 应优先选择 Gemini（gemini 为主）', () => {
+      process.env.GEMINI_API_KEY = 'sk-gemini';
       process.env.ZHIPU_API_KEY = 'sk-zhipu';
       process.env.QWEN_API_KEY = 'sk-qwen';
       process.env.DEEPSEEK_API_KEY = 'sk-deep';
-      expect(getDefaultProvider()).toBe('deepseek');
+      expect(getDefaultProvider()).toBe('gemini');
     });
 
-    it('DeepSeek 未配置时应回退到智谱', () => {
+    it('Gemini 未配置时应回退到智谱 GLM（glm 为辅助）', () => {
       process.env.ZHIPU_API_KEY = 'sk-zhipu';
       expect(getDefaultProvider()).toBe('zhipu');
+    });
+  });
+
+  describe('resolveProvider（未配置 provider 的健壮回退）', () => {
+    const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+      delete process.env.GEMINI_API_KEY;
+      delete process.env.DEEPSEEK_API_KEY;
+      delete process.env.ZHIPU_API_KEY;
+      delete process.env.QWEN_API_KEY;
+    });
+
+    afterEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    it('请求的 provider 已配置 → 采用它及其请求模型', () => {
+      process.env.ZHIPU_API_KEY = 'sk-zhipu';
+      process.env.DEEPSEEK_API_KEY = 'sk-deep';
+      const r = resolveProvider('deepseek', 'deepseek-chat');
+      expect(r).toEqual({ provider: 'deepseek', model: 'deepseek-chat' });
+    });
+
+    it('请求的 provider 未配置（如 gemini 无 key）→ 回退到已配置 provider 并使用其默认模型', () => {
+      process.env.ZHIPU_API_KEY = 'sk-zhipu';
+      process.env.DEEPSEEK_API_KEY = 'sk-deep';
+      const r = resolveProvider('gemini', 'gemini-2.5-flash');
+      expect(r).not.toBeNull();
+      expect(r!.provider).toBe('zhipu');
+      expect(r!.model).toBe('glm-4-flash'); // 套用 zhipu 默认模型，而非 gemini 的
+    });
+
+    it('未显式指定 provider → 回退到默认 provider', () => {
+      process.env.ZHIPU_API_KEY = 'sk-zhipu';
+      const r = resolveProvider(undefined, 'some-model');
+      expect(r!.provider).toBe('zhipu');
+    });
+
+    it('无任何已配置 provider → 返回 null', () => {
+      expect(resolveProvider('gemini', 'gemini-2.5-flash')).toBeNull();
     });
   });
 });
@@ -374,6 +428,7 @@ describe('llm/adapter', () => {
 
     beforeEach(() => {
       process.env = { ...originalEnv };
+      delete process.env.GEMINI_API_KEY;
       delete process.env.DEEPSEEK_API_KEY;
       delete process.env.ZHIPU_API_KEY;
       delete process.env.QWEN_API_KEY;

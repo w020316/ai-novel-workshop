@@ -34,7 +34,23 @@ export interface ProviderConfig {
 }
 
 // ============ Provider 配置表 ============
+// 说明：gemini（主用，免费额度充足）走 Google AI Studio 的 OpenAI 兼容端点；
+//       zhipu（智谱 GLM）为辅助降级；deepseek / qwen 为额外备份。
 export const PROVIDER_CONFIGS: Record<LLMProvider, ProviderConfig> = {
+  gemini: {
+    provider: 'gemini',
+    label: 'Google Gemini',
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    chatPath: '/chat/completions',
+    embeddingPath: '/embeddings',
+    envKey: 'GEMINI_API_KEY',
+    defaultModel: 'gemini-2.5-flash',
+    defaultEmbeddingModel: 'text-embedding-004',
+    supportsJSON: true,
+    supportsStream: true,
+    maxOutputTokens: 8192,
+    rateLimitRPM: 15,
+  },
   deepseek: {
     provider: 'deepseek',
     label: 'DeepSeek',
@@ -113,15 +129,15 @@ export function isProviderConfigured(provider: LLMProvider): boolean {
 
 /**
  * 列出所有已配置的 Provider（按优先级排序）
- * 可通过环境变量 LLM_PROVIDER_ORDER 自定义顺序（逗号分隔），默认为 deepseek > zhipu > qwen
+ * 可通过环境变量 LLM_PROVIDER_ORDER 自定义顺序（逗号分隔），默认为 gemini > zhipu > deepseek > qwen
  */
 export function listConfiguredProviders(): LLMProvider[] {
   const envOrder = process.env['LLM_PROVIDER_ORDER'];
   const order: LLMProvider[] = envOrder
-    ? (envOrder.split(',').map((s) => s.trim()) as LLMProvider[]).filter(
-        (p) => p === 'deepseek' || p === 'zhipu' || p === 'qwen'
+    ? (envOrder.split(',').map((s) => s.trim()) as LLMProvider[]).filter((p) =>
+        p === 'gemini' || p === 'deepseek' || p === 'zhipu' || p === 'qwen'
       )
-    : ['deepseek', 'zhipu', 'qwen'];
+    : ['gemini', 'zhipu', 'deepseek', 'qwen'];
   return order.filter((p) => isProviderConfigured(p));
 }
 
@@ -131,4 +147,22 @@ export function listConfiguredProviders(): LLMProvider[] {
 export function getDefaultProvider(): LLMProvider | null {
   const configured = listConfiguredProviders();
   return configured[0] ?? null;
+}
+
+/**
+ * 解析实际可用的 Provider 与模型（健壮回退）：
+ * - 请求的 provider 已配置 key → 使用它及其请求模型
+ * - 请求的 provider 未配置（如 gemini 无 key）→ 回退到第一个已配置 provider，并套用其默认模型
+ * 若无任何已配置 provider，返回 null。
+ */
+export function resolveProvider(
+  requested?: LLMProvider,
+  requestedModel?: string
+): { provider: LLMProvider; model?: string } | null {
+  if (requested && isProviderConfigured(requested)) {
+    return { provider: requested, model: requestedModel };
+  }
+  const fallback = getDefaultProvider();
+  if (!fallback) return null;
+  return { provider: fallback, model: getProviderConfig(fallback).defaultModel };
 }

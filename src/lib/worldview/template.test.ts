@@ -3,6 +3,7 @@ import {
   generateWorldviewTemplate,
   isWorldviewEmpty,
   normalizeRules,
+  parseRulesInput,
 } from './template';
 import type { Genre } from '@/types';
 
@@ -188,6 +189,35 @@ describe('worldview/template', () => {
 
     it('全空数组应返回空数组', () => {
       expect(normalizeRules(['', '  ', ''])).toEqual([]);
+    });
+  });
+
+  describe('parseRulesInput（多行粘贴拆分为多条规则）', () => {
+    it('按换行拆分为多条规则', () => {
+      expect(parseRulesInput('规则一\n规则二\n规则三')).toEqual([
+        '规则一',
+        '规则二',
+        '规则三',
+      ]);
+    });
+
+    it('支持 windows 的 \\r\\n 换行', () => {
+      expect(parseRulesInput('规则一\r\n规则二\r\n规则三')).toEqual([
+        '规则一',
+        '规则二',
+        '规则三',
+      ]);
+    });
+
+    it('单行（无换行）返回单条规则', () => {
+      expect(parseRulesInput(' 唯一规则 ')).toEqual(['唯一规则']);
+    });
+
+    it('去除前后空白与多余空行，并去重', () => {
+      expect(parseRulesInput(' 规则A \n\n 规则B \n 规则A \n')).toEqual([
+        '规则A',
+        '规则B',
+      ]);
     });
   });
 });

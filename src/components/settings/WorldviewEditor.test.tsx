@@ -26,6 +26,16 @@ vi.mock('sonner', () => ({ toast: toastMock }));
 
 vi.mock('@/lib/worldview/template', () => ({
   normalizeRules: (rules: string[]) => rules,
+  parseRulesInput: (s: string) =>
+    s.split(/\r?\n+/).map((x) => x.trim()).filter((x) => x.length > 0),
+  generateWorldviewTemplate: () => ({
+    worldStructure: '模板世界架构',
+    powerSystem: '模板力量体系',
+    geography: '模板地理',
+    era: '模板时代',
+    factions: '模板势力',
+    rules: ['模板规则一', '模板规则二', '模板规则三'],
+  }),
 }));
 
 const wvFixture: Worldview = {
@@ -101,9 +111,7 @@ describe('WorldviewEditor', () => {
 
   it('通过回车添加核心规则并显示', async () => {
     render(<WorldviewEditor projectId="p1" />);
-    const input = await screen.findByPlaceholderText(
-      '输入一条规则后按回车或点击添加…'
-    );
+    const input = await screen.findByPlaceholderText(/输入一条规则，或一次粘贴多行/);
     fireEvent.change(input, { target: { value: '凡人不可飞升' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -115,12 +123,33 @@ describe('WorldviewEditor', () => {
   it('重复规则会给出警告', async () => {
     getWorldviewMock.mockResolvedValue({ ...wvFixture, rules: ['凡人不可飞升'] });
     render(<WorldviewEditor projectId="p1" />);
-    const input = await screen.findByPlaceholderText(
-      '输入一条规则后按回车或点击添加…'
-    );
+    const input = await screen.findByPlaceholderText(/输入一条规则，或一次粘贴多行/);
     fireEvent.change(input, { target: { value: '凡人不可飞升' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(toastMock.warning).toHaveBeenCalledWith('该规则已存在'));
+    await waitFor(() => expect(toastMock.warning).toHaveBeenCalledWith('这些规则已存在'));
+  });
+
+  it('一次粘贴多行会拆分为多条规则', async () => {
+    render(<WorldviewEditor projectId="p1" />);
+    const input = await screen.findByPlaceholderText(/输入一条规则，或一次粘贴多行/);
+    fireEvent.change(input, { target: { value: '规则一\n规则二\n规则三' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(screen.getByText('规则一')).toBeInTheDocument();
+    expect(screen.getByText('规则二')).toBeInTheDocument();
+    expect(screen.getByText('规则三')).toBeInTheDocument();
+    expect(screen.getByText('3 条规则', { exact: false })).toBeInTheDocument();
+  });
+
+  it('从题材模板填充空白设定与规则', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<WorldviewEditor projectId="p1" genre="玄幻" />);
+    fireEvent.click(await screen.findByRole('button', { name: /从题材模板填充/ }));
+
+    expect(screen.getByDisplayValue('模板世界架构')).toBeInTheDocument();
+    expect(screen.getByText('模板规则一')).toBeInTheDocument();
+    expect(screen.getByText('3 条规则', { exact: false })).toBeInTheDocument();
+    expect(toastMock.success).toHaveBeenCalled();
   });
 
   it('删除已添加的规则', async () => {

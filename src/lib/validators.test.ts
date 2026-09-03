@@ -170,7 +170,7 @@ describe('validators/options', () => {
     ]);
   });
 
-  it('Provider 选项应包含三个厂商', () => {
-    expect(PROVIDER_OPTIONS.map((p) => p.value)).toEqual(['deepseek', 'zhipu', 'qwen']);
+  it('Provider 选项应包含四家厂商（gemini 为主）', () => {
+    expect(PROVIDER_OPTIONS.map((p) => p.value)).toEqual(['gemini', 'zhipu', 'deepseek', 'qwen']);
   });
 });

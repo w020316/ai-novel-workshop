@@ -110,13 +110,14 @@ describe('export/epub', () => {
     expect(chapterBody).toContain('第1章 第一章 序章');
   });
 
-  it('正文应按行转换为 <p> 段落', async () => {
+  it('正文应按行转换为 <p> 段落（含首行缩进样式）', async () => {
     const chapters = [makeChapter({ content: '第一段\n第二段\n第三段' })];
     await exportEpub({ project: mockProject, chapters });
     const body = fileContent(lastZip.inst!, 'OEBPS/chapter_0.xhtml');
-    expect(body).toContain('<p>第一段</p>');
-    expect(body).toContain('<p>第二段</p>');
-    expect(body).toContain('<p>第三段</p>');
+    expect(body).toContain('text-indent:2em');
+    expect(body).toContain('>第一段</p>');
+    expect(body).toContain('>第二段</p>');
+    expect(body).toContain('>第三段</p>');
   });
 
   it('特殊字符应被 XML 转义', async () => {
@@ -171,5 +172,41 @@ describe('export/epub', () => {
     downloadEpub(blob, 'book.epub');
     expect(anchor.download).toBe('book.epub');
     expect(click).toHaveBeenCalled();
+  });
+
+  it('应生成 SVG 封面文件并注册为封面图片', async () => {
+    await exportEpub({ project: mockProject, chapters: [] });
+    const names = fileNames(lastZip.inst!);
+    expect(names).toContain('OEBPS/cover.svg');
+    const coverSvg = fileContent(lastZip.inst!, 'OEBPS/cover.svg');
+    expect(coverSvg).toContain('<svg');
+    const opf = fileContent(lastZip.inst!, 'OEBPS/content.opf');
+    expect(opf).toContain('cover-img');
+    expect(opf).toContain('<meta name="cover" content="cover-img"/>');
+    const coverXhtml = fileContent(lastZip.inst!, 'OEBPS/cover.xhtml');
+    expect(coverXhtml).toContain('src="cover.svg"');
+  });
+
+  it('meta 提供作者/简介/封面标题并写入 OPF 元数据', async () => {
+    const project = { ...mockProject, summary: '一个少年逆天改命的故事。' };
+    await exportEpub({
+      project,
+      chapters: [],
+      meta: { author: '笔名君', description: '自定义简介。', coverTitle: '逆命少年' },
+    });
+    const opf = fileContent(lastZip.inst!, 'OEBPS/content.opf');
+    expect(opf).toContain('<dc:creator>笔名君</dc:creator>');
+    expect(opf).toContain('自定义简介。');
+    expect(opf).toContain('<dc:title>逆命少年</dc:title>');
+  });
+
+  it('meta 缺省时回退项目标题/默认作者/项目简介', async () => {
+    const project = { ...mockProject, summary: '默认简介。' };
+    await exportEpub({ project, chapters: [] });
+    const opf = fileContent(lastZip.inst!, 'OEBPS/content.opf');
+    expect(opf).toContain('<dc:title>测试小说</dc:title>');
+    // 缺 author → 默认
+    const coverSvg = fileContent(lastZip.inst!, 'OEBPS/cover.svg');
+    expect(coverSvg).toContain('AI 小说制作工坊');
   });
 });

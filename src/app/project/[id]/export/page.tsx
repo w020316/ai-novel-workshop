@@ -5,14 +5,21 @@ import { useParams } from 'next/navigation';
 import { getProject, listChapters, getWorldview, listCharacters, getOutline, listForeshadowings, listChapterSummaries, getConsistencyReport, listPlotThreads, getProjectStylePreset } from '@/lib/db/queries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Download, FileText, BookMarked, Archive, Upload, ShieldCheck, CheckSquare } from 'lucide-react';
+import { Loader2, Download, FileText, BookMarked, Archive, Upload, ShieldCheck, CheckSquare, Image as ImageIcon } from 'lucide-react';
 import { exportTxt, downloadTxt } from '@/lib/export/txt';
 import { exportMarkdown, downloadMarkdown } from '@/lib/export/markdown';
-import { exportEpub, downloadEpub } from '@/lib/export/epub';
+import { exportEpub, downloadEpub, buildCoverSvg } from '@/lib/export/epub';
 import { createBackup, downloadBackup } from '@/lib/export/backup';
 import { readBackupFile, restoreBackup } from '@/lib/import/restore';
 import { toast } from 'sonner';
 import type { NovelProject, Chapter } from '@/types';
+
+const PLATFORM_TIPS: [string, string, string][] = [
+  ['番茄小说', 'EPUB', '免费爽文平台，导入后标题+简介需符合平台规范，附带 AI 披露。'],
+  ['起点中文网', 'DOCX/EPUB', '建议完整正文+作者简介+第一卷标题，人工过琵琶初审。'],
+  ['晋江文学城', '同一文件', '女频平台，改动敏感/需改标题简介，拆书卡注意边界。'],
+  ['知乎盐选', 'Markdown', '盐选专栏，短篇→长文；保留首段钩子与断章。'],
+];
 
 export default function ExportPage() {
   const params = useParams<{ id: string }>();
@@ -22,6 +29,10 @@ export default function ExportPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  // 封面/元数据配置
+  const [coverTitle, setCoverTitle] = useState('');
+  const [author, setAuthor] = useState('');
+  const [description, setDescription] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -29,7 +40,11 @@ export default function ExportPage() {
       getProject(projectId),
       listChapters(projectId),
     ]);
-    if (p) setProject(p);
+    if (p) {
+      setProject(p);
+      setCoverTitle((prev) => prev || p.title);
+      setDescription((prev) => prev || p.summary);
+    }
     setChapters(chs);
     setLoading(false);
   }, [projectId]);
@@ -69,9 +84,13 @@ export default function ExportPage() {
     if (!project) return;
     setExporting('epub');
     try {
-      const blob = await exportEpub({ project, chapters });
-      downloadEpub(blob, `${project.title}_全文`);
-      toast.success('EPUB 导出成功');
+      const blob = await exportEpub({
+        project,
+        chapters,
+        meta: { coverTitle: coverTitle.trim(), author: author.trim(), description: description.trim() },
+      });
+      downloadEpub(blob, `${coverTitle.trim() || project.title}_全文`);
+      toast.success('EPUB 导出成功（含封面与元数据）');
     } catch {
       toast.error('EPUB 导出失败，请确认已安装 jszip 依赖');
     }
@@ -255,6 +274,84 @@ export default function ExportPage() {
           </ul>
         </CardContent>
       </Card>
+
+      {/* 封面 / 元数据 / 多平台建议 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ImageIcon className="h-4 w-4 text-brand-500" />
+              EPUB 封面与元数据
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-stone-600">书名（封面标题）</label>
+              <input
+                value={coverTitle}
+                onChange={(e) => setCoverTitle(e.target.value)}
+                className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                placeholder={project.title}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-stone-600">作者（笔名）</label>
+              <input
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+                className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                placeholder="AI 小说制作工坊"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-stone-600">作品简介（将写入 EPUB 元数据）</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="min-h-[72px] w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                placeholder="一段吸引读者的简介…"
+              />
+            </div>
+            <p className="text-xs text-stone-400">导出 EPUB 自动生成文房风格 SVG 封面并带作者/简介元数据。</p>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">封面预览</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* 用 data URI 展示 SVG 封面预览 */}
+              <img
+                src={`data:image/svg+xml;utf8,${encodeURIComponent(
+                  buildCoverSvg(
+                    coverTitle.trim() || project.title,
+                    project.genre,
+                    totalWords.toLocaleString(),
+                    author.trim() || 'AI 小说制作工坊'
+                  )
+                )}`}
+                alt="封面预览"
+                className="mx-auto w-40 rounded shadow-sm"
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">多平台分发建议</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1.5">
+              {PLATFORM_TIPS.map(([p, fmt, tip]) => (
+                <p key={p} className="text-xs text-stone-500">
+                  <span className="font-medium text-stone-700">{p}</span>
+                  <span className="ml-1 text-stone-400">({fmt})</span>：{tip}
+                </p>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       {/* 导出选项 */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

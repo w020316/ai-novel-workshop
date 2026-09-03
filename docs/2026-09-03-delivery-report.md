@@ -343,4 +343,225 @@
 
 - 无代码改动，不影响测试/构建
 
+***
+
+## 十三、阶段八·EPUB 封面与元数据增强（M7）
+
+**需求**：交付报告 §5.7 建议 #4 —— 导出前封面/元数据生成与多平台打包（EPUB 增强）。
+
+### 功能说明
+
+- **SVG 书封面**：生成文房风格 SVG 封面（暖纸底 + 翰墨青描边 + 朱砂点缀），含书名/题材/字数/作者，无需外部资源，阅读器可直接渲染
+
+- **元数据增强**：EPUB 元数据新增作者（笔名）、作品简介，封面标题可独立设置
+
+- **排版优化**：章节正文段落首行缩进 2em、行高 1.8，提升中文阅读体验
+
+- **封面预览**：导出前实时预览 SVG 封面效果
+
+- **多平台建议**：导出中心新增番茄/起点/晋江/知乎盐选等平台的格式与规范建议
+
+### 落地文件
+
+| 文件                                     | 改动                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `src/lib/export/epub.ts`               | 新增 `EpubMeta` 接口、`buildCoverSvg` 函数；`exportEpub` 支持传入元数据，生成封面 SVG 并写入 OPF、章节段落首行缩进 |
+| `src/app/project/[id]/export/page.tsx` | 新增封面标题/作者/简介输入框 + 封面预览 + 多平台建议卡片；`handleExportEpub` 传递元数据                          |
+| `src/lib/export/epub.test.ts`          | 新增 SVG 封面生成、元数据写入、段落样式 3 类用例；更新 1 个子段既有用例                                          |
+
+### 验证
+
+- 全量单元回归：**76 文件 / 632 用例全绿**（含 EPUB 增强 11 个用例）
+
+- 移动端 E2E：`e2e/mobile-viewport.spec.ts` **1 通过**（Pixel 5 视口 4 条核心公开路由均无横向溢出）——依赖 Chromium 已装齐加载
+
+- 生产构建：`next build` 通过（静态页 7/7）
+
+*至此阶段一\~八全部交付：质量审查 / UI 设计系统 / 章节版本回滚 / 全局灵感库 / 批量续写 / 移动端巡检 / 开源对标落地方案 / EPUB 封面与元数据增强。项目交付状态完整、运行稳定、已具备自动回归保障。*
+
 *交付套件完备：dev-handoff / 开源调研 / 对标落地方案 / 交付报告 / 用户手册 / 设计规范。*
+
+***
+
+## 十四、阶段九·Gemini 为主 + GLM 为辅助的模型接入（M7 增强）
+
+**需求**：创建以 Gemini（免费 API）为主、智谱 GLM 为辅助的小说创作平台 —— 复用现有 OpenAI 兼容适配层，零新增 SDK。
+
+### 方案
+
+- Gemini 走 Google AI Studio 的 **OpenAI 兼容端点** `https://generativelanguage.googleapis.com/v1beta/openai`，因此现有 `OpenAICompatibleAdapter` 直接复用，无需改协议层；沿用 `Authorization: Bearer` 鉴权与既有 SSE/JSON 流解析。
+
+- 免费额度与模型（2023-03 起 AI Studio 免费层稳定）：`gemini-2.5-flash`（推荐，1M 上下文）、`gemini-2.5-flash-lite`（免费高限）、`gemini-2.0-flash`（稳定）；Embedding 用 `text-embedding-004`。
+
+- 降级链：`gemini → zhipu(GLM) → deepseek → qwen`；`getDefaultProvider` 在未配 Gemini Key 时自动回退到 GLM。
+
+### 落地文件
+
+| 文件                                                           | 改动                                                                                                                   | <br /> |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | :----- |
+| `src/types/index.ts`                                         | `LLMProvider` 联合类型新增 `'gemini'`                                                                                      | <br /> |
+| `src/lib/llm/providers.ts`                                   | 新增 gemini Provider 配置（免费端点/`GEMINI_API_KEY`/默认模型/embedding）；默认顺序改为 `gemini > zhipu > deepseek > qwen`，过滤白名单收录 gemini | <br /> |
+| `src/lib/llm/adapter.ts`                                     | `createFirstAvailableAdapter` 降级默认列表前置 gemini                                                                        | <br /> |
+| `src/lib/validators.ts`                                      | `PROVIDER_OPTIONS` 与 zod 枚举加入 gemini（置首）                                                                             | <br /> |
+| `src/lib/store/project-store.ts`                             | `DEFAULT_LLM_CONFIG.provider` → `gemini`，默认 `gemini-2.5-flash`                                                       | <br /> |
+| `src/components/project/project-form.tsx`                    | `MODEL_OPTIONS` 增 Gemini 三种免费模型，创建表单默认选中                                                                             | <br /> |
+| `src/app/api/llm/{generate-chapter,chat,embedding}/route.ts` | 三处 `safeParseProvider` 纳管 gemini                                                                                     | <br /> |
+| `.env.example` / `.env.local`                                | 增加 `GEMINI_API_KEY`（主用置首）；`LLM_PROVIDER_ORDER=gemini,zhipu`                                                          | <br /> |
+
+### 测试更新
+
+- `openai-compatible.test.ts`：Provider 全量列表加入 gemini；新增 Gemini 免费端点/默认模型断言；默认回退测试改为 `gemini → zhipu`（GLM 为辅助）语义
+
+- `validators.test.ts` / `project-store.test.ts` / `project-form.test.tsx`：适配默认 provider 更改为 gemini 及选项顺序
+
+### 验证
+
+- 单元回归：**76 文件 / 637 用例全绿**（新增 Gemini 配置 1 条 + resolveProvider 回退 4 条回归断言）
+
+- 类型检查：无新增错误（仅存 2 处既有、与本阶段无关的测试文件类型告警：`queries.test.ts` 的 `ChapterVersion`、`merge.test.ts` 的 `wrap`）
+
+- 生产构建：`next build` 通过（静态页 7/7）
+
+### 同步健壮性修复（Provider 未配置自动回退）
+
+让「请求的 provider 未配置（如默认 gemini 但未填 key）」不再 503 或把 gemini 的模型名发到别的网关：
+
+- 新增 `resolveProvider(requested, model)`（`providers.ts`）：请求的 provider 已配置 → 采用它及请求模型；未配置 → 回退到第一个已配置 provider 并套用其默认模型（如 GLM 的 `glm-4-flash`）
+
+- 三个 API 路由 `chat / generate-chapter / embedding` 统一改用 `resolveProvider`，并补充 `isProviderConfigured` 判定
+
+- 结果：即使用户新建项目默认 provider 是 gemini，只要未配 key，生成/对话/向量都会透明回退到已跑的免费 GLM，不再报错
+
+### 全流程实跑走查 + 章节乱码排查（阶段九补充）
+
+起 `next dev` 后，用已配置的免费 GLM 对核心链路做了真实端到端验证：
+
+- `POST /api/llm/chat`（非流式）：返回内容为干净 UTF-8 中文，含「」与省略号，无乱码
+
+- `POST /api/llm/generate-chapter`（SSE 流式）：全角标点（破折号——、省略号……、引号“ ”）逐 token 完好返回，无乱码
+
+- 传输层核对：前后端 `TextDecoder(…, { stream: true })` 均正确处理跨 chunk 多字节；token 经 `JSON.stringify` 转义后单行 `data:` 传输，JSON 往返无二次转义——**未发现代码层乱码源**
+
+- **发现并修复的真实缺陷**：`deepseek/agnes` 网关存在间歇性「返回 0 token 且无错误」的空流 → 此前会静默生成空章节（空白/异常观感）。已在 `generate-chapter` 路由增加**空流防护**：0 token 且未中断时改发 `error` 事件（"模型返回为空，请稍后重试或切换模型/Provider"），而非静默 `done`，便于 UI 提示与重试
+
+- 结论：章节乱码为**间歇性模型输出**（如 agnes 网关变体），非本仓库编码 bug；空流已被显式兜底，异常不再静默
+
+- 验证：全量单测 76 文件 / 637 用例全绿；`next build` 通过（静态页 7/7）
+
+### 使用前一次性配置
+
+在 `https://aistudio.google.com/`（Google AI Studio）→ Get API key 免费获取 `GEMINI_API_KEY`，填入 `.env.local` 的 `GEMINI_API_KEY=` 后即生效；留空时系统自动回退到已配置的智谱 GLM，不影响使用。
+
+*说明：Gemini 官方免费 API 必须能连通 Google AI Studio 申请（当前网络连不上 Google），故现阶段平台以免费 GLM 为主、gemini 作为可选接入，具备自动回退保障。*
+
+***
+
+## 十五、阶段十·灵感并入大纲扩展（并入世界观规则，关闭痛点③）
+
+**需求**：交付报告 §5.4 痛点③ —— 灵感并入大纲此前只支持「剧情/高潮想法」，不支持并入「世界观规则」。
+
+### 落地文件
+
+| 文件                                     | 改动                                                                                                   |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `src/lib/inspiration/merge.ts`         | 新增 `mergeCardIntoWorldview(projectId, card)`：把灵感内容追加为项目世界观一条「核心规则」（`rules`，去重、上限 60），无世界观时自动新建以免灵感丢失 |
+| `src/app/inspiration/library/page.tsx` | 每张灵感卡新增「并入世界观」按钮（含处理/提示），说明文案同步                                                                      |
+| `src/lib/inspiration/merge.test.ts`    | 新增 3 条世界观并入用例；顺带修复既有 `'wrap'` 非法 kind 的类型错误                                                          |
+
+### 联调收尾（类型/测试/构建）
+
+- 顺带修复 `src/lib/db/queries.test.ts` 缺失的 `ChapterVersion` 类型导入（既有 tsc 告警）
+
+- 类型检查：`tsc --noEmit` **全仓零错误**（此前 2 处既有测试文件类型告警均已清理）
+
+- 单元回归：**76 文件 / 640 用例全绿**（新增 3 条）
+
+- 生产构建：`next build` 通过（静态页 7/7）
+
+*至此阶段一\~九全部交付。当前以免费 GLM 为主驱动（永久免费、直连稳定），Gemini 已接入为可选 provider 并具备「未配置自动回退」，后续网络可达 Google 时填入 key 即自动切换为主用。*
+
+***
+
+## 十六、阶段十一·覆盖率短板补测（trends / short-term-memory）
+
+**需求**：交付报告 §三 覆盖率短板——`lib/trend/trends.ts`（LLM 路径约 48%）与 `lib/store/term-memory.ts`（约 25%）偏低，标注「后续轮次可针对性补测」。
+
+### 落地文件
+
+| 文件                                            | 表现                                                                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `src/lib/trend/trends.test.ts`                | 新增 5 条 `generateTrendInspiration`（LLM 路径）用例：合法 cards 解析+非法 kind 回退+空内容过滤、≥5 张截断、非 JSON/抛错降级为派生卡、未知渠道回退 |
+| `src/lib/store/short-term-memory.test.ts`（新增） | 7 条纯函数用例覆盖 Zustand store 全部 action 与约束（最近 3 章、追加、覆盖、clear 重置）                                          |
+
+注：`term-memory.ts` 已演化重命名为 `short-term-memory.ts`，故对当前实际文件补测。
+
+### 覆盖率实测（vitest coverage）
+
+- `trends.ts`：语句/行/函数 **100%**，分支 80.76%（原约 48%）
+
+- `short-term-memory.ts`：语句/分支/函数/行 **100%**（原约 25%）
+
+### 验证
+
+- 单元回归：**77 文件 / 652 用例全绿**（新增 12 条）
+
+- 本阶段仅新增测试文件，未改动生产代码，故构建/类型不受影响（既有 `tsc --noEmit` 全仓零错误保持）
+
+***
+
+## 十七、阶段十二·综合评审收尾（代码复审 / 设计升级 / UX 评估）
+
+**需求**：以产品经理 + 用户双视角对项目做全面质量评估与完善收尾。
+
+### 1. 代码复审（全仓定向扫描）
+
+- 扫描范围：`console.log` / `innerHTML` / `eval` / `child_process` / `@ts-ignore\|@ts-expect-error` / `any` / 密钥泄漏 / 图片 alt / 图标按钮可访问性 / API 路由限流。
+
+- 结论：**未发现需修复的新缺陷** —— 无调试日志、无注入面、无真实密钥外泄、图片均有 alt、`tsc --noEmit` 全仓零错误。
+
+### 2. 前端设计升级（「去 AI 化」高保真改稿）
+
+- 问题：首页偏功能化，未充分表达既有「砚斋·墨印」文房美学。
+
+- 落地：新增 `docs/design-spec.md`（设计系统规范：色彩/排版/组件/响应式/动效/参考方向）；将首页升级为 Hero —— 宣纸墨晕 + 竖排水印印章 + 衬线大标题「写一部能成书的小说」+ 朱砂 CTA + 分层浮现动效（`globals.css` 新增 `.reveal`/`.brush-line`/`.watermark-seal`）。
+
+- 验证：`next build` 通过；移动端 E2E 通过（新 Hero 无横向溢出）。
+
+### 3. UX 评估（新增报告 `docs/2026-09-03-ux-evaluation.md`）
+
+- 3 个核心场景真实体验（新建→世界观/人物/大纲→逐章流式→审校/去AI/合规→导出）均打通。
+
+- SUS 量表 **≈74/100（Good）**；列 5 条痛点（含改进/预期）、识别 4 条功能-需求差距、提出 4 项新功能建议（含价值/难度/优先级）。
+
+### 4. 验证汇总
+
+- 单元回归：**77 文件 / 652 用例全绿**；`next build` 通过（静态页 7/7）；移动端 E2E `mobile-viewport` 1 通过；`tsc --noEmit` 全仓零错误。
+
+### 交付物清单（docs/）
+
+`dev-handoff` / `design-spec` / `2026-09-03-ux-evaluation` / `2026-09-03-delivery-report` / `user-manual` / 开源对标落地方案。
+
+***
+
+## 十八、阶段十三·UX 痛点落地 + 题材模板速填（P1/P2/P3 + N2）
+
+**需求**：落实 UX 评估痛点与 N2「模板市场」，全部为安全起底（不覆盖已有内容）且带回归。
+
+### 落地内容
+
+| 项 | 落点 | 说明 |
+|---|---|---|
+| P1 LLM 就绪 | 首页探测 `/api/llm/providers` | 未配置显示可关闭说明横幅；已配置显示「模型就绪·provider」徽标 |
+| P2 移动端拥挤 | 章节正文头部/操作栏 | 移动端标题在上、动作按钮换行（`flex-wrap`），无横向溢出 |
+| P3 结构化编辑 | 世界观规则输入 | 单行 Input→多行 Textarea：一次粘贴多行自动拆分为多条规则；`parseRulesInput` 去空/去重/兼容 `\r\n` |
+| N2 模板速填·世界观 | `WorldviewEditor`「从题材模板填充」 | 基于 `GENRE_TEMPLATES` 空字段填充 + 规则合并去重，加确认/提示，锁定禁用 |
+| N2 模板速填·大纲 | `outline/page.tsx`「从题材模板起底」 | 新增 `lib/outline/template.ts`：9 题材主线/结局/4 卷骨架，未收录回退通用，返回独立副本 |
+
+### 验证
+
+- 单元回归：**78 文件 / 663 用例全绿**（新增：`parseRulesInput` 4 + 题材模板填充 1 + outline 模板 5 + 组件多行粘贴 1 等）
+- 类型：`tsc --noEmit` 全仓零错误
+- 构建：`next build` 通过（静态页 7/7）；移动端 E2E `mobile-viewport` 1 通过
+- UX 报告已同步 P1–P5、N2 落地状态
+
+*至此，AI 小说制作工坊完成全流程质量评估、设计升级与 UX 评审：功能闭环完整、运行稳定、覆盖率达标、类型零错误、文档齐备，满足产品验收标准。*

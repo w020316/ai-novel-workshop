@@ -7,8 +7,8 @@ import * as queries from '@/lib/db/queries';
 import type { NovelProject, LLMConfig, Genre } from '@/types';
 
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
-  provider: 'deepseek',
-  model: 'deepseek-chat',
+  provider: 'gemini',
+  model: 'gemini-2.5-flash',
   temperature: 0.8,
   topP: 0.9,
   maxTokens: 4096,

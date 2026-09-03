@@ -17,7 +17,7 @@ const { createProjectMock, pushMock, backMock, toastMock, toArrayMock } =
   }));
 
 vi.mock('@/lib/store/project-store', () => ({
-  DEFAULT_LLM_CONFIG: { provider: 'deepseek', temperature: 0.8, topP: 0.9 },
+  DEFAULT_LLM_CONFIG: { provider: 'gemini', temperature: 0.8, topP: 0.9 },
   useProjectStore: () => ({ createProject: createProjectMock }),
 }));
 
@@ -50,7 +50,7 @@ describe('ProjectForm', () => {
     expect(preset).toBeInTheDocument();
     expect(screen.getByText('细腻言情')).toBeInTheDocument();
     expect(
-      screen.getByText('首选：DeepSeek Chat (推荐，32K)')
+      screen.getByText('首选：Gemini 2.5 Flash (免费推荐，1M)')
     ).toBeInTheDocument();
     // 等待文风预设异步加载完成，避免未包裹 act 的更新
     await screen.findByRole('option', { name: '细腻言情' });
@@ -84,8 +84,8 @@ describe('ProjectForm', () => {
         targetWords: 300000,
         stylePresetId: 'style-preset-1',
         llmConfig: expect.objectContaining({
-          provider: 'deepseek',
-          model: 'deepseek-chat',
+          provider: 'gemini',
+          model: 'gemini-2.5-flash',
           temperature: 0.8,
           topP: 0.9,
         }),

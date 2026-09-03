@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useProjectStore } from '@/lib/store/project-store';
 import { WorldviewGenerator } from '@/components/settings/WorldviewGenerator';
 import { WorldviewEditor } from '@/components/settings/WorldviewEditor';
+import { SettingsTransfer } from '@/components/settings/SettingsTransfer';
 
 export default function WorldviewPage() {
   const params = useParams<{ id: string }>();
@@ -30,7 +31,8 @@ export default function WorldviewPage() {
         summary={currentProject.summary}
         onGenerated={handleGenerated}
       />
-      <WorldviewEditor key={editorKey} projectId={projectId} />
+      <WorldviewEditor key={editorKey} projectId={projectId} genre={currentProject.genre} />
+      <SettingsTransfer projectId={projectId} />
     </div>
   );
 }

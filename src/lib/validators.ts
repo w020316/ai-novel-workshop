@@ -17,8 +17,9 @@ export const GENRE_OPTIONS = [
 ] as const;
 
 export const PROVIDER_OPTIONS = [
-  { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'gemini', label: 'Google Gemini' },
   { value: 'zhipu', label: '智谱 GLM' },
+  { value: 'deepseek', label: 'DeepSeek' },
   { value: 'qwen', label: '通义 Qwen' },
 ] as const;
 
@@ -39,7 +40,7 @@ export const projectFormSchema = z.object({
     .min(10000, '目标字数不少于 1 万')
     .max(5000000, '目标字数不超过 500 万'),
   stylePresetId: z.string().min(1, '请选择文风预设'),
-  llmProvider: z.enum(['deepseek', 'zhipu', 'qwen']),
+  llmProvider: z.enum(['gemini', 'zhipu', 'deepseek', 'qwen']),
   temperature: z.number().min(0).max(2),
   topP: z.number().min(0).max(1),
 });

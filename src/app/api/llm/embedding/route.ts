@@ -11,7 +11,7 @@
 // ============================================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
-import { getDefaultProvider } from '@/lib/llm/providers';
+import { resolveProvider } from '@/lib/llm/providers';
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import { estimateTokens } from '@/lib/utils';
@@ -32,7 +32,7 @@ interface EmbeddingRequestBody {
 }
 
 function safeParseProvider(value: unknown): LLMProvider | undefined {
-  if (value === 'deepseek' || value === 'zhipu' || value === 'qwen') {
+  if (value === 'gemini' || value === 'zhipu' || value === 'deepseek' || value === 'qwen') {
     return value;
   }
   return undefined;
@@ -79,19 +79,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3. 选择 Provider
-  const provider = safeParseProvider(body.provider) ?? getDefaultProvider();
+  // 3. 选择 Provider（请求的 provider 未配置则自动回退到已配置 provider）
+  const resolved = resolveProvider(safeParseProvider(body.provider), body.model);
 
   try {
-    const adapter = provider
-      ? createAdapter(provider, { model: body.model })
+    const adapter = resolved
+      ? createAdapter(resolved.provider, { model: resolved.model })
       : createFirstAvailableAdapter();
 
     if (!adapter) {
       return NextResponse.json(
         {
           error:
-            '服务端未配置任何 LLM Provider，请在 .env.local 中设置 DEEPSEEK_API_KEY / ZHIPU_API_KEY / QWEN_API_KEY',
+            '服务端未配置任何 LLM Provider，请在 .env.local 中设置 GEMINI_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY / QWEN_API_KEY',
         },
         { status: 503 }
       );
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
     const vectors: number[][] = [];
     let totalPromptTokens = 0;
     for (const t of texts) {
-      const vec = await adapter.embedding(t, body.model);
+      const vec = await adapter.embedding(t, resolved?.model ?? body.model);
       vectors.push(Array.from(vec));
       totalPromptTokens += estimateTokens(t); // 统一 token 估算口径
     }
@@ -110,8 +110,8 @@ export async function POST(request: NextRequest) {
       vectors,
       count: vectors.length,
       dim: vectors[0]?.length ?? 0,
-      provider: provider ?? 'auto',
-      model: body.model ?? adapter.model,
+      provider: resolved?.provider ?? 'auto',
+      model: (resolved?.model ?? body.model) || adapter.model,
       usage: { promptTokens: totalPromptTokens },
     });
   } catch (err) {

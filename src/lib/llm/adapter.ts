@@ -64,7 +64,7 @@ export function createAdapterFromConfig(config: LLMConfig): LLMAdapter {
  * 用于多 Provider 降级场景
  */
 export function createFirstAvailableAdapter(
-  providers: LLMProvider[] = ['deepseek', 'zhipu', 'qwen']
+  providers: LLMProvider[] = ['gemini', 'zhipu', 'deepseek', 'qwen']
 ): LLMAdapter | null {
   for (const p of providers) {
     try {

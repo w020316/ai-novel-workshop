@@ -3,16 +3,16 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input, Textarea, Label } from '@/components/ui/input';
+import { Textarea, Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   getWorldview,
   saveWorldview,
   markChapterNeedsRecheck,
 } from '@/lib/db/queries';
-import { normalizeRules } from '@/lib/worldview/template';
+import { normalizeRules, parseRulesInput, generateWorldviewTemplate } from '@/lib/worldview/template';
 import { countChineseWords, formatTime } from '@/lib/utils';
-import type { Worldview } from '@/types';
+import type { Worldview, Genre } from '@/types';
 import {
   Lock,
   Unlock,
@@ -26,6 +26,8 @@ import {
 
 interface WorldviewEditorProps {
   projectId: string;
+  /** 项目题材：用于「从题材模板填充」快速起底（可选） */
+  genre?: Genre;
 }
 
 const FIELD_CONFIG: Array<{
@@ -68,7 +70,7 @@ const FIELD_CONFIG: Array<{
   },
 ];
 
-export function WorldviewEditor({ projectId }: WorldviewEditorProps) {
+export function WorldviewEditor({ projectId, genre }: WorldviewEditorProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [wv, setWv] = useState<Worldview | null>(null);
@@ -116,20 +118,69 @@ export function WorldviewEditor({ projectId }: WorldviewEditorProps) {
   };
 
   const addRule = () => {
-    const trimmed = newRule.trim();
-    if (!trimmed) return;
-    if (rules.includes(trimmed)) {
-      toast.warning('该规则已存在');
-      return;
+    const incoming = parseRulesInput(newRule);
+    if (incoming.length === 0) return;
+    const { added, dupes } = (() => {
+      const added: string[] = [];
+      let dupes = 0;
+      for (const r of incoming) {
+        if (rules.includes(r)) dupes++;
+        else added.push(r);
+      }
+      return { added, dupes };
+    })();
+    if (dupes > 0) {
+      toast.warning(added.length === 0 ? '这些规则已存在' : `已过滤 ${dupes} 条已存在的规则`);
     }
-    setRules((prev) => [...prev, trimmed]);
+    if (added.length > 0) {
+      setRules((prev) => [...prev, ...added]);
+      setDirty(true);
+      if (added.length > 1) toast.success(`已添加 ${added.length} 条规则`);
+    }
     setNewRule('');
-    setDirty(true);
   };
 
   const removeRule = (index: number) => {
     setRules((prev) => prev.filter((_, i) => i !== index));
     setDirty(true);
+  };
+
+  /** 从内置题材模板快速起底：空字段填充模板内容，规则并集合并去重（不覆盖已有内容） */
+  const applyGenreTemplate = () => {
+    if (locked || !genre) return;
+    if (
+      !window.confirm(
+        `确定从「${genre}」题材模板填充空白设定？仅填充为空的内容，已有内容不受影响。`
+      )
+    ) return;
+    const tpl = generateWorldviewTemplate({
+      projectId,
+      genre,
+      title: '',
+      summary: '',
+    });
+    const fieldKeys = ['worldStructure', 'powerSystem', 'geography', 'era', 'factions'] as const;
+    let filled = 0;
+    setFields((prev) => {
+      const next = { ...prev };
+      for (const k of fieldKeys) {
+        if (!(next[k] ?? '').trim()) {
+          next[k] = tpl[k];
+          filled++;
+        }
+      }
+      return next;
+    });
+    let addedRules = 0;
+    setRules((prev) => {
+      const merged = normalizeRules([...prev, ...tpl.rules]);
+      addedRules = merged.length - normalizeRules(prev).length;
+      return merged;
+    });
+    setDirty(true);
+    toast.success(`已填充 ${filled} 项设定${addedRules ? ` + ${addedRules} 条规则` : ''}`, {
+      description: '只有空白字段被填充，可继续编辑后保存',
+    });
   };
 
   const toggleLock = async () => {
@@ -290,7 +341,22 @@ export function WorldviewEditor({ projectId }: WorldviewEditorProps) {
       {/* 表单主体 */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">世界观设定</CardTitle>
+          <div className="flex items-start justify-between gap-3">
+            <CardTitle className="text-base">世界观设定</CardTitle>
+            {genre && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={applyGenreTemplate}
+                disabled={locked}
+                title="用内置「题材模板」填充空白设定（不覆盖已有内容，无需等待 AI）"
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                从题材模板填充
+              </Button>
+            )}
+          </div>
           <CardDescription>
             填写世界规则、势力、地理与时代背景。锁定后将在生成章节时强制校验一致性。
           </CardDescription>
@@ -320,31 +386,34 @@ export function WorldviewEditor({ projectId }: WorldviewEditorProps) {
           <div className="space-y-2">
             <Label>核心规则（强制约束）</Label>
             <p className="text-xs text-stone-500">
-              如&ldquo;修为不可越阶挑战&rdquo;、&ldquo;凡人不可飞升&rdquo;等不可违反的世界法则
+              如&ldquo;修为不可越阶挑战&rdquo;、&ldquo;凡人不可飞升&rdquo;等不可违反的世界法则。支持一次粘贴多行，每行将作为一条规则。
             </p>
-            <div className="flex gap-2">
-              <Input
+            <div className="flex flex-col gap-2">
+              <Textarea
                 value={newRule}
                 onChange={(e) => setNewRule(e.target.value)}
-                placeholder="输入一条规则后按回车或点击添加…"
+                placeholder={'输入一条规则，或一次粘贴多行…\n（回车添加；Shift+回车换行）'}
+                rows={2}
                 disabled={locked || saving}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     addRule();
                   }
                 }}
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addRule}
-                disabled={locked || saving || !newRule.trim()}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                添加
-              </Button>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addRule}
+                  disabled={locked || saving || !newRule.trim()}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  添加
+                </Button>
+              </div>
             </div>
             {rules.length > 0 && (
               <ul className="space-y-1.5">

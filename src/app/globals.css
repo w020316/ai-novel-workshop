@@ -154,6 +154,41 @@ a {
   }
 }
 
+/* ============================================================================
+   墨印动效（砚斋·墨印 v3）
+   ink-rise  从下方浮起 + 渐显，用于首屏分层入场
+   brush-line 一支毛笔擦出的墨线，可用作标题下装饰
+   watermark-seal 旋转的朱砂水印印章
+   ========================================================================== */
+@keyframes ink-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.reveal { opacity: 0; animation: ink-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+
+.brush-line {
+  display: block;
+  width: 3.5rem;
+  height: 0.28rem;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--brand), var(--brand) 55%, transparent 100%);
+  opacity: 0.7;
+}
+
+.watermark-seal {
+  user-select: none;
+  pointer-events: none;
+  opacity: 0.06;
+  font-family: var(--font-serif);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  writing-mode: vertical-rl;
+}
+
+/* 首屏分层依次浮现：通过 style="--d:n" 控制第 n 层的延迟 */
+.reveal[style*="--d"] { animation-delay: calc(var(--d) * 90ms); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;

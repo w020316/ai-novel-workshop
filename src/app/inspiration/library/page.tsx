@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Library as LibraryIcon, Copy, Check, Plus, Trash2, BookOpen } from 'lucide-react';
+import { ChevronLeft, Library as LibraryIcon, Copy, Check, Plus, Trash2, BookOpen, Settings2 } from 'lucide-react';
 import { listAllInspirationCards, deleteInspirationCard, listProjects } from '@/lib/db/queries';
-import { mergeCardIntoOutline } from '@/lib/inspiration/merge';
+import { mergeCardIntoOutline, mergeCardIntoWorldview } from '@/lib/inspiration/merge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -85,6 +85,22 @@ export default function GlobalLibraryPage() {
     }
   };
 
+  const handleMergeToWorldview = async (c: InspirationCard) => {
+    if (!targetProjectId) {
+      toast.warning('请先在上方选择要并入的项目');
+      return;
+    }
+    setMergingId(c.id);
+    try {
+      await mergeCardIntoWorldview(targetProjectId, c);
+      toast.success(`已并入「${projects.find((p) => p.id === targetProjectId)?.title ?? '该项目'}」的世界观规则`);
+    } catch (e) {
+      toast.error('并入世界观规则失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setMergingId(null);
+    }
+  };
+
   const handleDelete = async (c: InspirationCard) => {
     if (!window.confirm(`删除灵感「${c.title}」？`)) return;
     await deleteInspirationCard(c.id);
@@ -113,7 +129,7 @@ export default function GlobalLibraryPage() {
           全局灵感库
         </h1>
         <p className="mt-1 text-sm text-stone-500">
-          跨项目归集你收藏/生成的所有灵感卡（趋势灵感自动收藏于此），可搜索、筛选，并并入任意项目的大纲反哺创作
+          跨项目归集你收藏/生成的所有灵感卡（趋势灵感自动收藏于此），可搜索、筛选，并并入任意项目的大纲或世界观规则反哺创作
         </p>
       </header>
 
@@ -132,7 +148,7 @@ export default function GlobalLibraryPage() {
                 <option key={p.id} value={p.id}>{p.title}</option>
               ))}
             </select>
-            <span className="text-xs text-stone-400">选中后，对任意灵感卡点「并入大纲」即可</span>
+            <span className="text-xs text-stone-400">选中后，可把灵感卡「并入大纲」或「并入世界观规则」</span>
           </CardContent>
         </Card>
       )}
@@ -202,6 +218,12 @@ export default function GlobalLibraryPage() {
                     <Button variant="outline" size="sm" onClick={() => void handleMerge(c)} disabled={mergingId === c.id}>
                       <BookOpen className="mr-1 h-3 w-3" />
                       并入大纲
+                    </Button>
+                  )}
+                  {projects.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={() => void handleMergeToWorldview(c)} disabled={mergingId === c.id}>
+                      <Settings2 className="mr-1 h-3 w-3" />
+                      并入世界观
                     </Button>
                   )}
                   <Link

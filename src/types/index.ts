@@ -18,7 +18,7 @@ export type Genre =
 
 export type ProjectStatus = 'drafting' | 'ongoing' | 'completed' | 'archived';
 
-export type LLMProvider = 'deepseek' | 'zhipu' | 'qwen';
+export type LLMProvider = 'gemini' | 'zhipu' | 'deepseek' | 'qwen';
 
 export type CharacterRole = 'protagonist' | 'supporting' | 'antagonist' | 'minor';
 

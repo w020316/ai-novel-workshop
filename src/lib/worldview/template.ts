@@ -218,3 +218,15 @@ export function normalizeRules(rules: string[]): string[] {
   }
   return result;
 }
+
+/**
+ * 解析一条可能含换行的规则输入为多条规则（支持一次粘贴多行，每行一条）。
+ * 兼容中文/英文换行、前后空白与多余空行；顺带去重。
+ */
+export function parseRulesInput(input: string): string[] {
+  const lines = input
+    .split(/\r?\n+/) // 支持 \r\n 与 \n，压缩连续空行
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return normalizeRules(lines);
+}

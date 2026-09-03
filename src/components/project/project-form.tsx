@@ -38,13 +38,18 @@ const INSPIRATION_STARTS: { title: string; genre: string }[] = [
 ];
 
 const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
-  deepseek: [
-    { value: 'deepseek-chat', label: 'DeepSeek Chat (推荐，32K)' },
-    { value: 'deepseek-coder', label: 'DeepSeek Coder (64K)' },
+  gemini: [
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (免费推荐，1M)' },
+    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite (免费高限)' },
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (免费稳定)' },
   ],
   zhipu: [
     { value: 'glm-4-flash', label: 'GLM-4 Flash (免费，128K)' },
     { value: 'glm-4', label: 'GLM-4 (128K)' },
+  ],
+  deepseek: [
+    { value: 'deepseek-chat', label: 'DeepSeek Chat (推荐，32K)' },
+    { value: 'deepseek-coder', label: 'DeepSeek Coder (64K)' },
   ],
   qwen: [
     { value: 'qwen-turbo', label: 'Qwen Turbo (8K)' },

@@ -340,7 +340,7 @@ export default function ChapterPage() {
       </Card>
 
       {/* 操作按钮 */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Button onClick={handleGenerate} disabled={generating} size="lg">
           {generating ? (
             <>
@@ -400,12 +400,12 @@ export default function ChapterPage() {
       {streamingContent && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
                 <FileText className="h-4 w-4 text-brand-500" />
                 章节正文
               </CardTitle>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"

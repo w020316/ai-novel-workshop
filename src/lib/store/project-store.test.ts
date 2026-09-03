@@ -213,8 +213,8 @@ describe('useProjectStore', () => {
 });
 
 describe('DEFAULT_LLM_CONFIG', () => {
-  it('应使用 DeepSeek 作为默认 provider', () => {
-    expect(DEFAULT_LLM_CONFIG.provider).toBe('deepseek');
+  it('应使用 Gemini 作为默认 provider（gemini 为主）', () => {
+    expect(DEFAULT_LLM_CONFIG.provider).toBe('gemini');
   });
 
   it('应有合理的默认温度', () => {

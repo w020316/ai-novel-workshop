@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useProjectStore } from '@/lib/store/project-store';
 import { getProjectStats } from '@/lib/db/queries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PenLine, Settings, Download } from 'lucide-react';
+import { PenLine, Settings, Download, BarChart3 } from 'lucide-react';
 import { formatTime } from '@/lib/utils';
 
 export default function ProjectOverviewPage() {
@@ -52,6 +52,7 @@ export default function ProjectOverviewPage() {
   const actions = [
     { href: `/project/${projectId}/settings/worldview`, label: '设定世界观', icon: Settings, desc: '构建世界规则与人物' },
     { href: `/project/${projectId}/workbench`, label: '开始创作', icon: PenLine, desc: '生成大纲与章节正文' },
+    { href: `/project/${projectId}/dashboard`, label: '数据看板', icon: BarChart3, desc: '字数/进度/逐章趋势' },
     { href: `/project/${projectId}/export`, label: '导出作品', icon: Download, desc: 'TXT / EPUB / JSON 备份' },
   ];
 
@@ -104,7 +105,7 @@ export default function ProjectOverviewPage() {
       {/* 快速入口 */}
       <div>
         <h3 className="mb-3 text-sm font-medium text-stone-700">快速入口</h3>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {actions.map((a) => {
             const Icon = a.icon;
             return (

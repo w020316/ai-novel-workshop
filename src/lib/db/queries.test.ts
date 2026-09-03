@@ -9,6 +9,7 @@ import type {
   Foreshadowing,
   Chapter,
   ChapterSummary,
+  ChapterVersion,
   PlotThread,
   ConsistencyReport,
   StylePreset,

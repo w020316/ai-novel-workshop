@@ -10,7 +10,7 @@
 // ============================================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
-import { getDefaultProvider } from '@/lib/llm/providers';
+import { resolveProvider } from '@/lib/llm/providers';
 import { LLMApiError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import type { ChatMessage, LLMProvider } from '@/types';
@@ -29,7 +29,7 @@ interface GenerateChapterBody {
 }
 
 function safeParseProvider(value: unknown): LLMProvider | undefined {
-  if (value === 'deepseek' || value === 'zhipu' || value === 'qwen') {
+  if (value === 'gemini' || value === 'zhipu' || value === 'deepseek' || value === 'qwen') {
     return value;
   }
   return undefined;
@@ -75,12 +75,12 @@ export async function POST(request: NextRequest) {
   const topP = clampNumber(body.topP, 0, 1, 0.9);
   const maxTokens = Math.round(clampNumber(body.maxTokens, 256, 8192, 4096));
 
-  // 2. 创建 adapter
-  const provider = safeParseProvider(body.provider) ?? getDefaultProvider();
+  // 2. 创建 adapter（请求的 provider 未配置则自动回退到已配置 provider 及默认模型）
+  const resolved = resolveProvider(safeParseProvider(body.provider), body.model);
   let adapter;
   try {
-    adapter = provider
-      ? createAdapter(provider, { model: body.model })
+    adapter = resolved
+      ? createAdapter(resolved.provider, { model: resolved.model })
       : createFirstAvailableAdapter();
   } catch (err) {
     const msg = err instanceof Error ? err.message : '无法创建 LLM 适配器';
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       // 发送开始事件
       controller.enqueue(
         encoder.encode(
-          `event: start\ndata: ${JSON.stringify({ provider: provider ?? 'auto', model: adapter.model })}\n\n`
+          `event: start\ndata: ${JSON.stringify({ provider: resolved?.provider ?? 'auto', model: adapter.model })}\n\n`
         )
       );
 
@@ -128,16 +128,28 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // 发送完成事件
-        controller.enqueue(
-          encoder.encode(
-            `event: done\ndata: ${JSON.stringify({
-              totalTokens,
-              provider: provider ?? 'auto',
-              model: adapter.model,
-            })}\n\n`
-          )
-        );
+        // 空流防护：模型返回 0 token 且未被中断时，明确报错而非静默产出空章节（避免空白/疑似乱码观感）
+        if (totalTokens === 0 && !request.signal.aborted) {
+          controller.enqueue(
+            encoder.encode(
+              `event: error\ndata: ${JSON.stringify({
+                error: '模型返回为空，请稍后重试或切换模型/Provider',
+                tokenSent: false,
+              })}\n\n`
+            )
+          );
+        } else {
+          // 发送完成事件
+          controller.enqueue(
+            encoder.encode(
+              `event: done\ndata: ${JSON.stringify({
+                totalTokens,
+                provider: resolved?.provider ?? 'auto',
+                model: adapter.model,
+              })}\n\n`
+            )
+          );
+        }
       } catch (err) {
         // 用户主动中断：不做为错误上报，normal 关闭
         if (request.signal.aborted) {

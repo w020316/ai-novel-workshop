@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '@/lib/db/schema';
 import { generateId } from '@/lib/utils';
-import { mergeCardIntoOutline } from './merge';
+import { mergeCardIntoOutline, mergeCardIntoWorldview } from './merge';
 import type { InspirationCard } from '@/types';
 
 function makeCard(kind: InspirationCard['kind'], title: string, content: string): InspirationCard {
@@ -38,7 +38,7 @@ describe('lib/inspiration/merge', () => {
   });
 
   it('不同灵感应追加而非覆盖', async () => {
-    await mergeCardIntoOutline('p1', makeCard('wrap', '结构', '三幕式'));
+    await mergeCardIntoOutline('p1', makeCard('structure', '结构', '三幕式'));
     await mergeCardIntoOutline('p1', makeCard('pacing', '节奏', '金三章高密度'));
     const outline = await db.outlines.where('projectId').equals('p1').first();
     expect(outline?.climaxNodes.length).toBe(2);
@@ -49,5 +49,29 @@ describe('lib/inspiration/merge', () => {
     expect(outline.id).toBeTruthy();
     expect(outline.projectId).toBe('p1');
     expect(typeof generateId).toBe('function');
+  });
+
+  // ===== 并入世界观规则 =====
+  it('无世界观时先创建世界观并写入规则', async () => {
+    const card = makeCard('other', '设定', '灵脉衰微，修行者不得动用本源');
+    const wv = await mergeCardIntoWorldview('p1', card);
+    expect(wv.rules.length).toBe(1);
+    expect(wv.rules[0]).toContain('灵脉衰微');
+  });
+
+  it('相同规则重复并入应去重', async () => {
+    const card = makeCard('other', '设定', '灵气浓度随深度递减');
+    await mergeCardIntoWorldview('p1', card);
+    await mergeCardIntoWorldview('p1', card);
+    const wv = await db.worldviews.where('projectId').equals('p1').first();
+    expect(wv?.rules.length).toBe(1);
+  });
+
+  it('并入世界观不应写入大纲', async () => {
+    const card = makeCard('other', '设定', '规则：飞升需渡九重雷劫');
+    const wv = await mergeCardIntoWorldview('p1', card);
+    expect(wv.rules).toContain('规则：飞升需渡九重雷劫');
+    const outline = await db.outlines.where('projectId').equals('p1').first();
+    expect(outline?.climaxNodes.length ?? 0).toBe(0);
   });
 });

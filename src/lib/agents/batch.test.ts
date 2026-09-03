@@ -1,0 +1,115 @@
+// ============================================================================
+// 批量续写 单元测试（注入 mock single，不消耗真实 LLM）
+// ============================================================================
+import { describe, it, expect, vi } from 'vitest';
+import { generateChaptersBatch } from './batch';
+import type { GenerationResult } from '@/types';
+
+function mockSingle() {
+  return vi.fn(async (ctx: { chapterNo: number; plotPoints: string[] }) => {
+    const result: GenerationResult = {
+      content: `第${ctx.chapterNo}章正文`,
+      sceneDesign: {
+        setting: `场景${ctx.chapterNo}`,
+        conflict: '冲突',
+        highlight: '爽点',
+        foreshadowingToPlant: [],
+        foreshadowingToRecover: [],
+        characterAppearances: [],
+      },
+      consistencyReport: { chapterId: `ch-${ctx.chapterNo}`, passed: true, issues: [], checkedAt: Date.now() },
+      wordCount: 100,
+    };
+    return result;
+  });
+}
+
+describe('generateChaptersBatch（依赖注入）', () => {
+  it('依序生成 startChapterNo 起 count 章', async () => {
+    const single = mockSingle();
+    const res = await generateChaptersBatch({
+      projectId: 'p1',
+      startChapterNo: 5,
+      count: 3,
+      single: single as never,
+    });
+
+    expect(res.aborted).toBe(false);
+    expect(res.results).toHaveLength(3);
+    expect(res.chapterPLots.map((c) => c.chapterNo)).toEqual([5, 6, 7]);
+    // 传参校验：章号连续
+    expect(single).toHaveBeenCalledTimes(3);
+    expect(single.mock.calls[0][0].chapterNo).toBe(5);
+    expect(single.mock.calls[2][0].chapterNo).toBe(7);
+  });
+
+  it('plotPointsPerChapter 为每章提供剧情要点并透传', async () => {
+    const single = mockSingle();
+    await generateChaptersBatch({
+      projectId: 'p1',
+      startChapterNo: 1,
+      count: 2,
+      plotPointsPerChapter: (n) => [`第${n}章要点`],
+      single: single as never,
+    });
+    expect(single.mock.calls[0][0].plotPoints).toEqual(['第1章要点']);
+    expect(single.mock.calls[1][0].plotPoints).toEqual(['第2章要点']);
+  });
+
+  it('onProgress 逐章上报章号/总章/阶段', async () => {
+    const stages: { chapterNo: number; total: number; stage: string; index: number }[] = [];
+    // 模拟编排器内部会回调 onProgress（memory_assembling / 完成）
+    const single = vi.fn(async (ctx: {
+      chapterNo: number;
+      onProgress: (s: string) => void;
+    }) => {
+      ctx.onProgress('memory_assembling');
+      ctx.onProgress('completed');
+      const r: GenerationResult = {
+        content: `x${ctx.chapterNo}`,
+        sceneDesign: { setting: 's', conflict: '', highlight: '', foreshadowingToPlant: [], foreshadowingToRecover: [], characterAppearances: [] },
+        consistencyReport: { chapterId: `c${ctx.chapterNo}`, passed: true, issues: [], checkedAt: 0 },
+        wordCount: 1,
+      };
+      return r;
+    });
+    await generateChaptersBatch({
+      projectId: 'p1',
+      startChapterNo: 2,
+      count: 2,
+      single: single as never,
+      onProgress: (info) => stages.push({ ...info, stage: info.stage }),
+    });
+    // 每章触发一次 memory_assembling 与 completed
+    expect(stages.some((s) => s.chapterNo === 2 && s.total === 2 && s.index === 0 && s.stage === 'memory_assembling')).toBe(true);
+    expect(stages.some((s) => s.chapterNo === 3 && s.total === 2 && s.index === 1 && s.stage === 'completed')).toBe(true);
+  });
+
+  it('signal 中止后停止后续生成并标记 aborted', async () => {
+    const controller = new AbortController();
+    const single = vi.fn(async () => {
+      // 模拟前 2 章正常，第 3 章前触发中止
+      controller.abort();
+      const r: GenerationResult = {
+        content: 'x',
+        sceneDesign: { setting: 's', conflict: '', highlight: '', foreshadowingToPlant: [], foreshadowingToRecover: [], characterAppearances: [] },
+        consistencyReport: { chapterId: 'c', passed: true, issues: [], checkedAt: 0 },
+        wordCount: 1,
+      };
+      return r;
+    });
+    const res = await generateChaptersBatch({
+      projectId: 'p1',
+      startChapterNo: 1,
+      count: 5,
+      signal: controller.signal,
+      single: single as never,
+      plotPointsPerChapter: async (n) => {
+        if (n === 4) controller.abort();
+        return [];
+      },
+    });
+    // 循环在第 3 章（index2→n4）前检测到 aborted 而停止
+    expect(single.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+});

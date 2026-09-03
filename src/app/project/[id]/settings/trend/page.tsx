@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { getProject, listInspirationCards, saveInspirationCards } from '@/lib/db/queries';
 import { RANK_SOURCES, getTrend, generateTrendInspiration } from '@/lib/trend/trends';
 import { generateDeconstruction } from '@/lib/deconstruct/analyzer';
+import { mergeCardIntoOutline } from '@/lib/inspiration/merge';
 import { Button } from '@/components/ui/button';
 import { Textarea, Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -64,6 +65,15 @@ export default function TrendPage() {
       toast.error('生成失败', { description: e instanceof Error ? e.message : String(e) });
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleMergeCard = async (c: InspirationCard) => {
+    try {
+      await mergeCardIntoOutline(projectId, c);
+      toast.success('已并入大纲（创作工作台 · 大纲视图可查看）');
+    } catch {
+      toast.error('并入失败');
     }
   };
 
@@ -209,6 +219,15 @@ export default function TrendPage() {
                   </span>
                   <p className="mt-1 text-xs font-medium text-stone-800">{c.title}</p>
                   <p className="mt-0.5 text-xs text-stone-600">{c.content}</p>
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleMergeCard(c)}
+                      className="text-xs text-brand-600 hover:text-brand-700"
+                    >
+                      并入大纲
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

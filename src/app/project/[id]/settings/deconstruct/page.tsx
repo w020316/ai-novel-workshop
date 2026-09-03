@@ -16,6 +16,7 @@ import {
   deleteInspirationCard,
 } from '@/lib/db/queries';
 import { countChineseWords } from '@/lib/utils';
+import { mergeCardIntoOutline } from '@/lib/inspiration/merge';
 import type { Deconstruction, InspirationCard } from '@/types';
 import {
   BookOpen,
@@ -112,6 +113,15 @@ export default function DeconstructPage() {
     await deleteInspirationCard(id);
     await loadData();
     toast.info('灵感卡已移除');
+  };
+
+  const handleMergeCard = async (c: InspirationCard) => {
+    try {
+      await mergeCardIntoOutline(projectId, c);
+      toast.success('已并入大纲（创作工作台 · 大纲视图可查看）');
+    } catch {
+      toast.error('并入失败');
+    }
   };
 
   // 当前新建的灵感卡（未落库的），点击即收藏
@@ -300,6 +310,15 @@ export default function DeconstructPage() {
                   </span>
                   <p className="mt-1 text-xs font-medium text-stone-800">{c.title}</p>
                   <p className="mt-0.5 text-xs text-stone-600">{c.content}</p>
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleMergeCard(c)}
+                      className="text-xs text-brand-600 hover:text-brand-700"
+                    >
+                      并入大纲
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => void handleDeleteCard(c.id)}

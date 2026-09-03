@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, TrendingUp } from 'lucide-react';
 
 export function EmptyState() {
   return (
@@ -19,6 +19,13 @@ export function EmptyState() {
           <Plus className="mr-2 h-4 w-4" />
           创建第一部小说
         </Button>
+      </Link>
+      <Link
+        href="/inspiration"
+        className="mt-3 inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
+      >
+        <TrendingUp className="h-3.5 w-3.5" />
+        没有灵感？去「趋势灵感」看看热门风向
       </Link>
 
       <div className="mt-8 grid w-full max-w-lg grid-cols-1 gap-3 sm:grid-cols-3">

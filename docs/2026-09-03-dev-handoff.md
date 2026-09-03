@@ -113,10 +113,9 @@
 
 - **空流防护**：`generate-chapter` 若 0 token 且未被中断，发 `error` 事件（“模型返回为空…”）而非静默 done，避免空章节。
 
-- 当前线上真正可用：**智谱 GLM（glm-4-flash）+ DeepSeek 槽位（agnes 网关 agnes-2.5-pro）**；**Gemini 已接入且本地已配 key（免费）**。✅ 实测可用免费模型：`gemini-3.6-flash`（默认，推荐）、`gemini-3.5-flash`、`gemini-3.1-flash-lite`（OpenAI 兼容端点均返回中文正常）。⚠️ `gemini-2.5-flash/-lite`、`gemini-2.0-flash`、`gemini-flash-latest` 对新用户已下线或地区不支持，勿用。
-
-- 生产（Vercel）要启用 Gemini：在项目 Settings→Environment Variables 加 `GEMINI_API_KEY`（+可选 `GEMINI_DEFAULT_MODEL=gemini-3.6-flash`）后重新部署；未加则自动回退 GLM。
-
+- 当前线上（Vercel，已上线）默认 **Gemini 为主、智谱 GLM 辅助**：`/api/llm/providers` → `default=gemini, list=[Google Gemini, 智谱 GLM]`。✅ 实测可用免费模型：`gemini-3.6-flash`（正文/质量，默认）、`gemini-3.5-flash`（中间保底）、`gemini-3.1-flash-lite`（辅助高频，500 RPD）。⚠️ `gemini-2.5-flash/-lite`、`gemini-2.0-flash`、`gemini-flash-latest` 对新用户已下线或地区不支持，勿用。
+- 组合策略（B+C）：节点正文(generate-chapter)=3.6；chat 辅助默认 3.1-flash-lite，rewrite/humanize 经 task 升级 3.6；gemini 失败按 `3.6→3.5→3.1-flash-lite` 降级，仍不成回退 GLM。
+- 生产（Vercel）已配：`GEMINI_API_KEY`、`GEMINI_DEFAULT_MODEL=gemini-3.6-flash`、`LLM_PROVIDER_ORDER=gemini,zhipu`（三者均 Production）。env 变更后需 Redeploy/push 才生效（Vercel 不会自动重部署）。
 - 限流：`LLM_RATE_LIMIT_ENABLED=false` 时关闭（否则默认开启，可能 429）。
 
 ### 线上 Vercel 环境变量（项目 ai-novel-workshop-o25z，均为普通值，非 @secret 引用）
@@ -194,7 +193,7 @@
 
 - **坑 5**：`LLM_RATE_LIMIT_ENABLED` 设 `false` 才关闭限流；留空/否则默认开启（可能 429）。
 
-- **坑 6**：Gemini 默认模型须用新版本。`gemini-2.5-flash/-lite`、`gemini-2.0-flash` 对新用户已下线（404），`gemini-flash-latest` 部分地区受限；当前默认 `gemini-3.6-flash`（本地已配 key）。生产要在 Vercel 加 `GEMINI_API_KEY` 才会用 Gemini，否则回退 GLM。
+- **坑 6**：Gemini 默认模型须用新版本。`gemini-2.5-flash/-lite`、`gemini-2.0-flash` 对新用户已下线（404），`gemini-flash-latest` 部分地区受限；当前默认 `gemini-3.6-flash`（本地与线上均已配 `GEMINI_API_KEY`）。**注意**：线上 env 变更不会自动重部署，改 `LLM_PROVIDER_ORDER`/增删 env 后需 push 或 Redeploy 才生效；`LLM_PROVIDER_ORDER` 必须含 `gemini`，否则 Gemini 即使配了 key 也不在列表/不为默认。
 
 ***
 

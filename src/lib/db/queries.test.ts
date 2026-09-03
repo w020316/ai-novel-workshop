@@ -286,4 +286,53 @@ describe('db/queries', () => {
       expect((await q.getGenreTemplate('玄幻'))?.id).toBe('genre-template-1');
     });
   });
+
+  // ============ 章节版本（阶段二·版本回滚） ============
+  describe('章节版本', () => {
+    function makeVersion(chapterId: string, projectId: string, chapterNo: number, over: Partial<ChapterVersion> = {}): ChapterVersion {
+      return {
+        id: `ver-${chapterNo}-${over.createdAt ?? 0}`,
+        chapterId,
+        projectId,
+        chapterNo,
+        title: `第${chapterNo}章`,
+        plotPoints: ['要点'],
+        content: `版本内容${over.content ?? ''}`,
+        wordCount: 100,
+        createdAt: 0,
+        ...over,
+      } as ChapterVersion;
+    }
+
+    it('save/listChapterVersions 按时间新→旧返回并限条', async () => {
+      await db.chapterVersions.bulkAdd([
+        makeVersion('ch-1', 'p1', 1, { id: 'v1', content: '旧', createdAt: 100 }),
+        makeVersion('ch-1', 'p1', 1, { id: 'v2', content: '中', createdAt: 200 }),
+        makeVersion('ch-1', 'p1', 1, { id: 'v3', content: '新', createdAt: 300 }),
+        makeVersion('ch-1', 'p1', 2, { id: 'v9', content: '另一章', createdAt: 400 }),
+      ]);
+      const list = await q.listChapterVersions('p1', 1);
+      expect(list.map((v) => v.id)).toEqual(['v3', 'v2', 'v1']);
+      // 不串章
+      expect(list.every((v) => v.chapterNo === 1)).toBe(true);
+    });
+
+    it('listChapterVersions limit 生效', async () => {
+      for (let i = 0; i < 5; i++) {
+        await db.chapterVersions.add(makeVersion('ch-1', 'p1', 1, { id: `v${i}`, createdAt: i * 10 }));
+      }
+      const list = await q.listChapterVersions('p1', 1, 3);
+      expect(list).toHaveLength(3);
+      // 新→旧
+      expect(list[0].id).toBe('v4');
+    });
+
+    it('saveChapterVersion 落库 + deleteChapterVersions 清理', async () => {
+      const v = makeVersion('ch-1', 'p1', 1, { id: 'va', createdAt: 1, content: '甲' });
+      await q.saveChapterVersion(v);
+      expect(await db.chapterVersions.count()).toBe(1);
+      await q.deleteChapterVersions('ch-1');
+      expect(await db.chapterVersions.count()).toBe(0);
+    });
+  });
 });

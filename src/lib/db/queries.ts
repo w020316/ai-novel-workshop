@@ -18,6 +18,7 @@ import type {
   PlotThread,
   Deconstruction,
   InspirationCard,
+  ChapterVersion,
 } from '@/types';
 
 // ============ 项目 ============
@@ -76,13 +77,14 @@ export async function deleteProject(projectId: string): Promise<void> {
       await db.plotThreads.where('projectId').equals(projectId).delete();
     }
   );
-  // Step 2: 删除一致性报告 + 项目本体
+  // Step 2: 删除一致性报告 + 章节版本 + 项目本体
   await db.transaction(
     'rw',
-    [db.consistencyReports, db.projects],
+    [db.consistencyReports, db.chapterVersions, db.projects],
     async () => {
       for (const chapterId of chapterIds) {
         await db.consistencyReports.where('chapterId').equals(chapterId).delete();
+        await db.chapterVersions.where('chapterId').equals(chapterId).delete();
       }
       await db.projects.delete(projectId);
     }
@@ -326,4 +328,29 @@ export async function listInspirationCards(projectId: string): Promise<Inspirati
 
 export async function deleteInspirationCard(id: string): Promise<void> {
   await db.inspirationCards.delete(id);
+}
+
+// ============ 章节版本（阶段二·版本回滚） ============
+/** 保存一条章节历史版本快照 */
+export async function saveChapterVersion(v: ChapterVersion): Promise<void> {
+  await db.chapterVersions.put(v);
+}
+
+/** 按章节列出历史版本（新→旧）；limit 限制返回条数 */
+export async function listChapterVersions(
+  projectId: string,
+  chapterNo: number,
+  limit = 20
+): Promise<ChapterVersion[]> {
+  const all = await db.chapterVersions
+    .where('projectId')
+    .equals(projectId)
+    .filter((v) => v.chapterNo === chapterNo)
+    .toArray();
+  return all.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+}
+
+/** 删除某章节的全部历史版本（用于重建章节/清理） */
+export async function deleteChapterVersions(chapterId: string): Promise<void> {
+  await db.chapterVersions.where('chapterId').equals(chapterId).delete();
 }

@@ -17,6 +17,7 @@ import type {
   ConsistencyReport,
   Deconstruction,
   InspirationCard,
+  ChapterVersion,
 } from '@/types';
 
 export class NovelDB extends Dexie {
@@ -33,6 +34,7 @@ export class NovelDB extends Dexie {
   consistencyReports!: Table<ConsistencyReport, string>;
   deconstructions!: Table<Deconstruction, string>;
   inspirationCards!: Table<InspirationCard, string>;
+  chapterVersions!: Table<ChapterVersion, string>;
 
   constructor() {
     super('ai_novel_workshop');
@@ -53,6 +55,10 @@ export class NovelDB extends Dexie {
     this.version(2).stores({
       deconstructions: 'id, projectId, createdAt',
       inspirationCards: 'id, projectId, kind, sourceDeconstructionId',
+    });
+    // 章节版本：正文历史快照（阶段二·版本回滚）
+    this.version(3).stores({
+      chapterVersions: 'id, chapterId, projectId, chapterNo, createdAt',
     });
   }
 }

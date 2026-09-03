@@ -191,6 +191,21 @@ export interface Chapter {
   updatedAt: number;
 }
 
+// ============ 章节版本（阶段二·版本回滚） ============
+/** 章节正文的历史快照：保存时若内容发生变化则将旧版快照入库，支持回滚找回 */
+export interface ChapterVersion {
+  id: string;
+  chapterId: string;
+  projectId: string;
+  chapterNo: number;
+  title: string;
+  plotPoints: string[];
+  content: string;
+  wordCount: number;
+  /** 快照产生时（即该版本对应的章节 updatedAt） */
+  createdAt: number;
+}
+
 // ============ 中期记忆（向量索引） ============
 export interface ChapterSummary {
   id: string;

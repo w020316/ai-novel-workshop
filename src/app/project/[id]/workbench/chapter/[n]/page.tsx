@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getChapter, saveChapter } from '@/lib/db/queries';
+import { getChapter, saveChapter, saveChapterVersion, listChapterVersions } from '@/lib/db/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GenerationProgress } from '@/components/workbench/GenerationProgress';
@@ -23,9 +23,11 @@ import {
   ScanSearch,
   Eye,
   ShieldCheck,
+  History,
+  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Chapter, GenerationStage, ConsistencyReport, GenerationContext } from '@/types';
+import type { Chapter, ChapterVersion, GenerationStage, ConsistencyReport, GenerationContext } from '@/types';
 
 export default function ChapterPage() {
   const params = useParams<{ id: string; n: string }>();
@@ -50,6 +52,9 @@ export default function ChapterPage() {
   const [readerReview, setReaderReview] = useState<ReaderReview | null>(null);
   const [candidateCount, setCandidateCount] = useState(1);
   const [compliance, setCompliance] = useState<ComplianceReport | null>(null);
+  const [versions, setVersions] = useState<ChapterVersion[]>([]);
+  const [showVersions, setShowVersions] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState<ChapterVersion | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -131,6 +136,20 @@ export default function ChapterPage() {
       await saveChapter(newChapter);
       setChapter(newChapter);
     } else {
+      // 保存前先把旧版内容快照为历史版本（仅当正文/标题/要点有变化时）
+      if (chapter.content !== streamingContent) {
+        await saveChapterVersion({
+          id: `ver_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          chapterId: chapter.id,
+          projectId,
+          chapterNo,
+          title: chapter.title,
+          plotPoints: chapter.plotPoints,
+          content: chapter.content,
+          wordCount: chapter.wordCount,
+          createdAt: Date.now(),
+        });
+      }
       await saveChapter({
         ...chapter,
         title,
@@ -142,6 +161,35 @@ export default function ChapterPage() {
     }
     router.push(`/project/${projectId}/workbench`);
   }, [chapter, projectId, chapterNo, title, plotPoints, streamingContent, router]);
+
+  // 打开历史版本面板，加载该章节的历史快照
+  const handleOpenVersions = useCallback(async () => {
+    setShowVersions(true);
+    setPreviewVersion(null);
+    try {
+      const vs = await listChapterVersions(projectId, chapterNo);
+      setVersions(vs);
+      if (vs.length === 0) {
+        toast.info('暂无历史版本（保存内容变化时会自动留档）');
+      }
+    } catch {
+      setVersions([]);
+      toast.error('加载历史版本失败');
+    }
+  }, [projectId, chapterNo]);
+
+  // 回滚到指定历史版本：恢复其正文/标题/要点（旧快照暂不删除，保留多级回退）
+  const handleRollback = useCallback((v: ChapterVersion) => {
+    if (!chapter) return;
+    setStreamingContent(v.content);
+    setTitle(v.title);
+    setPlotPoints(v.plotPoints.length > 0 ? v.plotPoints : ['']);
+    setPreviewVersion(null);
+    setShowVersions(false);
+    toast.success(
+      `已从 ${new Date(v.createdAt).toLocaleString('zh-CN', { hour12: false })} 的版本恢复，记得点击「保存章节」落盘`
+    );
+  }, [chapter]);
 
   // 先本地扫描 AI 痕迹，若命中再由 LLM 做定点去AI味修复
   const handleScan = useCallback(() => {
@@ -406,6 +454,17 @@ export default function ChapterPage() {
                   <ShieldCheck className="mr-1 h-4 w-4" />
                   投稿合规体检
                 </Button>
+                {chapter && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleOpenVersions()}
+                    title="查看并恢复本章的历史保存版本"
+                  >
+                    <History className="mr-1 h-4 w-4" />
+                    历史版本
+                  </Button>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -419,6 +478,70 @@ export default function ChapterPage() {
             <p className="mt-2 text-xs text-stone-400">
               字数：{(streamingContent.match(/[\u4e00-\u9fff]/g) ?? []).length}
             </p>
+
+            {/* 历史版本面板 */}
+            {showVersions && (
+              <div className="mt-4 rounded-md border border-brand-200 bg-brand-50/40 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="flex items-center gap-1 text-sm font-medium text-stone-700">
+                    <History className="h-4 w-4 text-brand-500" />
+                    历史版本（{versions.length}）
+                  </p>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowVersions(false); setPreviewVersion(null); }}>
+                    关闭
+                  </Button>
+                </div>
+                <p className="mb-2 text-xs text-stone-400">
+                  每次保存章节时若内容有变化会自动留档，可任选一个版本恢复。恢复后当前正文会被替换，请按「保存章节」落盘。
+                </p>
+                {versions.length === 0 ? (
+                  <p className="text-xs text-stone-400">暂无历史版本。</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {versions.map((v) => (
+                      <div
+                        key={v.id}
+                        className="flex flex-wrap items-center gap-2 rounded-md border border-brand-100 bg-white px-2.5 py-1.5 text-xs"
+                      >
+                        <span className="font-medium text-stone-700">
+                          {new Date(v.createdAt).toLocaleString('zh-CN', { hour12: false })}
+                        </span>
+                        <span className="text-stone-400">· {v.wordCount} 字</span>
+                        <span className="text-stone-400 line-clamp-1 max-w-[40%] flex-1">
+                          {v.content.slice(0, 40) || '（空稿）'}
+                        </span>
+                        <div className="ml-auto flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPreviewVersion(previewVersion?.id === v.id ? null : v)}
+                          >
+                            {previewVersion?.id === v.id ? '收起' : '预览'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              if (window.confirm('确定恢复该版本？当前未保存的正文会被替换。')) {
+                                handleRollback(v);
+                              }
+                            }}
+                          >
+                            <RotateCcw className="mr-1 h-3 w-3" />
+                            恢复此版
+                          </Button>
+                        </div>
+                        {previewVersion?.id === v.id && (
+                          <pre className="mt-2 max-h-40 w-full overflow-auto rounded border border-stone-200 bg-paper-50 p-2 whitespace-pre-wrap font-serif text-xs leading-relaxed text-stone-700">
+                            {v.content}
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* AI 痕迹检测结果 */}
             {aiReport && (

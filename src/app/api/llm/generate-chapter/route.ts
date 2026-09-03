@@ -35,6 +35,17 @@ function safeParseProvider(value: unknown): LLMProvider | undefined {
   return undefined;
 }
 
+/** 数值消毒：非法/越界回退到 fallback 并夹取到 [min,max] */
+function clampNumber(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number
+): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 export async function POST(request: NextRequest) {
   // 0. 限流保护（防配额滥用）
   const rateLimited = enforceRateLimit(request);
@@ -51,13 +62,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { messages } = body;
+  const messages = body.messages;
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
       { error: 'messages 必填且不能为空' },
       { status: 400 }
     );
   }
+
+  // 数值消毒（防 NaN/越界值破坏适配器调用）
+  const temperature = clampNumber(body.temperature, 0, 2, 0.7);
+  const topP = clampNumber(body.topP, 0, 1, 0.9);
+  const maxTokens = Math.round(clampNumber(body.maxTokens, 256, 8192, 4096));
 
   // 2. 创建 adapter
   const provider = safeParseProvider(body.provider) ?? getDefaultProvider();
@@ -97,9 +113,9 @@ export async function POST(request: NextRequest) {
         // 故不在此处使用 withRetry 包裹整个流；仅在连接建立阶段抛错时，交由上层 orchestrator 重试。
         await adapter.streamChat({
           messages,
-          temperature: body.temperature,
-          topP: body.topP,
-          maxTokens: body.maxTokens,
+          temperature,
+          topP,
+          maxTokens,
           signal: request.signal,
           onToken: (token: string) => {
             tokenSent = true;

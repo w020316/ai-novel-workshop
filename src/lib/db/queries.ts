@@ -330,6 +330,17 @@ export async function deleteInspirationCard(id: string): Promise<void> {
   await db.inspirationCards.delete(id);
 }
 
+/** 全局灵感库：聚合所有项目收藏的灵感卡（含无项目的全局灵感），按时间新→旧 */
+export async function listAllInspirationCards(limit = 200): Promise<InspirationCard[]> {
+  const all = await db.inspirationCards.toArray();
+  return all
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, limit);
+}
+
+/** 无项目时收藏到全局灵感库使用的占位 projectId */
+export const GLOBAL_PROJECT_ID = 'global';
+
 // ============ 章节版本（阶段二·版本回滚） ============
 /** 保存一条章节历史版本快照 */
 export async function saveChapterVersion(v: ChapterVersion): Promise<void> {

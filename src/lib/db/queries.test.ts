@@ -13,6 +13,7 @@ import type {
   ConsistencyReport,
   StylePreset,
   GenreTemplate,
+  InspirationCard,
 } from '@/types';
 
 // 测试数据构造辅助
@@ -333,6 +334,35 @@ describe('db/queries', () => {
       expect(await db.chapterVersions.count()).toBe(1);
       await q.deleteChapterVersions('ch-1');
       expect(await db.chapterVersions.count()).toBe(0);
+    });
+  });
+
+  // ============ 全局灵感库（阶段三·跨项目聚合） ============
+  describe('全局灵感库', () => {
+    function makeCard(projectId: string, id: string, createdAt: number, kind: InspirationCard['kind'] = 'other'): InspirationCard {
+      return { id, projectId, kind, title: `灵感${id}`, content: '内容', sourceDeconstructionId: '', createdAt };
+    }
+
+    it('listAllInspirationCards 聚合所有项目并按时间新→旧', async () => {
+      await db.inspirationCards.bulkAdd([
+        makeCard('p1', 'c1', 100),
+        makeCard('p2', 'c2', 300),
+        makeCard('global', 'c3', 200),
+      ]);
+      const all = await q.listAllInspirationCards();
+      expect(all.map((c) => c.id)).toEqual(['c2', 'c3', 'c1']);
+      // 含跨项目与全局灵感
+      expect(all.some((c) => c.projectId === 'global')).toBe(true);
+      expect(all).toHaveLength(3);
+    });
+
+    it('listAllInspirationCards limit 参数生效', async () => {
+      for (let i = 0; i < 5; i++) {
+        await db.inspirationCards.add(makeCard('p1', `c${i}`, i * 10));
+      }
+      const list = await q.listAllInspirationCards(3);
+      expect(list).toHaveLength(3);
+      expect(list[0].id).toBe('c4'); // 最新的优先
     });
   });
 });

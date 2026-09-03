@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, TrendingUp, Loader2, Sparkles, Lightbulb, Copy, Check, Plus } from 'lucide-react';
+import { ChevronLeft, TrendingUp, Loader2, Sparkles, Lightbulb, Copy, Check, Plus, Library as LibraryIcon } from 'lucide-react';
 import { RANK_SOURCES, getTrend, generateTrendInspiration } from '@/lib/trend/trends';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { saveInspirationCards, GLOBAL_PROJECT_ID } from '@/lib/db/queries';
 import { toast } from 'sonner';
 import type { InspirationCard } from '@/types';
 
@@ -26,9 +27,14 @@ export default function InspirationPage() {
     if (!trend) return;
     setGenerating(true);
     try {
-      // 无项目时用空 projectId，仅本地展示不落库
+      // 生成后自动收藏到全局灵感库（projectId='global'），跨项目可复用
       const { cards: generated } = await generateTrendInspiration('', sourceId, genre);
-      setCards(generated);
+      const withGlobal = generated.map((c) => ({ ...c, projectId: GLOBAL_PROJECT_ID }));
+      setCards(withGlobal);
+      if (withGlobal.length > 0) {
+        await saveInspirationCards(withGlobal);
+        toast.success(`已收藏 ${withGlobal.length} 条到全局灵感库`);
+      }
     } catch (e) {
       toast.error('生成失败', { description: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -56,11 +62,20 @@ export default function InspirationPage() {
         返回首页
       </Link>
 
-      <header className="mb-8">
-        <h1 className="font-serif text-2xl font-bold text-brand-800">趋势灵感 · 找选题</h1>
-        <p className="mt-1 text-sm text-stone-500">
-          还没有项目也能逛：按平台与题材看看热门风向，找找写作灵感
-        </p>
+      <header className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="font-serif text-2xl font-bold text-brand-800">趋势灵感 · 找选题</h1>
+          <p className="mt-1 text-sm text-stone-500">
+            还没有项目也能逛：按平台与题材看看热门风向，找找写作灵感
+          </p>
+        </div>
+        <Link
+          href="/inspiration/library"
+          className="inline-flex shrink-0 items-center gap-1 text-sm text-brand-600 hover:text-brand-700"
+        >
+          <LibraryIcon className="h-4 w-4" />
+          全局灵感库
+        </Link>
       </header>
 
       <div className="space-y-4">

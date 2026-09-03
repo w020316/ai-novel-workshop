@@ -74,6 +74,9 @@ export default function Home() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/inspiration/library" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+            灵感库
+          </Link>
           <Link href="/inspiration" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
             <TrendingUp className="h-4 w-4" />
             找灵感

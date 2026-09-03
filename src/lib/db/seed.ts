@@ -140,6 +140,14 @@ const GENRE_TEMPLATES: GenreTemplateSeed[] = [
     readerPreference: '治愈向，代入感，平凡中见温情',
     typicalArcs: ['都市日常', '职场升迁', '邻里温情', '人生转折'],
   },
+  {
+    genre: '都市',
+    variant: '短剧爆款',
+    pacingRule: '每 3000-5000 字一个强冲突节奏卡点，前三章抛出阶层落差/身份反差，中段连续打脸与反转，章末留悬念钩',
+    highlightDesign: '隐藏身份揭穿、阶层冲突爆发、当众打脸、身份反转、关键卡点收势',
+    readerPreference: '强冲突、快节奏、每章都有爽点或反转，追读导向（短剧化高密度卡点）',
+    typicalArcs: ['赘婿身份揭秘', '弃妇逆袭', '草根皇亲', '隐藏大佬现身'],
+  },
 
   // ---------- 历史 ----------
   {

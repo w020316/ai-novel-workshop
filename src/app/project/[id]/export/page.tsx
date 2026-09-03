@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { getProject, listChapters, getWorldview, listCharacters, getOutline, listForeshadowings, listChapterSummaries, getConsistencyReport, listPlotThreads, getProjectStylePreset } from '@/lib/db/queries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Download, FileText, BookMarked, Archive, Upload } from 'lucide-react';
+import { Loader2, Download, FileText, BookMarked, Archive, Upload, ShieldCheck, CheckSquare } from 'lucide-react';
 import { exportTxt, downloadTxt } from '@/lib/export/txt';
 import { exportMarkdown, downloadMarkdown } from '@/lib/export/markdown';
 import { exportEpub, downloadEpub } from '@/lib/export/epub';
@@ -225,6 +225,36 @@ export default function ExportPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 版权 / 商用合规提示 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="h-4 w-4 text-brand-500" />
+            导出前 · 版权与商用合规提示
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
+            {[
+              ['原创性 & 去重自查', '导出前先在「投稿合规体检」清零必改项，可用「扫描AI痕迹」复核文本。'],
+              ['AI 内容披露', '番茄 / 起点 / 七猫等平台对 AI 生成文本的披露与声明要求不一，请按目标平台规则标注。'],
+              ['拆书灵感边界', '拆书工坊只吸收「手法 / 结构 / 节奏」灵感，勿直接复制他人设定、人物与台词，避免侵权。'],
+              ['素材授权', '外链或生成式封面 / 插图需确认授权来源与允许用途。'],
+              ['商用 / 出版', '确定商用前请确认已满足平台《AI 创作协议》、版权归属与授权链完整。'],
+              ['留存创作记录', '保留设定、拆书灵感卡等过程记录，便于应对「AI 制造」争议或原创性举证。'],
+            ].map(([t, d]) => (
+              <li key={t} className="flex items-start gap-2">
+                <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
+                <span>
+                  <span className="font-medium text-stone-700">{t}</span>
+                  <span className="block text-xs text-stone-500">{d}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
 
       {/* 导出选项 */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

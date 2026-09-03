@@ -60,6 +60,14 @@ describe('db/seed', () => {
       const variants = getVariantsByGenre('其他');
       expect(variants.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('都市应包含「短剧爆款」强冲突变体', () => {
+      const variants = getVariantsByGenre('都市');
+      const short = variants.find((v) => v.variant === '短剧爆款');
+      expect(short).toBeTruthy();
+      expect(short?.pacingRule).toContain('卡点');
+      expect(short?.typicalArcs.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('seedDatabase', () => {

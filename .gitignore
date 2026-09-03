@@ -40,6 +40,9 @@ yarn-error.log*
 .vercel-cache/
 .vercel-config/
 
+# 本地部署临时 token（绝不纳入部署产物）
+.vercel_token.tmp
+
 # npm cache (本地重定向)
 .npm-cache/
 
@@ -60,3 +63,5 @@ next-env.d.ts
 .DS_Store
 
 .iga/
+
+.vercel

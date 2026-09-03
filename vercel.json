@@ -2,9 +2,5 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "outputDirectory": ".next",
-  "installCommand": "npm install",
-  "env": {
-    "DEEPSEEK_API_KEY": "@deepseek_api_key",
-    "ZHIPU_API_KEY": "@zhipu_api_key"
-  }
+  "installCommand": "npm install"
 }

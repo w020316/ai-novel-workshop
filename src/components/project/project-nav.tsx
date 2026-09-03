@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { BookOpen, Settings, PenLine, Brain, Download, HeartPulse, SlidersHorizontal } from 'lucide-react';
+import { BookOpen, Settings, PenLine, Brain, Download, HeartPulse, SlidersHorizontal, MessageSquare } from 'lucide-react';
 
 interface ProjectNavProps {
   projectId: string;
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: '/settings/worldview', label: '设定工坊', icon: Settings },
   { href: '/memory', label: '记忆管理', icon: Brain },
   { href: '/health', label: '健康体检', icon: HeartPulse },
+  { href: '/review', label: '多平台审稿', icon: MessageSquare },
   { href: '/export', label: '导出中心', icon: Download },
   { href: '/config', label: '项目配置', icon: SlidersHorizontal },
 ];

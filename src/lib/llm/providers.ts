@@ -44,7 +44,7 @@ export const PROVIDER_CONFIGS: Record<LLMProvider, ProviderConfig> = {
     chatPath: '/chat/completions',
     embeddingPath: '/embeddings',
     envKey: 'GEMINI_API_KEY',
-    defaultModel: 'gemini-2.5-flash',
+    defaultModel: 'gemini-3.6-flash',
     defaultEmbeddingModel: 'text-embedding-004',
     supportsJSON: true,
     supportsStream: true,

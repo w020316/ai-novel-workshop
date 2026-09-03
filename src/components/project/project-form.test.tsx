@@ -50,7 +50,7 @@ describe('ProjectForm', () => {
     expect(preset).toBeInTheDocument();
     expect(screen.getByText('细腻言情')).toBeInTheDocument();
     expect(
-      screen.getByText('首选：Gemini 2.5 Flash (免费推荐，1M)')
+      screen.getByText('首选：Gemini 3.6 Flash (免费推荐，最新)')
     ).toBeInTheDocument();
     // 等待文风预设异步加载完成，避免未包裹 act 的更新
     await screen.findByRole('option', { name: '细腻言情' });
@@ -85,7 +85,7 @@ describe('ProjectForm', () => {
         stylePresetId: 'style-preset-1',
         llmConfig: expect.objectContaining({
           provider: 'gemini',
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.6-flash',
           temperature: 0.8,
           topP: 0.9,
         }),

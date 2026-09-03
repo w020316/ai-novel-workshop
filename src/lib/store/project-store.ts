@@ -8,7 +8,7 @@ import type { NovelProject, LLMConfig, Genre } from '@/types';
 
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
   provider: 'gemini',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-3.6-flash',
   temperature: 0.8,
   topP: 0.9,
   maxTokens: 4096,

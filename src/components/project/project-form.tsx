@@ -39,9 +39,9 @@ const INSPIRATION_STARTS: { title: string; genre: string }[] = [
 
 const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
   gemini: [
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (免费推荐，1M)' },
-    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite (免费高限)' },
-    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (免费稳定)' },
+    { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (免费推荐，最新)' },
+    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash (免费，稳定)' },
+    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite (免费，轻量高限)' },
   ],
   zhipu: [
     { value: 'glm-4-flash', label: 'GLM-4 Flash (免费，128K)' },

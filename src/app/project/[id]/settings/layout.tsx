@@ -64,7 +64,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       <nav
         role="tablist"
         aria-label="设定工坊 Tab 切换"
-        className="flex flex-wrap gap-1 border-b border-stone-200"
+        className="flex flex-wrap gap-1 border-b border-paper-200"
       >
         {SETTINGS_TABS.map((tab) => {
           const href = `${basePath}/${tab.slug}`;
@@ -80,7 +80,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                 'group flex items-center gap-2 rounded-t-md border-b-2 px-4 py-2 text-sm transition-colors',
                 isActive
                   ? 'border-brand-600 text-brand-700'
-                  : 'border-transparent text-stone-600 hover:border-stone-300 hover:text-stone-900'
+                  : 'border-transparent text-ink-400 hover:border-paper-300 hover:text-brand-700'
               )}
             >
               <Icon className="h-4 w-4" />
@@ -90,7 +90,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         })}
       </nav>
 
-      <p className="flex items-center gap-1.5 text-xs text-stone-500">
+      <p className="flex items-center gap-1.5 text-xs text-ink-400">
         <Lock className="h-3 w-3" />
         世界观与人物档案在创作进行后建议锁定，避免破坏已生成章节的一致性
       </p>

@@ -25,7 +25,7 @@ export function ProjectNav({ projectId }: ProjectNavProps) {
   const basePath = `/project/${projectId}`;
 
   return (
-    <aside className="w-full shrink-0 border-b border-stone-200 bg-stone-50/50 p-2 md:w-56 md:shrink-0 md:border-b-0 md:border-r md:p-4">
+    <aside className="w-full shrink-0 border-b border-paper-200 bg-paper-100/60 p-2 md:w-56 md:shrink-0 md:border-b-0 md:border-r md:p-4">
       <nav className="flex items-center gap-1 overflow-x-auto md:flex-col md:items-stretch md:space-y-1">
         {NAV_ITEMS.map((item) => {
           const href = basePath + item.href;
@@ -43,7 +43,7 @@ export function ProjectNav({ projectId }: ProjectNavProps) {
                 'flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
                 isActive
                   ? 'bg-brand-100 text-brand-700'
-                  : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
+                  : 'text-ink-400 hover:bg-paper-100 hover:text-brand-700'
               )}
             >
               <Icon className="h-4 w-4" />

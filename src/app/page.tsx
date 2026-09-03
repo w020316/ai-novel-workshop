@@ -62,13 +62,16 @@ export default function Home() {
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-8">
       {/* 顶部 */}
       <header className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="font-serif text-3xl font-bold text-brand-800">
-            AI 小说制作工坊
-          </h1>
-          <p className="mt-1 text-sm text-stone-500">
-            AI 全流程高质量小说生成器 · 人工轻度介入
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="seal" aria-hidden="true">砚</span>
+          <div>
+            <h1 className="font-serif text-3xl font-bold text-brand-800">
+              AI 小说制作工坊
+            </h1>
+            <p className="mt-1 text-sm text-ink-500">
+              AI 全流程高质量小说生成器 · 人工轻度介入
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/inspiration" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
@@ -108,7 +111,7 @@ export default function Home() {
       )}
 
       {/* 底部 */}
-      <footer className="mt-16 border-t border-stone-200 pt-6 text-center text-xs text-stone-400">
+      <footer className="mt-16 border-t border-paper-200 pt-6 text-center text-xs text-ink-300">
         <p>所有数据存储在浏览器本地 · 隐私 100% 安全 · 数据不离机</p>
       </footer>
     </main>

@@ -19,7 +19,7 @@ export default function WorkbenchLayout({ children }: { children: React.ReactNod
   return (
     <div>
       {/* 子导航 */}
-      <div className="mb-6 flex items-center gap-1 border-b border-stone-200">
+      <div className="mb-6 flex items-center gap-1 border-b border-paper-200">
         {tabs.map((tab) => {
           const href = pathname.replace(/\/workbench(\/.*)?$/, `/workbench${tab.href}`);
           const isActive = currentPath === tab.href || currentPath.startsWith(tab.href + '/');

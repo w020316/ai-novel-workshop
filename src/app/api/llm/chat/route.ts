@@ -9,8 +9,8 @@
 // 路径：POST /api/llm/chat
 // ============================================================================
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
-import { resolveProvider } from '@/lib/llm/providers';
+import { createAdapter, createFirstAvailableAdapter, callWithModelFallback } from '@/lib/llm/adapter';
+import { resolveProvider, geminiModelChain, geminiPrimaryForTask } from '@/lib/llm/providers';
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import type { ChatMessage, LLMProvider } from '@/types';
@@ -22,6 +22,7 @@ interface ChatRequestBody {
   messages: ChatMessage[];
   provider?: LLMProvider;
   model?: string;
+  task?: string;
   temperature?: number;
   topP?: number;
   maxTokens?: number;
@@ -93,19 +94,37 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. 调用 chat
-    const result = await adapter.chat({
-      messages,
-      temperature: body.temperature,
-      topP: body.topP,
-      maxTokens: body.maxTokens,
-      responseFormat: body.responseFormat,
-    });
+    // Gemini 组合策略（B+C）：未显式指定 model 时按任务分级选主模型，并做模型级降级链
+    const gemini = resolved?.provider === 'gemini' && !body.model;
+    let usedGeminiModel = '';
+    const result = gemini
+      ? await callWithModelFallback(
+          geminiModelChain(geminiPrimaryForTask(body.task)),
+          (m) => {
+            usedGeminiModel = m;
+            return createAdapter('gemini', { model: m }).chat({
+              messages,
+              temperature: body.temperature,
+              topP: body.topP,
+              maxTokens: body.maxTokens,
+              responseFormat: body.responseFormat,
+            });
+          },
+          isRetryableError
+        )
+      : await adapter.chat({
+          messages,
+          temperature: body.temperature,
+          topP: body.topP,
+          maxTokens: body.maxTokens,
+          responseFormat: body.responseFormat,
+        });
 
     return NextResponse.json({
       content: result.content,
       usage: result.usage,
       provider: resolved?.provider ?? 'auto',
-      model: resolved?.model ?? adapter.model,
+      model: gemini ? usedGeminiModel : (resolved?.model ?? adapter.model),
     });
   } catch (err) {
     // 5. 错误处理

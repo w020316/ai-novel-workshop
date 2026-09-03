@@ -130,6 +130,7 @@ async function getJSON<T>(url: string): Promise<T> {
 export interface ChatOptions {
   provider?: LLMProvider;
   model?: string;
+  task?: string; // gemini 任务分级：质量型(write/rewrite/humanize)/批量型(其余)
   temperature?: number;
   topP?: number;
   maxTokens?: number;

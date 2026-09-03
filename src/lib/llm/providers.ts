@@ -149,6 +149,37 @@ export function getDefaultProvider(): LLMProvider | null {
   return configured[0] ?? null;
 }
 
+// ============ Gemini 任务分级 + 模型降级链（组合策略 B+C） ============
+/** 高质量任务：章节正文 / 重写 / 去AI味（单章少数调用，用质量最高的 3.6，保住正文水平） */
+export const GEMINI_QUALITY_MODEL = 'gemini-3.6-flash';
+/** 批量/低敏感任务：设定设计 / 一致性校验 / 标题 / 摘要 / 灵感（高频，用 3.1-flash-lite，500 RPD 扛量） */
+export const GEMINI_BULK_MODEL = 'gemini-3.1-flash-lite';
+/** 中间保底模型（降级链中段） */
+export const GEMINI_MID_MODEL = 'gemini-3.5-flash';
+/** 单次 gemini 处理的完整降级链（不含 provider 级回退到 GLM） */
+export const GEMINI_MODEL_CHAIN = [
+  GEMINI_QUALITY_MODEL,
+  GEMINI_MID_MODEL,
+  GEMINI_BULK_MODEL,
+];
+
+/**
+ * 返回以主模型打头的降级模型列表（主模型放最前，其余按链排列，自身去掉重复）。
+ * - 质量路径主模型：GEMINI_QUALITY_MODEL
+ * - 批量路径主模型：GEMINI_BULK_MODEL
+ */
+export function geminiModelChain(startModel: string): string[] {
+  return [startModel, ...GEMINI_MODEL_CHAIN.filter((m) => m !== startModel)];
+}
+
+/** 对正文质量敏感的任务：命中用高质量模型，否则走批量模型 */
+const QUALITY_TASKS = new Set(['write', 'rewrite', 'humanize']);
+
+/** Gemini 主模型按任务选择：质量型任务 → 3.6-flash；批量型 → 3.1-flash-lite */
+export function geminiPrimaryForTask(task?: string): string {
+  return task && QUALITY_TASKS.has(task) ? GEMINI_QUALITY_MODEL : GEMINI_BULK_MODEL;
+}
+
 /**
  * 解析实际可用的 Provider 与模型（健壮回退）：
  * - 请求的 provider 已配置 key → 使用它及其请求模型

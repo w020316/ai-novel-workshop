@@ -70,7 +70,7 @@ export async function rewriteForConsistency(
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userPrompt },
     ],
-    { responseFormat: 'text', temperature: 0.4, maxTokens: 4096 }
+    { responseFormat: 'text', temperature: 0.4, maxTokens: 4096, task: 'rewrite' }
   );
 
   const revised = result.content?.trim();

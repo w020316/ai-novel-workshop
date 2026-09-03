@@ -112,7 +112,7 @@ export async function humanizeChapter(input: HumanizeInput): Promise<HumanizeRes
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: buildFullPrompt(trimmed, report, { title, chapterNo, styleSample }) },
       ],
-      { responseFormat: 'text', temperature: 0.7, maxTokens: 4096 }
+      { responseFormat: 'text', temperature: 0.7, maxTokens: 4096, task: 'humanize' }
     );
 
     const rewritten = result.content?.trim();

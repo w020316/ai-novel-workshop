@@ -75,3 +75,25 @@ export function createFirstAvailableAdapter(
   }
   return null;
 }
+
+/**
+ * 在若干模型间串行调用，命中可重试错误（429/5xx/超时）时自动换下一个模型。
+ * 用于 gemini 模型级降级链（组合策略 C）：例如 3.6 → 3.5 → 3.1-flash-lite。
+ * @returns 任一模型成功的结果；全部失败则抛出最后一次错误。
+ */
+export async function callWithModelFallback<T>(
+  models: string[],
+  call: (model: string) => Promise<T>,
+  isRetryable: (err: unknown) => boolean
+): Promise<T> {
+  let lastError: unknown;
+  for (const model of models) {
+    try {
+      return await call(model);
+    } catch (err) {
+      lastError = err;
+      if (!isRetryable(err)) throw err; // 非可重试错误（如 401）不换模型，直接抛
+    }
+  }
+  throw lastError;
+}

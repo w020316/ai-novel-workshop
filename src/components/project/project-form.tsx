@@ -19,6 +19,24 @@ import { Input, Textarea, Label } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { LLMProvider, StylePreset } from '@/types';
 
+/** 文风一句话说明（纯新手提示，不含偏好校验） */
+const STYLE_HINT: Record<string, string> = {
+  细腻言情: '情绪细腻、心理描写多，例：眸光微动，心尖一颤',
+  硬核爽文: '节奏快、打脸逆袭多，例：冷笑一声，杀意凛然',
+  悬疑冷峻: '氛围紧张、信息克制，例：寒意爬上脊背',
+  史诗厚重: '宏大叙事、古风厚重，例：烽烟起，山河变色',
+  轻松幽默: '轻松搞笑、对话多，例：翻了个白眼，欲哭无泪',
+};
+
+/** 灵感起点：给小白的快速选题（点击即填标题与题材） */
+const INSPIRATION_STARTS: { title: string; genre: string }[] = [
+  { title: '星河黎明', genre: '科幻' },
+  { title: '赘婿归来', genre: '都市' },
+  { title: '废柴逆袭', genre: '玄幻' },
+  { title: '幕后黑手', genre: '悬疑' },
+  { title: '宫廷嫡女', genre: '宫斗' },
+];
+
 const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
   deepseek: [
     { value: 'deepseek-chat', label: 'DeepSeek Chat (推荐，32K)' },
@@ -63,8 +81,10 @@ export function ProjectForm() {
     },
   });
 
-  const { register, handleSubmit, watch, formState: { errors } } = form;
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = form;
   const selectedProvider = watch('llmProvider');
+  const selectedPresetId = watch('stylePresetId');
+  const selectedPreset = stylePresets.find((p) => p.id === selectedPresetId);
 
   const onSubmit = async (values: ProjectFormValues) => {
     setSubmitting(true);
@@ -95,6 +115,28 @@ export function ProjectForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {/* 灵感起点：给小白快速选题 */}
+      <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+        <p className="mb-2 text-xs font-medium text-stone-600">
+          不知道写什么？点一个起点，会自动帮你填好标题和题材，也可以自己起名
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {INSPIRATION_STARTS.map((s) => (
+            <button
+              key={s.title}
+              type="button"
+              onClick={() => {
+                setValue('title', s.title);
+                setValue('genre', s.genre as never);
+              }}
+              className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs text-stone-600 transition-colors hover:border-brand-400 hover:text-brand-700"
+            >
+              {s.title} · {s.genre}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* 标题 */}
       <div className="space-y-1.5">
         <Label htmlFor="title">小说标题 *</Label>
@@ -136,6 +178,9 @@ export function ProjectForm() {
         {errors.genre && (
           <p className="text-xs text-accent-600">{errors.genre.message}</p>
         )}
+        <p className="text-xs text-stone-400">
+          题材决定世界观基调，之后可随时回来改；拿不准就选「其他」自由发挥
+        </p>
       </div>
 
       {/* 简介 */}
@@ -147,6 +192,9 @@ export function ProjectForm() {
           rows={2}
           {...register('summary')}
         />
+        <p className="text-xs text-stone-400">
+          写一句更贴合你的故事（AI 会优先按它生成设定）；留空则交给 AI 自由发挥
+        </p>
         {errors.summary && (
           <p className="text-xs text-accent-600">{errors.summary.message}</p>
         )}
@@ -162,7 +210,9 @@ export function ProjectForm() {
           min={10000}
           {...register('targetWords', { valueAsNumber: true })}
         />
-        <p className="text-xs text-stone-400">建议 20 万 - 100 万字</p>
+        <p className="text-xs text-stone-400">
+          建议 20 万-100 万字 · 约每 2000-3000 字一章（影响分卷与章节规划）
+        </p>
         {errors.targetWords && (
           <p className="text-xs text-accent-600">{errors.targetWords.message}</p>
         )}
@@ -189,11 +239,15 @@ export function ProjectForm() {
         {errors.stylePresetId && (
           <p className="text-xs text-accent-600">{errors.stylePresetId.message}</p>
         )}
+        <p className="text-xs text-stone-400">
+          {STYLE_HINT[selectedPreset?.name ?? ''] ?? '决定整体语言质感，进入项目后仍可调整'}
+        </p>
       </div>
 
       {/* LLM 配置 */}
       <div className="space-y-3 rounded-md border border-stone-200 bg-stone-50 p-4">
         <h3 className="text-sm font-medium text-stone-700">AI 模型配置</h3>
+        <p className="text-xs text-stone-400">新手可直接用默认，无需修改；想更智能或更省可以后续在项目里调整</p>
 
         <div className="space-y-1.5">
           <Label>模型供应商</Label>
@@ -247,6 +301,19 @@ export function ProjectForm() {
             />
           </div>
         </div>
+      </div>
+
+      {/* 创建后会发生什么（降低黑箱感） */}
+      <div className="rounded-md border border-brand-200 bg-brand-50/40 p-3">
+        <p className="mb-1.5 text-xs font-medium text-brand-700">创建后会发生什么？</p>
+        <ol className="list-decimal space-y-1 pl-5 text-xs text-stone-600">
+          <li>进入项目概览，先到「设定工坊」一键生成世界观</li>
+          <li>再生成人物档案与大纲，随时可改</li>
+          <li>最后到「创作工作台」逐章生成正文，每步可预览、手动修改或重新生成</li>
+        </ol>
+        <p className="mt-1.5 text-xs text-stone-400">
+          全程可人工介入，不是全自动「黑箱」；实在不懂就把流程动画看完再动手。
+        </p>
       </div>
 
       {/* 提交 */}

@@ -20,6 +20,25 @@ export function EmptyState() {
           创建第一部小说
         </Button>
       </Link>
+
+      <div className="mt-8 grid w-full max-w-lg grid-cols-1 gap-3 sm:grid-cols-3">
+        {[
+          ['1', '新建项目', '设定题材、目标字数、文风与 AI 模型'],
+          ['2', '生成设定 · 章节', '在设定工坊与创作工作台一键生成'],
+          ['3', '校验 · 导出', '冷读复核、去AI味、投稿体检后导出'],
+        ].map(([n, t, d]) => (
+          <div
+            key={n}
+            className="rounded-md border border-stone-200 bg-stone-50 p-3 text-left"
+          >
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-[11px] font-medium text-brand-700">
+              {n}
+            </span>
+            <p className="mt-1.5 text-xs font-medium text-stone-700">{t}</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-stone-500">{d}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

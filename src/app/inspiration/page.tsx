@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, TrendingUp, Loader2, Sparkles, Lightbulb, Copy, Check } from 'lucide-react';
+import { ChevronLeft, TrendingUp, Loader2, Sparkles, Lightbulb, Copy, Check, Plus } from 'lucide-react';
 import { RANK_SOURCES, getTrend, generateTrendInspiration } from '@/lib/trend/trends';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/input';
@@ -169,18 +169,29 @@ export default function InspirationPage() {
                 <div key={c.id} className="rounded-md border border-stone-200 p-3">
                   <p className="text-xs font-medium text-stone-800">{c.title}</p>
                   <p className="mt-1 text-xs text-stone-600">{c.content}</p>
-                  <button
-                    type="button"
-                    onClick={() => void handleCopy(c)}
-                    className="mt-2 inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
-                  >
-                    {copiedId === c.id ? (
-                      <Check className="h-3 w-3" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                    {copiedId === c.id ? '已复制' : '复制灵感'}
-                  </button>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleCopy(c)}
+                      className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
+                    >
+                      {copiedId === c.id ? (
+                        <Check className="h-3 w-3" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                      {copiedId === c.id ? '已复制' : '复制灵感'}
+                    </button>
+                    <Link
+                      href={`/project/new?title=${encodeURIComponent(c.title)}&genre=${encodeURIComponent(
+                        genre
+                      )}&summary=${encodeURIComponent(c.content)}`}
+                      className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
+                    >
+                      <Plus className="h-3 w-3" />
+                      以此新建小说
+                    </Link>
+                  </div>
                 </div>
               ))}
             </CardContent>

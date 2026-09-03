@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -85,6 +85,28 @@ export function ProjectForm() {
   const selectedProvider = watch('llmProvider');
   const selectedPresetId = watch('stylePresetId');
   const selectedPreset = stylePresets.find((p) => p.id === selectedPresetId);
+
+  // 从「趋势灵感」带入：读 URL query 预填标题/题材/简介
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const t = q.get('title');
+    const g = q.get('genre');
+    const s = q.get('summary');
+    let changed = false;
+    if (t) {
+      setValue('title', t.slice(0, 60));
+      changed = true;
+    }
+    if (g && GENRE_OPTIONS.some((o) => o.value === g)) {
+      setValue('genre', g as ProjectFormValues['genre']);
+      changed = true;
+    }
+    if (s) {
+      setValue('summary', s.slice(0, 300));
+      changed = true;
+    }
+    if (changed) toast.info('已带入灵感，可再调整');
+  }, [setValue]);
 
   const onSubmit = async (values: ProjectFormValues) => {
     setSubmitting(true);

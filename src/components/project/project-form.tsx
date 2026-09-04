@@ -68,6 +68,13 @@ const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
   ],
 };
 
+/** 三步向导：每步对应的必校验字段（选填字段不拦） */
+const STEP_META: { title: string; hint: string; fields: (keyof ProjectFormValues)[] }[] = [
+  { title: '故事想法', hint: '想写一个什么故事', fields: ['title', 'genre'] },
+  { title: '篇幅与文风', hint: '写多长、什么味', fields: ['targetWords', 'stylePresetId'] },
+  { title: 'AI 配置', hint: '新手保持默认即可', fields: [] },
+];
+
 export function ProjectForm() {
   const router = useRouter();
   const { createProject } = useProjectStore();
@@ -109,6 +116,27 @@ export function ProjectForm() {
     Number.isFinite(targetWords) && targetWords > 0
       ? summarizePlan(targetWords, selectedGenre)
       : summarizePlan(300000, selectedGenre);
+
+  // ===== 三步向导 =====
+  const [step, setStep] = useState(0);
+
+  const scrollTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  /** 下一步前校验当步必填字段，不通过则停留并显示字段错误 */
+  const goNext = async () => {
+    const fields = STEP_META[step].fields;
+    if (fields.length > 0) {
+      const ok = await form.trigger(fields as never);
+      if (!ok) return;
+    }
+    setStep((s) => Math.min(s + 1, STEP_META.length - 1));
+    scrollTop();
+  };
+
+  const goPrev = () => {
+    setStep((s) => Math.max(s - 1, 0));
+    scrollTop();
+  };
 
   // 从「趋势灵感」带入：读 URL query 预填标题/题材/简介
   useEffect(() => {
@@ -201,248 +229,315 @@ export function ProjectForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      {/* 灵感起点：给小白快速选题 */}
-      <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-        <p className="mb-2 text-xs font-medium text-stone-600">
-          不知道写什么？点一个起点，会自动帮你填好标题和题材，也可以自己起名
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {INSPIRATION_STARTS.map((s) => (
+      {/* 步骤条：已完成步可点击回跳 */}
+      <ol className="flex items-center gap-2" aria-label="表单分步">
+        {STEP_META.map((s, i) => (
+          <li key={s.title} className="flex min-w-0 flex-1 items-center gap-2">
             <button
-              key={s.title}
               type="button"
               onClick={() => {
-                setValue('title', s.title);
-                setValue('genre', s.genre as never);
+                if (i < step) {
+                  setStep(i);
+                  scrollTop();
+                }
               }}
-              className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs text-stone-600 transition-colors hover:border-brand-400 hover:text-brand-700"
+              disabled={i > step}
+              className={cn(
+                'flex min-w-0 items-center gap-1.5 rounded-full px-2 py-1 text-xs transition-colors',
+                i === step ? 'text-brand-700' : i < step ? 'text-stone-600 hover:text-brand-700' : 'text-stone-400'
+              )}
+              aria-current={i === step ? 'step' : undefined}
             >
-              {s.title} · {s.genre}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 标题 */}
-      <div className="space-y-1.5">
-        <Label htmlFor="title">小说标题 *</Label>
-        <Input
-          id="title"
-          placeholder="如：星河黎明"
-          {...register('title')}
-          aria-invalid={!!errors.title}
-        />
-        {errors.title && (
-          <p className="text-xs text-accent-600">{errors.title.message}</p>
-        )}
-      </div>
-
-      {/* 题材 */}
-      <div className="space-y-1.5">
-        <Label>题材 *</Label>
-        <div className="flex flex-wrap gap-2">
-          {GENRE_OPTIONS.map((opt) => (
-            <label key={opt.value} className="cursor-pointer">
-              <input
-                type="radio"
-                value={opt.value}
-                {...register('genre')}
-                className="peer sr-only"
-              />
               <span
                 className={cn(
-                  'inline-block rounded-md border px-3 py-1.5 text-sm transition-colors',
-                  'border-stone-300 text-stone-600',
-                  'peer-checked:border-brand-500 peer-checked:bg-brand-50 peer-checked:text-brand-700'
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium',
+                  i === step && 'border-brand-500 bg-brand-600 text-white',
+                  i < step && 'border-brand-300 bg-brand-50 text-brand-700',
+                  i > step && 'border-stone-200 bg-stone-50 text-stone-400'
                 )}
               >
-                {opt.label}
+                {i < step ? '✓' : i + 1}
               </span>
-            </label>
-          ))}
-        </div>
-        {errors.genre && (
-          <p className="text-xs text-accent-600">{errors.genre.message}</p>
-        )}
-        <p className="text-xs text-stone-400">
-          题材决定世界观基调，之后可随时回来改；拿不准就选「其他」自由发挥
-        </p>
-      </div>
-
-      {/* 简介 */}
-      <div className="space-y-1.5">
-        <Label htmlFor="summary">一句话简介</Label>
-        <Textarea
-          id="summary"
-          placeholder="用一句话概括故事核心（选填，可后补）"
-          rows={2}
-          {...register('summary')}
-        />
-        <p className="text-xs text-stone-400">
-          写一句更贴合你的故事（AI 会优先按它生成设定）；留空则交给 AI 自由发挥
-        </p>
-        {errors.summary && (
-          <p className="text-xs text-accent-600">{errors.summary.message}</p>
-        )}
-      </div>
-
-      {/* 目标字数 */}
-      <div className="space-y-1.5">
-        <Label htmlFor="targetWords">目标字数 *</Label>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Input
-            id="targetWords"
-            type="number"
-            step={10000}
-            min={10000}
-            max={5000000}
-            className="max-w-48"
-            {...register('targetWords', { valueAsNumber: true })}
-          />
-          {TARGET_WORD_PRESETS.map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              onClick={() => setValue('targetWords', p.value)}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                targetWords === p.value
-                  ? 'border-brand-500 bg-brand-50 text-brand-700'
-                  : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
-              }`}
-            >
-              {p.label}
+              <span className="hidden truncate sm:inline">{s.title}</span>
             </button>
-          ))}
-        </div>
-        <p className="text-xs text-stone-400">
-          支持 1 万-500 万字（百万字长篇友好）· 约每 2000-3000 字一章，将自动规划分卷与章节
-        </p>
-        <p className="text-xs text-stone-500">
-          预估：{plan.volumeCount} 卷 / {plan.totalChapters.toLocaleString()} 章（按每章约 2500 字估算）
-        </p>
-        {errors.targetWords && (
-          <p className="text-xs text-accent-600">{errors.targetWords.message}</p>
-        )}
-      </div>
+            {i < STEP_META.length - 1 && <span className="h-px flex-1 bg-stone-200" aria-hidden />}
+          </li>
+        ))}
+      </ol>
+      <p className="-mt-3 text-xs text-stone-400">{STEP_META[step].hint}</p>
 
-      {/* 文风预设 */}
-      <div className="space-y-1.5">
-        <Label htmlFor="stylePresetId">文风预设 *</Label>
-        {!loadedPresets ? (
-          <p className="text-xs text-stone-400">加载文风预设中…</p>
-        ) : (
-          <select
-            id="stylePresetId"
-            {...register('stylePresetId')}
-            className="flex h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm"
-          >
-            {stylePresets.map((preset) => (
-              <option key={preset.id} value={preset.id}>
-                {preset.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {errors.stylePresetId && (
-          <p className="text-xs text-accent-600">{errors.stylePresetId.message}</p>
-        )}
-        <p className="text-xs text-stone-400">
-          {STYLE_HINT[selectedPreset?.name ?? ''] ?? '决定整体语言质感，进入项目后仍可调整'}
-        </p>
-      </div>
-
-      {/* LLM 配置 */}
-      <div className="space-y-3 rounded-md border border-stone-200 bg-stone-50 p-4">
-        <h3 className="text-sm font-medium text-stone-700">AI 模型配置</h3>
-        <p className="text-xs text-stone-400">新手可直接用默认，无需修改；想更智能或更省可以后续在项目里调整</p>
-
-        <div className="space-y-1.5">
-          <Label>模型供应商</Label>
-          <div className="flex gap-2">
-            {PROVIDER_OPTIONS.map((opt) => (
-              <label key={opt.value} className="cursor-pointer">
-                <input
-                  type="radio"
-                  value={opt.value}
-                  {...register('llmProvider')}
-                  className="peer sr-only"
-                />
-                <span
-                  className={cn(
-                    'inline-block rounded-md border px-3 py-1.5 text-sm transition-colors',
-                    'border-stone-300 text-stone-600',
-                    'peer-checked:border-brand-500 peer-checked:bg-brand-50 peer-checked:text-brand-700'
-                  )}
+      {/* ===== 第 1 步 · 故事想法 ===== */}
+      {step === 0 && (
+        <>
+          {/* 灵感起点：给小白快速选题 */}
+          <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+            <p className="mb-2 text-xs font-medium text-stone-600">
+              不知道写什么？点一个起点，会自动帮你填好标题和题材，也可以自己起名
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {INSPIRATION_STARTS.map((s) => (
+                <button
+                  key={s.title}
+                  type="button"
+                  onClick={() => {
+                    setValue('title', s.title);
+                    setValue('genre', s.genre as never);
+                  }}
+                  className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs text-stone-600 transition-colors hover:border-brand-400 hover:text-brand-700"
                 >
-                  {opt.label}
-                </span>
-              </label>
-            ))}
+                  {s.title} · {s.genre}
+                </button>
+              ))}
+            </div>
           </div>
-          <p className="text-xs text-stone-400">
-            首选：{MODEL_OPTIONS[selectedProvider]?.[0]?.label}
-          </p>
-        </div>
 
-        <div className="grid grid-cols-2 gap-3">
+          {/* 标题 */}
           <div className="space-y-1.5">
-            <Label htmlFor="temperature">温度 (0-2)</Label>
+            <Label htmlFor="title">小说标题 *</Label>
             <Input
-              id="temperature"
-              type="number"
-              step={0.1}
-              min={0}
-              max={2}
-              {...register('temperature', { valueAsNumber: true })}
+              id="title"
+              placeholder="如：星河黎明"
+              {...register('title')}
+              aria-invalid={!!errors.title}
             />
+            {errors.title && (
+              <p className="text-xs text-accent-600">{errors.title.message}</p>
+            )}
           </div>
+
+          {/* 题材 */}
           <div className="space-y-1.5">
-            <Label htmlFor="topP">Top-P (0-1)</Label>
-            <Input
-              id="topP"
-              type="number"
-              step={0.05}
-              min={0}
-              max={1}
-              {...register('topP', { valueAsNumber: true })}
+            <Label>题材 *</Label>
+            <div className="flex flex-wrap gap-2">
+              {GENRE_OPTIONS.map((opt) => (
+                <label key={opt.value} className="cursor-pointer">
+                  <input
+                    type="radio"
+                    value={opt.value}
+                    {...register('genre')}
+                    className="peer sr-only"
+                  />
+                  <span
+                    className={cn(
+                      'inline-block rounded-md border px-3 py-1.5 text-sm transition-colors',
+                      'border-stone-300 text-stone-600',
+                      'peer-checked:border-brand-500 peer-checked:bg-brand-50 peer-checked:text-brand-700'
+                    )}
+                  >
+                    {opt.label}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {errors.genre && (
+              <p className="text-xs text-accent-600">{errors.genre.message}</p>
+            )}
+            <p className="text-xs text-stone-400">
+              题材决定世界观基调，之后可随时回来改；拿不准就选「其他」自由发挥
+            </p>
+          </div>
+
+          {/* 简介 */}
+          <div className="space-y-1.5">
+            <Label htmlFor="summary">一句话简介</Label>
+            <Textarea
+              id="summary"
+              placeholder="用一句话概括故事核心（选填，可后补）"
+              rows={2}
+              {...register('summary')}
             />
+            <p className="text-xs text-stone-400">
+              写一句更贴合你的故事（AI 会优先按它生成设定）；留空则交给 AI 自由发挥
+            </p>
+            {errors.summary && (
+              <p className="text-xs text-accent-600">{errors.summary.message}</p>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ===== 第 2 步 · 篇幅与文风 ===== */}
+      {step === 1 && (
+        <>
+          {/* 目标字数 */}
+          <div className="space-y-1.5">
+            <Label htmlFor="targetWords">目标字数 *</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Input
+                id="targetWords"
+                type="number"
+                step={10000}
+                min={10000}
+                max={5000000}
+                className="max-w-48"
+                {...register('targetWords', { valueAsNumber: true })}
+              />
+              {TARGET_WORD_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setValue('targetWords', p.value)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    targetWords === p.value
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-stone-400">
+              支持 1 万-500 万字（百万字长篇友好）· 约每 2000-3000 字一章，将自动规划分卷与章节
+            </p>
+            <p className="text-xs text-stone-500">
+              预估：{plan.volumeCount} 卷 / {plan.totalChapters.toLocaleString()} 章（按每章约 2500 字估算）
+            </p>
+            {errors.targetWords && (
+              <p className="text-xs text-accent-600">{errors.targetWords.message}</p>
+            )}
+          </div>
+
+          {/* 文风预设 */}
+          <div className="space-y-1.5">
+            <Label htmlFor="stylePresetId">文风预设 *</Label>
+            {!loadedPresets ? (
+              <p className="text-xs text-stone-400">加载文风预设中…</p>
+            ) : (
+              <select
+                id="stylePresetId"
+                {...register('stylePresetId')}
+                className="flex h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm"
+              >
+                {stylePresets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {errors.stylePresetId && (
+              <p className="text-xs text-accent-600">{errors.stylePresetId.message}</p>
+            )}
+            <p className="text-xs text-stone-400">
+              {STYLE_HINT[selectedPreset?.name ?? ''] ?? '决定整体语言质感，进入项目后仍可调整'}
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* ===== 第 3 步 · AI 配置 ===== */}
+      {step === 2 && (
+        <>
+          {/* LLM 配置 */}
+          <div className="space-y-3 rounded-md border border-stone-200 bg-stone-50 p-4">
+            <h3 className="text-sm font-medium text-stone-700">AI 模型配置</h3>
+            <p className="text-xs text-stone-400">新手可直接用默认，无需修改；想更智能或更省可以后续在项目里调整</p>
+
+            <div className="space-y-1.5">
+              <Label>模型供应商</Label>
+              <div className="flex gap-2">
+                {PROVIDER_OPTIONS.map((opt) => (
+                  <label key={opt.value} className="cursor-pointer">
+                    <input
+                      type="radio"
+                      value={opt.value}
+                      {...register('llmProvider')}
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={cn(
+                        'inline-block rounded-md border px-3 py-1.5 text-sm transition-colors',
+                        'border-stone-300 text-stone-600',
+                        'peer-checked:border-brand-500 peer-checked:bg-brand-50 peer-checked:text-brand-700'
+                      )}
+                    >
+                      {opt.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-stone-400">
+                首选：{MODEL_OPTIONS[selectedProvider]?.[0]?.label}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="temperature">温度 (0-2)</Label>
+                <Input
+                  id="temperature"
+                  type="number"
+                  step={0.1}
+                  min={0}
+                  max={2}
+                  {...register('temperature', { valueAsNumber: true })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="topP">Top-P (0-1)</Label>
+                <Input
+                  id="topP"
+                  type="number"
+                  step={0.05}
+                  min={0}
+                  max={1}
+                  {...register('topP', { valueAsNumber: true })}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 创建后会发生什么（降低黑箱感） */}
+          <div className="rounded-md border border-brand-200 bg-brand-50/40 p-3">
+            <p className="mb-1.5 text-xs font-medium text-brand-700">创建后会发生什么？</p>
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-stone-600">
+              <li>进入项目概览，先到「设定工坊」一键生成世界观</li>
+              <li>再生成人物档案与大纲，随时可改</li>
+              <li>最后到「创作工作台」逐章生成正文，每步可预览、手动修改或重新生成</li>
+            </ol>
+            <p className="mt-1.5 text-xs text-stone-400">
+              全程可人工介入，不是全自动「黑箱」；实在不懂就把流程动画看完再动手。
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* ===== 黏性提交条：滚动全程可见，降低长表单弃单 ===== */}
+      <div
+        className={cn(
+          'sticky bottom-0 z-10 -mx-6 border-t border-stone-200 bg-white/95 px-6 backdrop-blur',
+          'pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="hidden min-w-0 truncate text-xs text-stone-400 sm:inline">
+            预估 {plan.volumeCount} 卷 / {plan.totalChapters.toLocaleString()} 章 · 第 {step + 1}/{STEP_META.length} 步
+          </span>
+          <div className="flex shrink-0 gap-2">
+            {step > 0 && (
+              <Button type="button" variant="outline" onClick={goPrev} disabled={submitting}>
+                上一步
+              </Button>
+            )}
+            {step < STEP_META.length - 1 ? (
+              <Button type="button" onClick={goNext} disabled={submitting}>
+                下一步
+              </Button>
+            ) : (
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    创建中…
+                  </>
+                ) : (
+                  '创建项目'
+                )}
+              </Button>
+            )}
           </div>
         </div>
-      </div>
-
-      {/* 创建后会发生什么（降低黑箱感） */}
-      <div className="rounded-md border border-brand-200 bg-brand-50/40 p-3">
-        <p className="mb-1.5 text-xs font-medium text-brand-700">创建后会发生什么？</p>
-        <ol className="list-decimal space-y-1 pl-5 text-xs text-stone-600">
-          <li>进入项目概览，先到「设定工坊」一键生成世界观</li>
-          <li>再生成人物档案与大纲，随时可改</li>
-          <li>最后到「创作工作台」逐章生成正文，每步可预览、手动修改或重新生成</li>
-        </ol>
-        <p className="mt-1.5 text-xs text-stone-400">
-          全程可人工介入，不是全自动「黑箱」；实在不懂就把流程动画看完再动手。
-        </p>
-      </div>
-
-      {/* 提交 */}
-      <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.back()}
-          disabled={submitting}
-        >
-          取消
-        </Button>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              创建中…
-            </>
-          ) : (
-            '创建项目'
-          )}
-        </Button>
       </div>
     </form>
   );

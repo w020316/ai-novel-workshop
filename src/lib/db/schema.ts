@@ -19,6 +19,7 @@ import type {
   InspirationCard,
   ChapterVersion,
   LiveRankedWork,
+  BatchJob,
 } from '@/types';
 
 export class NovelDB extends Dexie {
@@ -37,6 +38,7 @@ export class NovelDB extends Dexie {
   inspirationCards!: Table<InspirationCard, string>;
   chapterVersions!: Table<ChapterVersion, string>;
   liveRankedWorks!: Table<LiveRankedWork, string>;
+  batchJobs!: Table<BatchJob, string>;
 
   constructor() {
     super('ai_novel_workshop');
@@ -65,6 +67,10 @@ export class NovelDB extends Dexie {
     // 实时榜单动态查重库（阶段十七）
     this.version(4).stores({
       liveRankedWorks: 'id, sourceId, title, fetchedAt',
+    });
+    // 批量续写任务（断点续写·暂停恢复）
+    this.version(5).stores({
+      batchJobs: 'id, projectId, updatedAt',
     });
   }
 }

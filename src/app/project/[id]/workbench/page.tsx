@@ -6,8 +6,9 @@ import { listChapters } from '@/lib/db/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChapterList } from '@/components/workbench/ChapterList';
-import { generateChaptersBatch } from '@/lib/agents/batch';
-import type { Chapter, GenerationStage } from '@/types';
+import { generateChaptersBatch, computeResumeCount, computeDoneCount } from '@/lib/agents/batch';
+import { startBatchJob, pauseBatchJob, clearBatchJob, getBatchJob } from '@/lib/batch/job-store';
+import type { Chapter, GenerationStage, BatchJob } from '@/types';
 import { Plus, Loader2, Layers, StopCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -25,6 +26,7 @@ export default function WorkbenchPage() {
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ chapterNo: number; total: number; stage: string | null; done: number } | null>(null);
   const batchAbortRef = useRef<AbortController | null>(null);
+  const [batchJob, setBatchJob] = useState<BatchJob | null>(null);
 
   const load = useCallback(async () => {
     const list = await listChapters(projectId).catch(() => []);
@@ -36,6 +38,12 @@ export default function WorkbenchPage() {
     load().finally(() => setLoading(false));
   }, [load]);
 
+  useEffect(() => {
+    getBatchJob(projectId)
+      .then(setBatchJob)
+      .catch(() => setBatchJob(null));
+  }, [projectId]);
+
   const handleCreateChapter = () => {
     const nextChapterNo = chapters.length + 1;
     router.push(`/project/${projectId}/workbench/chapter/${nextChapterNo}`);
@@ -46,22 +54,40 @@ export default function WorkbenchPage() {
       toast.warning('连写章数需在 1~50 之间');
       return;
     }
-    const startChapterNo = chapters.length + 1;
     const controller = new AbortController();
     batchAbortRef.current = controller;
     setBatchRunning(true);
-    setBatchProgress({ chapterNo: startChapterNo, total: batchCount, stage: null, done: 0 });
-    const plotTemplate = batchPlot.trim();
+
+    // 断点续写：存在未完成的上批任务则继续剩余章节（跳过已存在章）
+    const isResume = !!batchJob;
+    const startChapterNo = chapters.length + 1;
+    const remaining = isResume
+      ? computeResumeCount(batchJob!.total, batchJob!.startChapterNo, chapters.length)
+      : batchCount;
+    const resolvedTemplate = isResume && batchJob!.plotTemplate
+      ? batchJob!.plotTemplate
+      : batchPlot.trim();
+
+    if (remaining <= 0) {
+      await clearBatchJob(projectId);
+      setBatchJob(null);
+      setBatchRunning(false);
+      batchAbortRef.current = null;
+      toast.success('本批章节已全部生成，无需续写');
+      return;
+    }
+
+    if (!isResume) {
+      await startBatchJob({ projectId, total: batchCount, startChapterNo, plotTemplate: resolvedTemplate });
+    }
+    setBatchProgress({ chapterNo: startChapterNo, total: remaining, stage: null, done: 0 });
     try {
       const res = await generateChaptersBatch({
         projectId,
         startChapterNo,
-        count: batchCount,
+        count: remaining,
         signal: controller.signal,
-        // 若填写了剧情模板，整体注入每章要点，否则留空由剧情设计自动拟定
-        plotPointsPerChapter: !plotTemplate
-          ? undefined
-          : () => [plotTemplate],
+        plotPointsPerChapter: !resolvedTemplate ? undefined : () => [resolvedTemplate],
         onProgress: (info) =>
           setBatchProgress({
             chapterNo: info.chapterNo,
@@ -70,12 +96,23 @@ export default function WorkbenchPage() {
             done: info.index,
           }),
       });
-      setBatchProgress((p) => (p ? { ...p, done: p.total, stage: 'completed' } : p));
-      toast.success(res.aborted ? '已中止批量续写，已完成章已保存' : `已续写 ${res.results.length} 章`);
-      setShowBatch(false);
-      setBatchPlot('');
       await load();
+      if (res.aborted) {
+        // 暂停：保留任务现场，供刷新后继续
+        await pauseBatchJob(projectId);
+        setBatchJob(await getBatchJob(projectId));
+        toast.info('已暂停批量续写，可稍后「继续」');
+      } else {
+        // 完成：清理任务现场
+        await clearBatchJob(projectId);
+        setBatchJob(null);
+        toast.success(`已续写 ${res.results.length} 章`);
+        setShowBatch(false);
+        setBatchPlot('');
+      }
     } catch (e) {
+      await pauseBatchJob(projectId);
+      setBatchJob(await getBatchJob(projectId));
       toast.error('批量续写失败', { description: e instanceof Error ? e.message : String(e) });
       await load();
     } finally {
@@ -86,6 +123,12 @@ export default function WorkbenchPage() {
 
   const handleStopBatch = () => {
     batchAbortRef.current?.abort();
+  };
+
+  const handleDiscardBatch = async () => {
+    await clearBatchJob(projectId);
+    setBatchJob(null);
+    toast.success('已放弃本批批量续写任务');
   };
 
   const stageLabel: Record<GenerationStage, string> = {
@@ -179,9 +222,9 @@ export default function WorkbenchPage() {
                     {batchProgress.stage ? ` · ${stageLabel[batchProgress.stage as GenerationStage] ?? batchProgress.stage}` : '…'}
                   </span>
                   {batchRunning && (
-                    <button onClick={handleStopBatch} className="inline-flex items-center gap-1 text-red-500 hover:text-red-700">
+                    <button onClick={handleStopBatch} className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-700">
                       <StopCircle className="h-3.5 w-3.5" />
-                      停止
+                      暂停
                     </button>
                   )}
                 </div>
@@ -211,6 +254,24 @@ export default function WorkbenchPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* 断点续写横幅 */}
+      {!batchRunning && batchJob && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span>
+            上次批量续写未完成：已完成{' '}
+            {computeDoneCount(batchJob.total, batchJob.startChapterNo, chapters.length)} / {batchJob.total} 章，可继续生成剩余章节（已生成的章会自动跳过）。
+          </span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={handleBatchWrite}>
+              继续批量续写
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleDiscardBatch}>
+              放弃本次批量
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* 章节列表 */}

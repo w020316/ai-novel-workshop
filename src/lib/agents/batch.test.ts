@@ -2,7 +2,7 @@
 // 批量续写 单元测试（注入 mock single，不消耗真实 LLM）
 // ============================================================================
 import { describe, it, expect, vi } from 'vitest';
-import { generateChaptersBatch } from './batch';
+import { generateChaptersBatch, computeResumeCount, computeDoneCount } from './batch';
 import type { GenerationResult } from '@/types';
 
 function mockSingle() {
@@ -111,5 +111,34 @@ describe('generateChaptersBatch（依赖注入）', () => {
     });
     // 循环在第 3 章（index2→n4）前检测到 aborted 而停止
     expect(single.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+});
+describe('computeResumeCount / computeDoneCount（断点续写规划）', () => {
+  it('未开始：无需跳过，剩余=总章数', () => {
+    // 原批从第 1 章起、当前 0 章
+    expect(computeResumeCount(50, 1, 0)).toBe(50);
+    expect(computeDoneCount(50, 1, 0)).toBe(0);
+  });
+
+  it('已完成若干章：剩余=总数-已做，已完成=已做', () => {
+    // 原批 50 章起于第 1 章，当前已有 12 章
+    expect(computeResumeCount(50, 1, 12)).toBe(38);
+    expect(computeDoneCount(50, 1, 12)).toBe(12);
+  });
+
+  it('中断后从后部续写：起始章>1 时按偏移计算', () => {
+    // 原批起于第 3 章、总数 5（即第3~7章），当前已有 6 章 → 本批已做 3-6 共 4 章，剩第7章
+    expect(computeResumeCount(5, 3, 6)).toBe(1);
+    expect(computeDoneCount(5, 3, 6)).toBe(4);
+  });
+
+  it('已全部生成：剩余为 0', () => {
+    expect(computeResumeCount(5, 1, 5)).toBe(0);
+    expect(computeDoneCount(5, 1, 5)).toBe(5);
+  });
+
+  it('章数异常：非法入参安全返回 0', () => {
+    expect(computeResumeCount(-1, 1, 0)).toBe(0);
+    expect(computeDoneCount(0, 1, 5)).toBe(0);
   });
 });

@@ -318,6 +318,21 @@ export interface LiveRankedWork {
   fetchedAt: number;
 }
 
+
+/** 批量续写持久化任务（断点续写·暂停恢复） */
+export interface BatchJob {
+  id: string;
+  projectId: string;
+  /** 本批总章数 */
+  total: number;
+  /** 本批起始章号 */
+  startChapterNo: number;
+  /** 统一剧情模板 */
+  plotTemplate: string;
+  status: 'running' | 'paused';
+  updatedAt: number;
+}
+
 // ============ 起名工具 ============
 export type NameCategory = 'person' | 'place' | 'skill' | 'sect' | 'weapon' | 'treasure';
 

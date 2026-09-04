@@ -6,6 +6,7 @@
 //   - 每章使用传入的分章剧情要点（或留白由剧情设计 Agent 自动拟定），保留记忆续写连续性
 //   - 通过 onProgress 上报「第 X 章 / 总 N 章 · 当前阶段」；支持 AbortSignal 中止
 //   - single 支持依赖注入，便于单元测试（不改动编排器主路径）
+//   - 提供 computeResumeCount / computeDoneCount 供「断点续写」规划剩余章数。
 // ============================================================================
 import { generateChapter } from './orchestrator';
 import type { GenerationContext, GenerationResult, GenerationStage } from '@/types';
@@ -91,4 +92,34 @@ export async function generateChaptersBatch(
   }
 
   return { results, chapterPLots, aborted: false };
+}
+
+/**
+ * 计算断点续写时"还需续写的章数"。
+ * @param originalTotal 原请求总章数
+ * @param originalStart 原起始章号（如 1）
+ * @param currentChapterCount 当前已生成的章节数（含之前完成的本批章节）
+ * @returns 仍需要生成的章节数（>=0）；已全部生成为 0
+ */
+export function computeResumeCount(
+  originalTotal: number,
+  originalStart: number,
+  currentChapterCount: number
+): number {
+  if (originalTotal <= 0) return 0;
+  const made = Math.max(0, currentChapterCount - originalStart + 1);
+  return Math.max(0, originalTotal - made);
+}
+
+/**
+ * 计算"已完成本批的章数（用于进度展示，最多到 total）"。
+ */
+export function computeDoneCount(
+  originalTotal: number,
+  originalStart: number,
+  currentChapterCount: number
+): number {
+  if (originalTotal <= 0) return 0;
+  const made = Math.max(0, currentChapterCount - originalStart + 1);
+  return Math.min(originalTotal, made);
 }

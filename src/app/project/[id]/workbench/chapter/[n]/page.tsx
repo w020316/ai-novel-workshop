@@ -118,7 +118,13 @@ export default function ChapterPage() {
     try {
       const result = await generateChapter(context);
       setConsistencyReport(result.consistencyReport);
-      setStage('completed');
+      // 已被中止时给出具象提示（正文停在生成中的部分，用户可手动保存或重新生成）
+      if (result.interrupted) {
+        setStage('failed');
+        setError('生成已被中止，当前为不完整草稿，可手动保存或重新生成。');
+      } else {
+        setStage('completed');
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '生成失败';
       setError(msg);

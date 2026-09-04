@@ -112,6 +112,28 @@ describe('generateChaptersBatch（依赖注入）', () => {
     // 循环在第 3 章（index2→n4）前检测到 aborted 而停止
     expect(single.mock.calls.length).toBeLessThanOrEqual(3);
   });
+
+  it('被中断的章节不进入 results 且整批标记 aborted（残缺稿不落成 completed）', async () => {
+    const single = vi.fn(async () => {
+      const r: GenerationResult = {
+        content: '残缺稿',
+        sceneDesign: { setting: 's', conflict: '', highlight: '', foreshadowingToPlant: [], foreshadowingToRecover: [], characterAppearances: [] },
+        consistencyReport: { chapterId: 'c', passed: true, issues: [], checkedAt: 0 },
+        wordCount: 3,
+        interrupted: true,
+      };
+      return r;
+    });
+    const res = await generateChaptersBatch({
+      projectId: 'p1',
+      startChapterNo: 1,
+      count: 3,
+      single: single as never,
+    });
+    expect(res.aborted).toBe(true);
+    expect(res.results).toHaveLength(0); // 残缺章不入结果，后续也不再生成
+    expect(single).toHaveBeenCalledTimes(1);
+  });
 });
 describe('computeResumeCount / computeDoneCount（断点续写规划）', () => {
   it('未开始：无需跳过，剩余=总章数', () => {

@@ -81,6 +81,22 @@ export async function generateChapter(
       title
     );
 
+    // ===== 中断保护 =====
+    // 用户生成中被中止：writeChapter 会返回已生成的部分正文（而非抛错），若照常往下跑
+    // 一致性闭环并落库，会把「残缺稿」以 completed 状态入库。这里检测到中止即提早返回，
+    // 跳过 updateMemory 与 saveChapter —— 由调用方决定手动保存或重试。
+    if (context.signal?.aborted) {
+      const partial = result.content ?? '';
+      context.onProgress('failed');
+      return {
+        content: partial,
+        sceneDesign,
+        consistencyReport,
+        wordCount: (partial.match(/[\u4e00-\u9fff]/g) ?? []).length,
+        interrupted: true,
+      };
+    }
+
     // ===== Stage 5: 记忆更新 =====
     context.onProgress('memory_updating');
     const chapter = await buildChapter(context, sceneDesign, result.content, title);

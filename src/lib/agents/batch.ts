@@ -91,6 +91,11 @@ export async function generateChaptersBatch(
     };
 
     const result = await single(context);
+    // 本章生成被中断：残缺稿不进入结果（未落成 completed），stop 并标记 aborted，
+    // 供「断点续写」从该章重新生成。
+    if (result.interrupted) {
+      return { results, chapterPLots, aborted: true };
+    }
     results.push(result);
     chapterPLots.push({ chapterNo, index, plotPoints });
   }

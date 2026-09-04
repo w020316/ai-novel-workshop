@@ -497,4 +497,6 @@ export interface GenerationResult {
   sceneDesign: SceneDesign;
   consistencyReport: ConsistencyReport;
   wordCount: number;
+  /** 生成被用户/信号中断（骨架/不完整稿）：上层不应将其落成 completed */
+  interrupted?: boolean;
 }

@@ -11,6 +11,63 @@
 import { generateChapter } from './orchestrator';
 import type { GenerationContext, GenerationResult, GenerationStage } from '@/types';
 
+/** 批量进度：逐章队列快照的一章状态（供 UI 队列可视化渲染） */
+export interface QueueChapterState {
+  chapterNo: number;
+  status: 'pending' | 'running' | 'done';
+  /** 进行中章当前阶段（仅 status=running 有意义） */
+  stage: GenerationStage | null;
+}
+
+export interface BatchQueueSnapshot {
+  /** 每章状态，长度 = count，序号 0..count-1 对应 startChapterNo.. */
+  chapters: QueueChapterState[];
+  doneCount: number;
+  runningIndex: number | null;
+  /** 是否全部完成 */
+  allDone: boolean;
+}
+
+/**
+ * 由批量进度（当前章序号）推导逐章队列状态。
+ * 纯函数、确定性，便于单测；UI 据此渲染格子网格：
+ *   - runningIndex=null → 全部 pending（未开始）
+ *   - 序号 < runningIndex → done；== runningIndex → running；> → pending
+ * @param startChapterNo 本批次起始章号
+ * @param count 本批章数
+ * @param runningIndex 进行中的章序号（0-based，null=未开始）
+ * @param stage 进行中章当前阶段
+ */
+export function computeBatchQueue(
+  startChapterNo: number,
+  count: number,
+  runningIndex: number | null,
+  stage?: GenerationStage | null
+): BatchQueueSnapshot {
+  const chapters: QueueChapterState[] = [];
+  let doneCount = 0;
+  for (let i = 0; i < count; i++) {
+    let status: QueueChapterState['status'];
+    let s: GenerationStage | null = null;
+    if (runningIndex === null || i > runningIndex) {
+      status = 'pending';
+    } else if (i === runningIndex) {
+      status = 'running';
+      s = stage ?? null;
+    } else {
+      status = 'done';
+      doneCount++;
+    }
+    chapters.push({ chapterNo: startChapterNo + i, status, stage: s });
+  }
+  return {
+    chapters,
+    doneCount,
+    runningIndex,
+    allDone: runningIndex !== null && runningIndex >= count - 1,
+  };
+}
+
 /** 批量续写的分章剧情要点：给第 indexT 章（0 起）提供的要点数组 */
 export interface BatchPlanItem {
   chapterNo: number;

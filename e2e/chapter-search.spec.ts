@@ -28,12 +28,6 @@ test('跨章全文检索：命中章节、片段与跳转', async ({ page }) => 
     });
     const tx = idb.transaction('chapters', 'readwrite');
     const store = tx.objectStore('chapters');
-    const put = (c: Record<string, unknown>) =>
-      new Promise<void>((resolve, reject) => {
-        const r = store.put(c);
-        r.onsuccess = () => resolve();
-        r.onerror = () => reject(r.error);
-      });
     const now = Date.now();
     const chapter = (id: string, chapterNo: number, title: string, content: string) =>
       store.put({ id, projectId, volumeNo: 1, chapterNo, title, plotPoints: [], content, wordCount: 30, status: 'completed', createdAt: now, updatedAt: now });

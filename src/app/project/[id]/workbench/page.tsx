@@ -6,7 +6,7 @@ import { listChapters } from '@/lib/db/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChapterList } from '@/components/workbench/ChapterList';
-import { generateChaptersBatch, computeResumeCount, computeDoneCount } from '@/lib/agents/batch';
+import { generateChaptersBatch, computeResumeCount, computeDoneCount, computeBatchQueue } from '@/lib/agents/batch';
 import { startBatchJob, pauseBatchJob, clearBatchJob, getBatchJob, hasActiveBatchJob, touchBatchJob } from '@/lib/batch/job-store';
 import type { Chapter, GenerationStage, BatchJob, WritingSkill } from '@/types';
 import { getEnabledSkills } from '@/lib/skills/store';
@@ -195,6 +195,16 @@ export default function WorkbenchPage() {
     failed: '失败',
   };
 
+  // 队列可视化快照：由当前进行中章序号推导整批逐章状态
+  const batchRunningIndex = batchProgress ? batchProgress.done : null;
+  const batchStartNo = batchProgress ? Math.max(1, batchProgress.chapterNo - batchProgress.done) : 1;
+  const batchQueue = computeBatchQueue(
+    batchStartNo,
+    batchProgress?.total ?? 0,
+    batchRunningIndex,
+    (batchProgress?.stage as GenerationStage | null) ?? null
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -316,7 +326,7 @@ export default function WorkbenchPage() {
             )}
 
             {batchProgress && (
-              <div className="space-y-1 text-sm">
+              <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between text-xs text-stone-500">
                   <span>
                     第 {batchProgress.done + 1} / {batchProgress.total} 章
@@ -329,6 +339,29 @@ export default function WorkbenchPage() {
                     </button>
                   )}
                 </div>
+
+                {/* 队列可视化：逐章格子（灰=待做 / 蓝=进行中 / 绿=已完成） */}
+                <div className="flex flex-wrap gap-1">
+                  {batchQueue.chapters.map((cq) => (
+                    <span
+                      key={cq.chapterNo}
+                      title={
+                        cq.status === 'running'
+                          ? `第 ${cq.chapterNo} 章 · ${cq.stage ? stageLabel[cq.stage as GenerationStage] ?? cq.stage : '写入中'}`
+                          : `第 ${cq.chapterNo} 章 · ${cq.status === 'done' ? '已完成' : '待生成'}`
+                      }
+                      className={cn(
+                        'flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium',
+                        cq.status === 'done' && 'bg-brand-500 text-white',
+                        cq.status === 'running' && 'bg-amber-400 text-white animate-pulse',
+                        cq.status === 'pending' && 'border border-stone-200 bg-stone-50 text-stone-400'
+                      )}
+                    >
+                      {cq.status === 'done' ? '✓' : cq.chapterNo}
+                    </span>
+                  ))}
+                </div>
+
                 <div className="h-1.5 overflow-hidden rounded-full bg-stone-100">
                   <div
                     className="h-full rounded-full bg-brand-500 transition-all"

@@ -2,7 +2,7 @@
 // 批量续写 单元测试（注入 mock single，不消耗真实 LLM）
 // ============================================================================
 import { describe, it, expect, vi } from 'vitest';
-import { generateChaptersBatch, computeResumeCount, computeDoneCount } from './batch';
+import { generateChaptersBatch, computeResumeCount, computeDoneCount, computeBatchQueue } from './batch';
 import type { GenerationResult } from '@/types';
 
 function mockSingle() {
@@ -164,6 +164,37 @@ describe('generateChaptersBatch（依赖注入）', () => {
     ).rejects.toThrow('上游 LLM 500');
   });
 });
+describe('computeBatchQueue（队列可视化快照）', () => {
+  it('未开始：全部 pending，doneCount=0', () => {
+    const q = computeBatchQueue(3, 4, null);
+    expect(q.chapters.map((c) => c.status)).toEqual(['pending', 'pending', 'pending', 'pending']);
+    expect(q.chapters[0].chapterNo).toBe(3);
+    expect(q.doneCount).toBe(0);
+    expect(q.allDone).toBe(false);
+  });
+
+  it('进行中：<index 已 done、==index running、>index pending，且含阶段', () => {
+    const q = computeBatchQueue(1, 5, 2, 'writing');
+    expect(q.chapters.map((c) => c.status)).toEqual(['done', 'done', 'running', 'pending', 'pending']);
+    expect(q.doneCount).toBe(2);
+    expect(q.chapters[2].chapterNo).toBe(3); // 1+2
+    expect(q.chapters[2].stage).toBe('writing');
+    expect(q.allDone).toBe(false);
+  });
+
+  it('最后一章进行中：allDone 应标记整批临近完成', () => {
+    const q = computeBatchQueue(1, 3, 2, 'completed');
+    expect(q.chapters.map((c) => c.status)).toEqual(['done', 'done', 'running']);
+    expect(q.allDone).toBe(true);
+  });
+
+  it('begin 章号非 1 时章号正确对齐', () => {
+    const q = computeBatchQueue(10, 3, 0, 'writing');
+    expect(q.chapters.map((c) => c.chapterNo)).toEqual([10, 11, 12]);
+    expect(q.chapters[0].status).toBe('running');
+  });
+});
+
 describe('computeResumeCount / computeDoneCount（断点续写规划）', () => {
   it('未开始：无需跳过，剩余=总章数', () => {
     // 原批从第 1 章起、当前 0 章

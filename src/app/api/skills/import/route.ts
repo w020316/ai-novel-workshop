@@ -21,7 +21,7 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
 /** 常见技能文件候选名，用于 GitHub 仓库首页尝试 */
-const CANDIDATE_FILES = ['SKILL.md', 'skill.md', 'README.md', 'readme.md', 'SKILL.md'];
+const CANDIDATE_FILES = ['SKILL.md', 'skill.md', 'README.md', 'readme.md'];
 
 /** 从原始文本掐出 <body> 后的纯文本（供无 frontmatter 的 HTML 场景粗提取） */
 function extractTextFromHtml(html: string): string {
@@ -70,7 +70,7 @@ async function fetchText(url: string): Promise<string> {
   const ct = res.headers.get('content-type') ?? '';
   const buf = await res.arrayBuffer();
   // 按 content-type 或 BOM 判断字符集
-  const dec = new TextDecoder(res.ok && /gbk|gb2312/i.test(ct) ? 'gbk' : 'utf-8');
+  const dec = new TextDecoder(/gbk|gb2312/i.test(ct) ? 'gbk' : 'utf-8');
   return dec.decode(buf);
 }
 

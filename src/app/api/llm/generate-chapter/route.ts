@@ -13,6 +13,7 @@ import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
 import { resolveProvider } from '@/lib/llm/providers';
 import { LLMApiError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
+import { validateMessages } from '@/lib/llm/message-validation';
 import type { ChatMessage, LLMProvider } from '@/types';
 
 export const runtime = 'nodejs';
@@ -63,11 +64,9 @@ export async function POST(request: NextRequest) {
   }
 
   const messages = body.messages;
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return NextResponse.json(
-      { error: 'messages 必填且不能为空' },
-      { status: 400 }
-    );
+  const messageError = validateMessages(messages);
+  if (messageError) {
+    return NextResponse.json({ error: messageError }, { status: 400 });
   }
 
   // 数值消毒（防 NaN/越界值破坏适配器调用）

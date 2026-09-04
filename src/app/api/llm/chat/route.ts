@@ -13,6 +13,7 @@ import { createAdapter, createFirstAvailableAdapter, callWithModelFallback } fro
 import { resolveProvider, geminiModelChain, geminiPrimaryForTask } from '@/lib/llm/providers';
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
+import { validateMessages } from '@/lib/llm/message-validation';
 import type { ChatMessage, LLMProvider } from '@/types';
 
 export const runtime = 'nodejs';
@@ -52,27 +53,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 2. 校验必填字段
+  // 2. 校验必填字段（结构与 role 白名单校验抽离到 message-validation 共享工具）
   const { messages } = body;
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return NextResponse.json(
-      { error: 'messages 必填且不能为空' },
-      { status: 400 }
-    );
-  }
-
-  // 校验每条消息的结构
-  for (const m of messages) {
-    if (
-      !m ||
-      typeof m.content !== 'string' ||
-      !['system', 'user', 'assistant'].includes(m.role)
-    ) {
-      return NextResponse.json(
-        { error: 'messages 中存在非法消息项' },
-        { status: 400 }
-      );
-    }
+  const messageError = validateMessages(messages);
+  if (messageError) {
+    return NextResponse.json({ error: messageError }, { status: 400 });
   }
 
   // 3. 选择 Provider：请求显式指定（已配置才采用）→ 默认 Provider；模型随之回退

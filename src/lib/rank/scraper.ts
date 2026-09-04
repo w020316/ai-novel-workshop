@@ -55,6 +55,14 @@ const ADAPTERS: Record<string, SourceAdapter> = {
     id: 'hongxiu', name: '红袖添香', url: 'https://www.hongxiu.com/rank', kind: 'ssr',
     hint: '女频实时榜单（服务端直出，可解析）',
   },
+  zongheng: {
+    id: 'zongheng', name: '纵横中文网', url: 'https://www.zongheng.com/rank', kind: 'ssr',
+    hint: '男频实时榜单（服务端直出，可解析）',
+  },
+  xiaoxiang: {
+    id: 'xiaoxiang', name: '潇湘书院', url: 'https://www.xxsy.net/rank', kind: 'ssr',
+    hint: '女频实时榜单（服务端直出，可解析）',
+  },
   qidian: {
     id: 'qidian', name: '起点中文网', url: 'https://www.qidian.com/rank/yuepiao/', kind: 'blocked',
     hint: '起点启用 JS-验证/盾，服务端直抓返回 202',
@@ -253,6 +261,37 @@ function sourceName(id: string): string {
   return p?.name ?? a?.name ?? id;
 }
 
+interface CachedEntry {
+  sourceId: string;
+  result: RankFetchResult;
+  fetchedAt: number;
+}
+
+/** 进程内缓存（TTL: 15 分钟 = 900000 ms），避免连续请求打满配额 */
+const MEM_CACHE = new Map<string, CachedEntry>();
+const DEFAULT_TTL_MS = 15 * 60 * 1000;
+
+/** 清空进程缓存（调试/测试用） */
+export function clearRankCache(): void {
+  MEM_CACHE.clear();
+}
+
+/** 获取未过期的缓存结果；过期则回收并返回 null */
+function getCached(sourceId: string): RankFetchResult | null {
+  const entry = MEM_CACHE.get(sourceId);
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > DEFAULT_TTL_MS) {
+    MEM_CACHE.delete(sourceId);
+    return null;
+  }
+  return entry.result;
+}
+
+/** 写入进程缓存 */
+function setCached(sourceId: string, result: RankFetchResult): void {
+  MEM_CACHE.set(sourceId, { sourceId, result, fetchedAt: Date.now() });
+}
+
 /**
  * 抓取单个平台的实时榜单。
  * @param sourceId 平台 id（fanqie / feilu / qidian / qimao / jinjiang 等）
@@ -262,21 +301,35 @@ export async function scrapePlatform(sourceId: string): Promise<RankFetchResult>
   const name = sourceName(sourceId);
   const fetchedAt = Date.now();
 
-  if (!adapter) {
+  // 命中未过期缓存直接返回（省配额，提升体验）
+  const cached = getCached(sourceId);
+  if (cached) {
     return {
+      ...cached,
+      fetchedAt,
+      message: `从缓存读取 ${cached.books.length} 部（TTL 15 分钟）${cached.ok ? '' : '，原抓取失败'}`,
+    };
+  }
+
+  if (!adapter) {
+    const res = {
       ok: false, sourceId, sourceName: name, url: '', fetchedAt,
       message: '暂未支持该平台的自动抓取，请使用「榜单粘贴拆解」。', books: [],
     };
+    setCached(sourceId, res);
+    return res;
   }
 
   // 已知被反爬/JS 渲染阻断：直接返回 blocked，不浪费请求
   if (adapter.kind === 'blocked') {
-    return {
+    const res = {
       ok: false, sourceId, sourceName: name, url: adapter.url, targetUrl: adapter.url,
       blocked: true, fetchedAt,
       message: `${name} 需要浏览器会话才能读取榜单（${adapter.hint}）。请在浏览器打开目标地址，复制后粘贴到下方「榜单粘贴拆解」。`,
       books: [],
     };
+    setCached(sourceId, res);
+    return res;
   }
 
   try {
@@ -294,20 +347,32 @@ export async function scrapePlatform(sourceId: string): Promise<RankFetchResult>
         ? parseXiaoxiangHtml(html)
         : [];
     const ok = books.length > 0;
-    return {
+    const result = {
       ok, sourceId, sourceName: name, url: adapter.url, fetchedAt,
       message: ok
         ? `已抓取 ${books.length} 部实时作品`
         : '已请求榜单页但未能解析出作品（页面结构可能调整），请用「榜单粘贴拆解」。',
       books: ok ? books.slice(0, 50) : [],
     };
+    setCached(sourceId, result);
+    return result;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    return {
-      ok: false, sourceId, sourceName: name, url: adapter.url, targetUrl: adapter.url, fetchedAt,
-      message: `抓取失败（${reason}）——可能被风控拦截，请在浏览器打开目标地址复制后粘贴拆解。`,
-      books: [],
-    };
+    // 失败 fallback：若有 15 分钟内的成功缓存，降级返回上次结果
+    const oldCached = getCached(sourceId);
+    const fallback = !!oldCached && oldCached.ok && oldCached.books.length > 0;
+    const msg = fallback
+      ? `当前抓取失败（${reason}），已降级返回 15 分钟内缓存的 ${oldCached.books.length} 部结果`
+      : `抓取失败（${reason}）——可能被风控拦截，请在浏览器打开目标地址复制后粘贴拆解。`;
+    const res = fallback
+      ? { ...oldCached, fetchedAt, message: msg }
+      : {
+          ok: false, sourceId, sourceName: name, url: adapter.url, targetUrl: adapter.url, fetchedAt,
+          message: msg,
+          books: [],
+        };
+    setCached(sourceId, res);
+    return res;
   }
 }
 

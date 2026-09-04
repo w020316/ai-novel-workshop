@@ -8,10 +8,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ChapterList } from '@/components/workbench/ChapterList';
 import { generateChaptersBatch, computeResumeCount, computeDoneCount } from '@/lib/agents/batch';
 import { startBatchJob, pauseBatchJob, clearBatchJob, getBatchJob } from '@/lib/batch/job-store';
-import type { Chapter, GenerationStage, BatchJob } from '@/types';
+import type { Chapter, GenerationStage, BatchJob, WritingSkill } from '@/types';
+import { getEnabledSkills } from '@/lib/skills/store';
 import { loadLiveRankedTitles } from '@/lib/rank/store';
 import { scanChaptersOriginality, type ChapterScanResult } from '@/lib/originality/scan';
 import { Plus, Loader2, Layers, StopCircle, SearchCheck } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function WorkbenchPage() {
@@ -29,6 +31,17 @@ export default function WorkbenchPage() {
   const [batchProgress, setBatchProgress] = useState<{ chapterNo: number; total: number; stage: string | null; done: number } | null>(null);
   const batchAbortRef = useRef<AbortController | null>(null);
   const [batchJob, setBatchJob] = useState<BatchJob | null>(null);
+  // 批量模式技能选择
+  const [batchSkillIds, setBatchSkillIds] = useState<string[] | null>(null);
+  const [enabledSkills, setEnabledSkills] = useState<WritingSkill[]>([]);
+  const [showBatchSkills, setShowBatchSkills] = useState(false);
+
+  // 加载已启用技能供批量模式选择
+  useEffect(() => {
+    getEnabledSkills()
+      .then(setEnabledSkills)
+      .catch(() => {});
+  }, []);
 
   // 全书避撞体检
   const [scanningBook, setScanningBook] = useState(false);
@@ -113,6 +126,7 @@ export default function WorkbenchPage() {
         projectId,
         startChapterNo,
         count: remaining,
+        skillIds: batchSkillIds && batchSkillIds.length < enabledSkills.length ? batchSkillIds : undefined,
         signal: controller.signal,
         plotPointsPerChapter: !resolvedTemplate ? undefined : () => [resolvedTemplate],
         onProgress: (info) =>
@@ -240,6 +254,55 @@ export default function WorkbenchPage() {
                 className="min-w-0 flex-1 rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none disabled:opacity-50"
               />
             </div>
+
+            {/* 批量模式技能选择 */}
+            {enabledSkills.length > 0 && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowBatchSkills((v) => !v)}
+                  className="text-xs text-stone-500 hover:text-brand-600"
+                >
+                  本轮技能：{batchSkillIds ? `已选 ${batchSkillIds.length}/${enabledSkills.length}` : '全部'}
+                  {showBatchSkills ? ' · 收起' : ' · 选择'}
+                </button>
+                {showBatchSkills && (
+                  <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => setBatchSkillIds(null)}
+                      disabled={batchRunning}
+                      className={cn(
+                        'rounded border px-1.5 py-1 text-left text-[10px]',
+                        batchSkillIds === null ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-stone-200 bg-white text-stone-500 hover:border-brand-300'
+                      )}
+                    >
+                      全部技能
+                    </button>
+                    {enabledSkills.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={batchRunning}
+                        onClick={() => {
+                          setBatchSkillIds((prev) => {
+                            if (prev === null) return enabledSkills.filter((x) => x.id !== s.id).map((x) => x.id);
+                            if (prev.includes(s.id)) {
+                              const next = prev.filter((id) => id !== s.id);
+                              return next.length === enabledSkills.length ? null : next;
+                            }
+                            return [...prev, s.id];
+                          });
+                        }}
+                        className="rounded border border-stone-200 bg-white px-1.5 py-1 text-left text-[10px] text-stone-500 hover:border-brand-300"
+                      >
+                        {batchSkillIds === null || batchSkillIds.includes(s.id) ? '✓ ' : ''}{s.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {batchProgress && (
               <div className="space-y-1 text-sm">

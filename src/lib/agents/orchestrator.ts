@@ -181,6 +181,7 @@ async function consistencyAndRewriteLoop(
             title,
             issues: blockingIssues,
             stylePreset,
+            skillIds: context.skillIds,
           }),
         { maxRetries: 1, baseDelayMs: 1000 }
       );

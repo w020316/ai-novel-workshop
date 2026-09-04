@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea, Label } from '@/components/ui/input';
@@ -19,6 +19,8 @@ import {
   Rocket,
   ExternalLink,
   Search,
+  Upload,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -28,6 +30,8 @@ import {
   toggleSkillEnabled,
   deleteSkill,
   saveSkill,
+  exportSkillsJson,
+  importSkillsJson,
 } from '@/lib/skills/store';
 import type { WritingSkill } from '@/types';
 
@@ -96,6 +100,7 @@ export default function SkillsPage() {
   const [importUrl, setImportUrl] = useState('');
   const [importing, setImporting] = useState(false);
   const [preview, setPreview] = useState<{ name: string; instruction: string; category: WritingSkill['category']; description?: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 剪贴板导入
   const [clipText, setClipText] = useState('');
@@ -193,8 +198,8 @@ export default function SkillsPage() {
     }
   };
 
-  /** 确认导入到技能库 */
-  const confirmImport = async () => {
+  /** 确认导入到技能库，fromLink 表示来源是链接 */
+  const confirmImportInternal = async (enable: boolean) => {
     if (!preview) return;
     try {
       await saveSkill({
@@ -205,9 +210,9 @@ export default function SkillsPage() {
         sourceUrl: importUrl.trim() || undefined,
         description: preview.description ?? '',
         instruction: preview.instruction,
-        enabled: false,
+        enabled: enable,
       });
-      toast.success('已导入技能（可在列表开启）');
+      toast.success(enable ? '已导入并启用技能，后续生成的章节将遵循其指令' : '已导入技能（可在列表开启）');
       setPreview(null);
       setImportUrl('');
       setSkills(await listSkills());
@@ -215,6 +220,9 @@ export default function SkillsPage() {
       toast.error('保存失败');
     }
   };
+
+  const confirmImport = () => void confirmImportInternal(false);
+  const confirmImportEnabled = () => void confirmImportInternal(true);
 
   /** 从剪贴板文本导入 */
   const handleImportClip = async () => {
@@ -243,6 +251,35 @@ export default function SkillsPage() {
     }
   };
 
+  /** 导出全部技能为 JSON 文件 */
+  const handleExportJson = async () => {
+    try {
+      const json = await exportSkillsJson();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `skills-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('已导出技能 JSON（可换设备导入）');
+    } catch {
+      toast.error('导出失败');
+    }
+  };
+
+  /** 从 JSON 文件批量导入 */
+  const handleImportJsonFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const count = await importSkillsJson(text);
+      setSkills(await listSkills());
+      toast.success(`已导入 ${count} 个技能（默认未启用，可在列表开启）`);
+    } catch {
+      toast.error('JSON 导入失败，请检查文件格式');
+    }
+  };
+
   const visible = category === 'all' ? skills : skills.filter((s) => s.category === category);
   const enabledCount = skills.filter((s) => s.enabled).length;
 
@@ -265,10 +302,31 @@ export default function SkillsPage() {
             从 GitHub / HuggingFace / 各类 skill 站点 / 自定义收集写作技能；启用后会自动注入到章节生成，塑造你的文风与叙事
           </p>
         </div>
-        <Button onClick={() => setShowForm((v) => !v)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          添加技能
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void handleImportJsonFile(f);
+              e.target.value = '';
+            }}
+          />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="mr-1.5 h-4 w-4" />
+            导入 JSON
+          </Button>
+          <Button variant="outline" onClick={() => void handleExportJson()}>
+            <Download className="mr-1.5 h-4 w-4" />
+            导出 JSON
+          </Button>
+          <Button onClick={() => setShowForm((v) => !v)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            添加技能
+          </Button>
+        </div>
       </div>
 
       {/* 状态摘要 */}
@@ -316,10 +374,13 @@ export default function SkillsPage() {
                   <p className="text-sm font-medium text-stone-800">解析到技能：{preview.name}</p>
                   <p className="text-xs text-stone-500">{CATEGORY_LABEL[preview.category]}{preview.description ? ` · ${preview.description}` : ''}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="ghost" onClick={() => setPreview(null)}>取消</Button>
-                  <Button size="sm" onClick={() => void confirmImport()}>
-                    <Rocket className="mr-1.5 h-3.5 w-3.5" /> 确认导入
+                  <Button size="sm" variant="outline" onClick={confirmImport}>
+                    <Rocket className="mr-1.5 h-3.5 w-3.5" /> 仅导入
+                  </Button>
+                  <Button size="sm" onClick={confirmImportEnabled}>
+                    <Power className="mr-1.5 h-3.5 w-3.5" /> 导入并启用
                   </Button>
                 </div>
               </div>

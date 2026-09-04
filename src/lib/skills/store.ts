@@ -82,6 +82,58 @@ export async function listSkills(): Promise<WritingSkill[]> {
   return db.skills.orderBy('name').toArray();
 }
 
+/** 导出全部技能为可迁移 JSON 字符串（含信息字段，便于换设备/朋友间共享收藏） */
+export async function exportSkillsJson(): Promise<string> {
+  const all = await db.skills.toArray();
+  const payload = all.map((s) => ({
+    name: s.name,
+    category: s.category,
+    source: s.source,
+    sourceName: s.sourceName,
+    sourceUrl: s.sourceUrl,
+    author: s.author,
+    version: s.version,
+    description: s.description,
+    instruction: s.instruction,
+  }));
+  return JSON.stringify(payload, null, 2);
+}
+
+/** 从 JSON 批量导入技能（兼容导出格式；跳过内置同名技能避免覆盖种子）。
+ *  @returns 实际导入条数 */
+export async function importSkillsJson(text: string): Promise<number> {
+  const payload = JSON.parse(text.trim()) as Array<Partial<WritingSkill> & { name?: string; instruction?: string }>;
+  if (!Array.isArray(payload)) throw new Error('JSON 需为技能数组');
+  const existing = await db.skills.toArray();
+  const existingNames = new Set(existing.map((s) => s.name));
+  let imported = 0;
+  const t = Date.now();
+  for (const item of payload) {
+    if (!item.name || !item.instruction) continue;
+    if (existingNames.has(item.name) && item.builtin) continue; // 跳过种子
+    if (existingNames.has(item.name)) continue; // 跳过同名（防重复堆积）
+    await db.skills.put({
+      id: `skill-${t}-${Math.floor(Math.random() * 1e6)}`,
+      name: item.name,
+      category: item.category ?? 'other',
+      source: item.source ?? 'custom',
+      sourceName: item.sourceName,
+      sourceUrl: item.sourceUrl,
+      author: item.author,
+      version: item.version,
+      description: item.description ?? '',
+      instruction: item.instruction,
+      builtin: false,
+      enabled: false,
+      createdAt: t,
+      updatedAt: t,
+    } as WritingSkill);
+    existingNames.add(item.name);
+    imported++;
+  }
+  return imported;
+}
+
 /** 读取单个技能 */
 export async function getSkill(id: string): Promise<WritingSkill | undefined> {
   return db.skills.get(id);
@@ -146,12 +198,25 @@ export async function getEnabledSkills(): Promise<WritingSkill[]> {
   return all.filter((s) => s.enabled);
 }
 
-/** 按应用环节筛选已启用技能并拼成注入块 */
-export async function buildSkillsPromptForStage(stage: SkillStage): Promise<string> {
+/** 按应用环节筛选已启用技能并拼成注入块。
+ *  @param skillIds 可选：仅取指定 ID（用于"本轮生成自由选择技能"）；为空则用全部启用技能 */
+export async function buildSkillsPromptForStage(
+  stage: SkillStage,
+  skillIds?: string[]
+): Promise<string> {
   const enabled = await getEnabledSkills();
   const cats = STAGE_CATEGORIES[stage];
-  const filtered = enabled.filter((s) => cats.includes(s.category));
+  const filtered = enabled.filter(
+    (s) => cats.includes(s.category) && (!skillIds || skillIds.includes(s.id))
+  );
   return buildSkillsPromptBlock(filtered);
+}
+
+/** 列出可被某环节注入的技能（已启用 + 分类匹配），供「本轮选择」UI 使用 */
+export async function listStageSkills(stage: SkillStage): Promise<WritingSkill[]> {
+  const enabled = await getEnabledSkills();
+  const cats = STAGE_CATEGORIES[stage];
+  return enabled.filter((s) => cats.includes(s.category));
 }
 
 /** 把已启用技能拼成注入 prompt 的块；无启用返回空串（不影响既有行为） */

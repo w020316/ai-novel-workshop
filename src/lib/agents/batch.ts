@@ -25,6 +25,8 @@ export interface GenerateBatchOptions {
   count: number;
   /** 每章的剧情要点模板；缺省则各章给空（由剧情设计自动拟定） */
   plotPointsPerChapter?: (chapterNo: number) => string[] | Promise<string[]>;
+  /** 本轮批量续写选用的技能 ID（贯通到各章；为空沿用全部启用技能） */
+  skillIds?: string[];
   /** 中止信号（贯通到各章上游请求） */
   signal?: AbortSignal;
   /** 进度上报：章节号 / 总章 / 阶段 */
@@ -60,6 +62,7 @@ export async function generateChaptersBatch(
     startChapterNo,
     count,
     plotPointsPerChapter,
+    skillIds,
     signal,
     onProgress,
     single = generateChapter,
@@ -83,6 +86,7 @@ export async function generateChaptersBatch(
       onStream: () => {},
       onProgress: (stage) => onProgress?.({ chapterNo, total: count, stage, index }),
       candidateCount: 1,
+      skillIds,
       signal,
     };
 

@@ -57,7 +57,7 @@ export async function designPlot(
   const userPrompt = buildPlotDesignPrompt(context, memory);
 
   // 1.5 注入已启用的剧情类写作技能（无启用则不侵入原有 prompt）
-  const skillsBlock = await buildSkillsPromptForStage('plot');
+  const skillsBlock = await buildSkillsPromptForStage('plot', context.skillIds);
   let systemPrompt = SYSTEM_PROMPT;
   if (skillsBlock) systemPrompt = `${SYSTEM_PROMPT}\n\n${skillsBlock}`;
 

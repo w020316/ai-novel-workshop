@@ -19,6 +19,8 @@ export interface RewriteForConsistencyInput {
   /** 一致性校验暴露的问题（决定修正方向） */
   issues: Array<{ type?: string; severity?: string; description: string; suggestion?: string }>;
   stylePreset?: StylePreset | null;
+  /** 本轮生成选择的技能 ID（沿用章节生成的技能选择） */
+  skillIds?: string[];
 }
 
 const SYSTEM_PROMPT = `你是一位网络小说精修编辑。你的任务是在不改变本章剧情推进的前提下，修正正文中与设定/主线不一致的问题。
@@ -36,7 +38,7 @@ const SYSTEM_PROMPT = `你是一位网络小说精修编辑。你的任务是在
 export async function rewriteForConsistency(
   input: RewriteForConsistencyInput
 ): Promise<string> {
-  const { content, memory, sceneDesign, chapterNo, title, issues, stylePreset } = input;
+  const { content, memory, sceneDesign, chapterNo, title, issues, stylePreset, skillIds } = input;
 
   const issueText = issues
     .map(
@@ -67,7 +69,7 @@ export async function rewriteForConsistency(
   ].join('\n');
 
   // 注入已启用的修改/文风类写作技能（无启用不侵入既有 prompt）
-  const skillsBlock = await buildSkillsPromptForStage('rewrite');
+  const skillsBlock = await buildSkillsPromptForStage('rewrite', skillIds);
   const systemPrompt = skillsBlock ? `${SYSTEM_PROMPT}\n\n${skillsBlock}` : SYSTEM_PROMPT;
 
   const result = await chat(

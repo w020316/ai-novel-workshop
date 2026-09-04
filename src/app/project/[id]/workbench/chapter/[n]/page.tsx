@@ -28,7 +28,8 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Chapter, ChapterVersion, GenerationStage, ConsistencyReport, GenerationContext } from '@/types';
+import type { Chapter, ChapterVersion, GenerationStage, ConsistencyReport, GenerationContext, WritingSkill } from '@/types';
+import { getEnabledSkills } from '@/lib/skills/store';
 
 export default function ChapterPage() {
   const params = useParams<{ id: string; n: string }>();
@@ -53,6 +54,10 @@ export default function ChapterPage() {
   const [readerReview, setReaderReview] = useState<ReaderReview | null>(null);
   const [candidateCount, setCandidateCount] = useState(1);
   const [compliance, setCompliance] = useState<ComplianceReport | null>(null);
+  // 已启用的技能 + 本轮选择（空数组 = 沿用全部）
+  const [enabledSkills, setEnabledSkills] = useState<WritingSkill[]>([]);
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[] | null>(null);
+  const [showSkillPicker, setShowSkillPicker] = useState(false);
   const [versions, setVersions] = useState<ChapterVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [previewVersion, setPreviewVersion] = useState<ChapterVersion | null>(null);
@@ -73,6 +78,13 @@ export default function ChapterPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [projectId, chapterNo]);
+
+  // 加载已启用的技能供本轮选择
+  useEffect(() => {
+    getEnabledSkills()
+      .then(setEnabledSkills)
+      .catch(() => {});
+  }, []);
 
   const handleStream = useCallback((token: string) => {
     setStreamingContent((prev) => prev + token);
@@ -96,6 +108,8 @@ export default function ChapterPage() {
       chapterNo,
       plotPoints: validPlotPoints,
       candidateCount,
+      // 用户勾选的技能；全部勾选时沿用全部（undefined）
+      skillIds: selectedSkillIds && selectedSkillIds.length < enabledSkills.length ? selectedSkillIds : undefined,
       onStream: handleStream,
       onProgress: handleProgress,
     };
@@ -111,7 +125,7 @@ export default function ChapterPage() {
     } finally {
       setGenerating(false);
     }
-  }, [projectId, chapterNo, plotPoints, candidateCount, handleStream, handleProgress]);
+  }, [projectId, chapterNo, plotPoints, candidateCount, handleStream, handleProgress, selectedSkillIds, enabledSkills]);
 
   const handleAbort = useCallback(() => {
     abortRef.current?.abort();
@@ -377,6 +391,70 @@ export default function ChapterPage() {
             </select>
           </label>
         </div>
+        {/* 本轮技能选择 */}
+        {enabledSkills.length > 0 && (
+          <div className="flex items-center gap-1.5 text-xs text-stone-500">
+            <button
+              type="button"
+              onClick={() => setShowSkillPicker((v) => !v)}
+              className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-xs text-stone-600 hover:border-brand-300"
+            >
+              <Wand2 className="h-3.5 w-3.5 text-brand-500" />
+              本轮技能
+              {showSkillPicker && ' · 关闭'}
+              {!showSkillPicker && (selectedSkillIds ? `（已选 ${selectedSkillIds.length}/${enabledSkills.length}）` : '（全部）')}
+            </button>
+          </div>
+        )}
+        {showSkillPicker && enabledSkills.length > 0 && (
+          <div className="w-full rounded-md border border-stone-100 bg-white p-2.5">
+            <div className="mb-1.5 flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-stone-600">
+                <Wand2 className="h-3.5 w-3.5 text-brand-500" />
+                本轮应用技能（不勾选即全量生效）
+              </p>
+              <button
+                type="button"
+                className="text-xs text-brand-600 hover:text-brand-700"
+                onClick={() => setSelectedSkillIds(null)}
+              >
+                复位全部
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {enabledSkills.map((s) => (
+                <label
+                  key={s.id}
+                  className="flex cursor-pointer items-start gap-2 rounded-md border border-stone-100 px-2 py-1.5 hover:border-brand-200"
+                >
+                  <input
+                    type="checkbox"
+                    disabled={generating}
+                    className="mt-0.5"
+                    checked={selectedSkillIds === null || selectedSkillIds.includes(s.id)}
+                    onChange={() => {
+                      setSelectedSkillIds((prev) => {
+                        if (prev === null) {
+                          // 首次取消 → 全选再取消当前项
+                          return enabledSkills.filter((x) => x.id !== s.id).map((x) => x.id);
+                        }
+                        if (prev.includes(s.id)) {
+                          const next = prev.filter((id) => id !== s.id);
+                          return next.length === enabledSkills.length ? null : next;
+                        }
+                        return [...prev, s.id];
+                      });
+                    }}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-xs text-stone-700">{s.name}</span>
+                    <span className="block truncate text-[10px] text-stone-400">{s.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         {generating && (
           <Button variant="outline" onClick={handleAbort}>
             停止生成

@@ -131,7 +131,7 @@ export async function writeChapter(
     { role: 'user' as const, content: userPrompt },
   ];
   // 注入已启用的写作技能指令（无启用时为空，不影响既有行为）
-  const skillsBlock = await buildSkillsPromptForStage('write');
+  const skillsBlock = await buildSkillsPromptForStage('write', context.skillIds);
   if (skillsBlock) {
     messages[0] = { role: 'system' as const, content: `${SYSTEM_PROMPT}\n\n${skillsBlock}` };
   }

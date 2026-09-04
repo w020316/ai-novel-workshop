@@ -123,10 +123,35 @@ export async function deleteSkill(id: string): Promise<void> {
   await db.skills.delete(id);
 }
 
+/** 写作技能应用环节 */
+export type SkillStage = 'write' | 'plot' | 'rewrite' | 'review' | 'outline';
+
+/** 各环节默认生效的技能分类：
+ *  - write   章节生成：风格/情节/钩子等写作指令全量生效（保留既有行为）
+ *  - plot    剧情设计：情节与钩子类生效
+ *  - rewrite 一致性修正重写：修改类 + 文风类生效
+ *  - review  多平台审稿：审稿类生效
+ *  - outline 大纲/分卷规划：大纲类生效 */
+const STAGE_CATEGORIES: Record<SkillStage, WritingSkill['category'][]> = {
+  write: ['style', 'plot', 'hook', 'outline', 'rewrite', 'review', 'other'],
+  plot: ['plot', 'hook', 'other'],
+  rewrite: ['rewrite', 'style', 'other'],
+  review: ['review', 'other'],
+  outline: ['outline', 'other'],
+};
+
 /** 当前已启用的技能 */
 export async function getEnabledSkills(): Promise<WritingSkill[]> {
   const all = await db.skills.toArray();
   return all.filter((s) => s.enabled);
+}
+
+/** 按应用环节筛选已启用技能并拼成注入块 */
+export async function buildSkillsPromptForStage(stage: SkillStage): Promise<string> {
+  const enabled = await getEnabledSkills();
+  const cats = STAGE_CATEGORIES[stage];
+  const filtered = enabled.filter((s) => cats.includes(s.category));
+  return buildSkillsPromptBlock(filtered);
 }
 
 /** 把已启用技能拼成注入 prompt 的块；无启用返回空串（不影响既有行为） */

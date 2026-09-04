@@ -8,6 +8,7 @@
 import type { AssembledMemory, SceneDesign, StylePreset } from '@/types';
 import { chat, LLMClientError } from '@/lib/llm/client';
 import { memoryToPrompt } from '@/lib/memory/assembler';
+import { buildSkillsPromptForStage } from '@/lib/skills/store';
 
 export interface RewriteForConsistencyInput {
   content: string;
@@ -65,9 +66,13 @@ export async function rewriteForConsistency(
     content,
   ].join('\n');
 
+  // 注入已启用的修改/文风类写作技能（无启用不侵入既有 prompt）
+  const skillsBlock = await buildSkillsPromptForStage('rewrite');
+  const systemPrompt = skillsBlock ? `${SYSTEM_PROMPT}\n\n${skillsBlock}` : SYSTEM_PROMPT;
+
   const result = await chat(
     [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
     { responseFormat: 'text', temperature: 0.4, maxTokens: 4096, task: 'rewrite' }

@@ -9,6 +9,7 @@ import type { SceneDesign, AssembledMemory, GenerationContext } from '@/types';
 import { chat } from '@/lib/llm/client';
 import { memoryToPrompt } from '@/lib/memory/assembler';
 import { safeParseJSON } from '@/lib/utils';
+import { buildSkillsPromptForStage } from '@/lib/skills/store';
 
 /**
  * 剧情设计 Agent 的默认 Prompt 模板
@@ -55,10 +56,15 @@ export async function designPlot(
   // 1. 构建用户 Prompt
   const userPrompt = buildPlotDesignPrompt(context, memory);
 
+  // 1.5 注入已启用的剧情类写作技能（无启用则不侵入原有 prompt）
+  const skillsBlock = await buildSkillsPromptForStage('plot');
+  let systemPrompt = SYSTEM_PROMPT;
+  if (skillsBlock) systemPrompt = `${SYSTEM_PROMPT}\n\n${skillsBlock}`;
+
   // 2. 调用 LLM
   const response = await chat(
     [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
     {

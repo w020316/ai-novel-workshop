@@ -9,6 +9,7 @@
 // ============================================================================
 import { chat } from '@/lib/llm/client';
 import { localReaderReview } from './reader-review';
+import { buildSkillsPromptForStage } from '@/lib/skills/store';
 import type { ReviewInput } from './reader-review';
 
 // ============ 平台定义 ============
@@ -442,9 +443,13 @@ async function reviewPlatform(
       .filter(Boolean)
       .join('\n');
 
+    // 注入已启用的审稿类写作技能（无启用不侵入既有 prompt）
+    const skillsBlock = await buildSkillsPromptForStage('review').catch(() => '');
+    const systemPrompt = skillsBlock ? `${PROMPT_MAP[platform]}\n\n${skillsBlock}` : PROMPT_MAP[platform];
+
     const result = await chat(
       [
-        { role: 'system', content: PROMPT_MAP[platform] },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       { responseFormat: 'text', temperature: 0.4, maxTokens: 500 }

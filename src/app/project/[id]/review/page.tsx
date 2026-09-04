@@ -237,6 +237,11 @@ export default function ReviewPage() {
             </div>
           )}
 
+          {!bookReview && chapters.length === 0 && (
+            <p className="mt-3 text-xs text-stone-400">
+              暂无已完成章节。创建并完成至少 1 章后，扫描全书即可生成红 / 黄 / 绿质量榜单，快速定位先改哪几章。
+            </p>
+          )}
           {bookReview && bookReview.scanned === 0 && (
             <p className="mt-3 text-xs text-amber-600">
               未能找到正文达到 100 字下限的已完成章节，未执行全书体检。

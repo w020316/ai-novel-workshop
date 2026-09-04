@@ -275,7 +275,7 @@ export default function WorkbenchPage() {
               </Button>
               {batchRunning && (
                 <span className="text-xs text-stone-400">
-                  每章约需 1-2 分钟，可在后台进行其他工作
+                  每章约需 1-2 分钟，请保持本页打开；若中途离开，可稍后「继续批量续写」自动跳过已完成章节
                 </span>
               )}
             </div>

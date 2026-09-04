@@ -15,6 +15,7 @@
 //                             各维度结果与处理建议。
 // ============================================================================
 import { detectAITraces } from '@/lib/humanize/detect';
+import { checkOriginality } from '@/lib/originality/check';
 
 export type ComplianceSeverity = 'danger' | 'warn';
 
@@ -230,6 +231,21 @@ export function checkContentCompliance(content: string): ComplianceReport {
         : scaleIssues.join('；') + '。',
   });
   if (scaleIssues.length > 0) priorities.push(`建议优化：${scaleIssues.join('；')}`);
+
+
+  // ---- 4) 原创性查重（复用作品库，命中即提示避免复刻平台代表作）----
+  const orig = checkOriginality(text);
+  if (orig.hits.length > 0) {
+    categories.push({
+      id: 'originality',
+      label: '原创性 / 平台代表作撞梗',
+      status: 'warn',
+      count: orig.hits.length,
+      examples: orig.hits.slice(0, MAX_EXAMPLES).map((h) => '《' + h.workTitle + '》·' + h.matched),
+      hint: orig.hints.join('；'),
+    });
+    priorities.push('需处理：可能与平台代表作撞梗 ' + orig.hits.length + ' 处（' + orig.hits.map((h) => h.workTitle).join('、') + '）');
+  }
 
   // ---- 汇总评分（100 起扣，严重度加权）----
   let score = 100;

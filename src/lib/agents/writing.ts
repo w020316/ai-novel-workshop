@@ -10,6 +10,7 @@ import type { SceneDesign, AssembledMemory, GenerationContext, StylePreset } fro
 import { memoryToPrompt } from '@/lib/memory/assembler';
 import { streamChapter } from '@/lib/llm/client-stream';
 import { styleGuideToPrompt } from '@/lib/style/clone';
+import { buildAvoidance } from '@/lib/originality/check';
 
 /**
  * 文笔创作 Agent 的默认 System Prompt
@@ -39,7 +40,8 @@ function buildWritingPrompt(
   memory: AssembledMemory,
   chapterNo: number,
   title: string,
-  stylePreset?: StylePreset | null
+  stylePreset?: StylePreset | null,
+  genre?: string
 ): string {
   const parts: string[] = [];
 
@@ -84,6 +86,13 @@ function buildWritingPrompt(
     parts.push('');
   }
 
+  // 原创性规避负例：引导在同题材热梗方向下差异化，避免整体复刻平台代表作
+  if (genre) {
+    parts.push('【原创性要求·请务必遵守】');
+    parts.push(buildAvoidance({ genre }).prompt);
+    parts.push('');
+  }
+
   parts.push('请根据以上方案，创作第 ' + chapterNo + ' 章的正文。');
 
   return parts.join('\n');
@@ -104,14 +113,16 @@ export async function writeChapter(
   memory: AssembledMemory,
   context: GenerationContext,
   stylePreset?: StylePreset | null,
-  title?: string
+  title?: string,
+  genre?: string
 ): Promise<string> {
   const userPrompt = buildWritingPrompt(
     sceneDesign,
     memory,
     context.chapterNo,
     title ?? `第${context.chapterNo}章`,
-    stylePreset
+    stylePreset,
+    genre
   );
 
   const messages = [

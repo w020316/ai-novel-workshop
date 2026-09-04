@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { getProject, listInspirationCards, saveInspirationCards } from '@/lib/db/queries';
 import { RANK_SOURCES, getTrend, generateTrendInspiration } from '@/lib/trend/trends';
+import { PLATFORMS, worksByPlatform, platformOf } from '@/lib/originality/works-db';
 import { generateDeconstruction } from '@/lib/deconstruct/analyzer';
 import { mergeCardIntoOutline } from '@/lib/inspiration/merge';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,8 @@ export default function TrendPage() {
   }, [projectId]);
 
   const trend = getTrend(sourceId, genre);
+  const platform = platformOf(sourceId);
+  const platformWorks = worksByPlatform(sourceId);
 
   const handleGenerate = async () => {
     if (!trend) return;
@@ -164,6 +167,47 @@ export default function TrendPage() {
               ))}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 平台榜单参考（查重黑名单） */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TrendingUp className="h-4 w-4 text-brand-600" />
+            平台小说榜单参考
+          </CardTitle>
+          <CardDescription className="text-xs">
+            内置各大小说平台 / 写作软件的代表作品与高热题材，作为选题方向参考。下列作品同时接入查重黑名单，生成正文与投稿体检测出撞梗时会自动提示，帮您避免与平台作品重复
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-xs text-stone-600">
+          <p>
+            当前平台高热题材：{platform?.tags.slice(0, 8).join('、') || '—'}
+          </p>
+          <div>
+            <p className="mb-1 text-stone-500">各平台代表作品（榜单参考 · 查重黑名单）：</p>
+            <div className="grid gap-1.5 md:grid-cols-2">
+              {PLATFORMS.map((pl) => (
+                <div key={pl.id} className="rounded-md border border-stone-200 bg-stone-50/60 p-2">
+                  <p className="font-medium text-stone-700">
+                    {pl.name}
+                    {pl.id === sourceId && (
+                      <span className="ml-1 rounded bg-brand-100 px-1 text-[10px] text-brand-700">当前</span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-stone-500">
+                    {pl.representative.join('、')}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          {platformWorks.length > 0 && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-700">
+              当前平台 {platform?.name} 已有 {platformWorks.length} 部代表作纳入查重：请在同题材下做差异化设定与人设，避免整体复刻。
+            </p>
+          )}
         </CardContent>
       </Card>
 

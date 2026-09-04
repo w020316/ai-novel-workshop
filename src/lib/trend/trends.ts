@@ -12,6 +12,7 @@
 // ============================================================================
 import { chat } from '@/lib/llm/client';
 import { safeParseJSON } from '@/lib/utils';
+import { buildAvoidance } from '@/lib/originality/check';
 import type { InspirationCard } from '@/types';
 
 /** 小说平台渠道（各榜口径来源，仅作选题参考） */
@@ -113,6 +114,8 @@ export async function generateTrendInspiration(
 ): Promise<{ cards: InspirationCard[]; trend: TrendAnalysis; fromLLM: boolean }> {
   const trend = getTrend(sourceId, genre) ?? getTrend('fanqie', '都市')!;
   const base = deriveTrendHints(trend);
+  // 平台榜单参考 + 原创性规避负例（同题材代表作黑名单）
+  const avoidance = buildAvoidance({ genre: trend.genre, platformId: sourceId });
   let fromLLM = false;
   let cards: InspirationCard[] = [];
 
@@ -123,6 +126,14 @@ export async function generateTrendInspiration(
     `【高频桥段】${trend.tropes.join('、')}`,
     `【人设反差】${trend.contrast.join('；')}`,
     `【节奏】${trend.rhythm}｜【开篇/断章】${trend.hookPattern}`,
+    '',
+    `【目标平台榜单参考】`,
+    avoidance.rankingHint || '（暂无内置榜单参考，请自行把握热度方向）',
+    '',
+    `【原创性/规避要求】`,
+    avoidance.prompt,
+    '',
+    '注意：以上榜单与热梗仅作选题方向参考。请在同题材下做差异化创新，灵感卡必须给出差异化设定与差异化人设，不要整体复刻下方列入规避名单的代表作。',
     '',
     '请给出 3-5 张可收藏的选题灵感卡（严格 JSON）。',
   ].join('\n');
@@ -167,7 +178,7 @@ export async function generateTrendInspiration(
         projectId,
         kind: 'structure',
         title: `${trend.genre} · ${trend.sourceName} 选题方向`,
-        content: [trend.hotspot, ...base].join('\n'),
+        content: ['[悬避撞提示] 请差异化创新，不要整体复刻：' + (avoidance.avoid.join('、') || '暂无内置代表作，请保持原创'), trend.hotspot, ...base].join('\n'),
         sourceDeconstructionId: `trend_${sourceId}`,
         createdAt: Date.now(),
       },

@@ -121,4 +121,21 @@ describe('ProjectForm', () => {
     fireEvent.click(screen.getByRole('button', { name: '创建项目' }));
     await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
   });
+
+  it('点击百万长篇快选 → 预估更新为 7 卷 / 400 章，提交带入 100 万', async () => {
+    render(<ProjectForm />);
+    await screen.findByRole('option', { name: '硬核爽文' });
+    expect(screen.getByText(/预估：4 卷 \/ 120 章/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '100 万（百万长篇）' }));
+    expect(screen.getByText(/预估：7 卷 \/ 400 章/)).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('如：星河黎明'), {
+      target: { value: '百万纪元' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '创建项目' }));
+    await waitFor(() =>
+      expect(createProjectMock).toHaveBeenCalledWith(
+        expect.objectContaining({ targetWords: 1_000_000 })
+      )
+    );
+  });
 });

@@ -2,9 +2,10 @@
 // 大纲「题材模板」起底
 // 依据：UX 评估 N2 —— 用内置流派模板一键填充，降低冷启动门槛（无需 LLM、结果确定）。
 // 说明：为常见题材提供主线骨架/分卷/结局，供「从题材模板起底」按钮一键套用；
-//       未收录题材回退到通用四卷结构。
+//       未收录题材回退到通用四卷结构；分卷按 targetWords 自适应（百万字支持）。
 // ============================================================================
 import type { Volume } from '@/types';
+import { planVolumes } from './volume-plan';
 
 export interface OutlineTemplate {
   mainPlotline: string;
@@ -38,26 +39,18 @@ const ENDING: Record<string, string> = {
   宫斗: '清算旧账后归隐或上位，恩怨有了结局。',
 };
 
-/** 分卷四段骨架（各题材通用，标题按题材风味微调） */
-function buildVolumes(genre: string): Volume[] {
-  const hookTitle = `${genre}开局 · 身份与危机的引入`;
-  const middleTitle = `中期推进 · 升级与四方角力`;
-  const turningTitle = `转折爆发 · 真相 / 巨大危机`;
-  const climaxTitle = `终局清算 · 走向结局`;
-  return [
-    { volumeNo: 1, title: hookTitle, summary: '交代背景与主角处境，抛出核心冲突与第一重悬念。', chapterRange: [1, 30], coreConflict: '生存/身份危机浮现' },
-    { volumeNo: 2, title: middleTitle, summary: '主角获得成长（修行/事业/实力），与各方势力建立或激化关系。', chapterRange: [31, 80], coreConflict: '阵营冲突与实力升级' },
-    { volumeNo: 3, title: turningTitle, summary: '爆发巨大转折：真相揭露或强敌逼近，主角面临抉择。', chapterRange: [81, 120], coreConflict: '真相/背水一战' },
-    { volumeNo: 4, title: climaxTitle, summary: '最终对峙与清算，主线落定，呼应开头伏笔。', chapterRange: [121, 150], coreConflict: '终局对决与收束' },
-  ];
-}
-
 /**
  * 生成某个题材的大纲「起底模板」。
+ * @param genre - 题材（决定主线/结局/卷标题风味）
+ * @param targetWords - 目标字数（>0 时按自适应分卷；0/缺省按 30 万，塌到 4 卷骨架）
  * 字段内容可作为起点，用户可继续编辑；不覆盖已有人工内容（由调用方决定如何合并）。
  */
-export function generateOutlineTemplate(genre: string): OutlineTemplate {
+export function generateOutlineTemplate(
+  genre: string,
+  targetWords?: number
+): OutlineTemplate {
   const mainPlotline = MAIN_PLOT[genre] ?? MAIN_PLOT['玄幻'];
   const ending = ENDING[genre] ?? ENDING['玄幻'];
-  return { mainPlotline, ending, volumes: buildVolumes(genre) };
+  const volumes = planVolumes(targetWords ?? 300000, genre);
+  return { mainPlotline, ending, volumes };
 }

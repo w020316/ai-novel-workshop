@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { useProjectStore, DEFAULT_LLM_CONFIG } from '@/lib/store/project-store';
 import { db } from '@/lib/db/schema';
+import { summarizePlan } from '@/lib/outline/volume-plan';
 import {
   projectFormSchema,
   type ProjectFormValues,
@@ -35,6 +36,14 @@ const INSPIRATION_STARTS: { title: string; genre: string }[] = [
   { title: '废柴逆袭', genre: '玄幻' },
   { title: '幕后黑手', genre: '悬疑' },
   { title: '宫廷嫡女', genre: '宫斗' },
+];
+
+/** 目标字数快捷档（覆盖标准长篇与百万字超长篇） */
+const TARGET_WORD_PRESETS: { value: number; label: string }[] = [
+  { value: 300000, label: '30 万（标准）' },
+  { value: 1_000_000, label: '100 万（百万长篇）' },
+  { value: 2_000_000, label: '200 万（超长篇）' },
+  { value: 5_000_000, label: '500 万（巨著）' },
 ];
 
 const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
@@ -90,6 +99,13 @@ export function ProjectForm() {
   const selectedProvider = watch('llmProvider');
   const selectedPresetId = watch('stylePresetId');
   const selectedPreset = stylePresets.find((p) => p.id === selectedPresetId);
+  const targetWords = Number(watch('targetWords'));
+  const selectedGenre = watch('genre');
+  // 动态预估：按目标字数实时展示预计卷数与章节数（百万字也能看到规划）
+  const plan =
+    Number.isFinite(targetWords) && targetWords > 0
+      ? summarizePlan(targetWords, selectedGenre)
+      : summarizePlan(300000, selectedGenre);
 
   // 从「趋势灵感」带入：读 URL query 预填标题/题材/简介
   useEffect(() => {
@@ -230,15 +246,36 @@ export function ProjectForm() {
       {/* 目标字数 */}
       <div className="space-y-1.5">
         <Label htmlFor="targetWords">目标字数 *</Label>
-        <Input
-          id="targetWords"
-          type="number"
-          step={10000}
-          min={10000}
-          {...register('targetWords', { valueAsNumber: true })}
-        />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Input
+            id="targetWords"
+            type="number"
+            step={10000}
+            min={10000}
+            max={5000000}
+            className="max-w-48"
+            {...register('targetWords', { valueAsNumber: true })}
+          />
+          {TARGET_WORD_PRESETS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              onClick={() => setValue('targetWords', p.value)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                targetWords === p.value
+                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                  : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
         <p className="text-xs text-stone-400">
-          建议 20 万-100 万字 · 约每 2000-3000 字一章（影响分卷与章节规划）
+          支持 1 万-500 万字（百万字长篇友好）· 约每 2000-3000 字一章，将自动规划分卷与章节
+        </p>
+        <p className="text-xs text-stone-500">
+          预估：{plan.volumeCount} 卷 / {plan.totalChapters.toLocaleString()} 章（按每章约 2500 字估算）
         </p>
         {errors.targetWords && (
           <p className="text-xs text-accent-600">{errors.targetWords.message}</p>

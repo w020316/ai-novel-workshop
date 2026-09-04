@@ -1,0 +1,107 @@
+// ============================================================================
+// 自适应分卷规划（百万字长篇支持）
+// 依据：产品决策「按目标字数自适应分卷」——新建/起底大纲时按字数推导卷数与
+//       每卷章节区间，100 万字自动约 7 卷、50 万字约 4 卷，低字数保持 4 卷下限。
+// 规则：
+//   - 每章按 2500 字估算（20 万-500 万字区间的常见档位）
+//   - 目标卷数 = clamp(ceil(总章数 / 60), 4, 12)，即每卷约 60 章（15-20 万字）
+//   - 各卷均分章节区间，末卷承接收尾
+//   - 零依赖、纯函数，便于单测与页面/表单即时预览
+// ============================================================================
+import type { Volume } from '@/types';
+
+/** 每章估算字数（影响总章数与分卷均分） */
+export const WORDS_PER_CHAPTER = 2500;
+/** 每卷目标章数 */
+export const CHAPTERS_PER_VOLUME = 60;
+/** 卷数下限（保证大纲有起承转合的深度） */
+export const MIN_VOLUMES = 4;
+/** 卷数上限（避免卷太多管理成本过高） */
+export const MAX_VOLUMES = 12;
+
+/** 估算总章数：向上取整并钳制到 [12, 999] */
+export function estimateTotalChapters(targetWords: number): number {
+  const n = Math.ceil(targetWords / WORDS_PER_CHAPTER);
+  return Math.min(999, Math.max(12, n));
+}
+
+/** 计算目标卷数：clamp(ceil(总章数 / 每卷章数), 4, 12) */
+export function estimateVolumeCount(targetWords: number): number {
+  const total = estimateTotalChapters(targetWords);
+  const vol = Math.ceil(total / CHAPTERS_PER_VOLUME);
+  return Math.min(MAX_VOLUMES, Math.max(MIN_VOLUMES, vol));
+}
+
+/** 阶段卷标题（前 3 卷与末卷固定命名，中间卷按长线推进编号） */
+const STAGE_TITLES = ['开局', '推进', '角力', '转折', '高潮', '变局', '深化'];
+
+function volumeTitle(genre: string, index: number, count: number): string {
+  if (index === 0) return `${genre}开局 · 身份与危机的引入`;
+  if (index === 1) return '中期推进 · 升级与四方角力';
+  if (count >= 5 && index === 2) return '转折爆发 · 真相 / 巨大危机';
+  if (index === count - 1) return '终局清算 · 走向结局';
+  if (index < STAGE_TITLES.length) return `第${index + 1}卷 · ${STAGE_TITLES[index]}期局势`;
+  return `第${index + 1}卷 · 长线推进（新势力 / 新冲突）`;
+}
+
+function volumeSummary(index: number, count: number): string {
+  if (index === 0) return '交代背景与主角处境，抛出核心冲突与第一重悬念。';
+  const diff = count - index;
+  if (diff <= 1) return '最终对峙与清算，主线落定，呼应开头伏笔。';
+  if (diff === 2) return '爆发巨大转折：真相揭露或强敌逼近，主角面临抉择。';
+  if (diff === 3) return '主角获得成长（修行/事业/实力），与各方势力建立或激化关系。';
+  return '长线推进：引入新势力与新冲突，主角在更大棋盘上逐步破局，为终局积蓄势能。';
+}
+
+function volumeConflict(index: number, count: number): string {
+  if (index === 0) return '生存/身份危机浮现';
+  const diff = count - index;
+  if (diff <= 1) return '终局对决与收束';
+  if (diff === 2) return '真相/背水一战';
+  if (diff === 3) return '阵营冲突与实力升级';
+  return '新势力登场与格局更替';
+}
+
+/**
+ * 按目标字数生成自适应分卷规划。
+ * @param targetWords - 项目目标字数（>0 时参与计算；0/非法按 30 万兜底）
+ * @param genre - 题材（用于卷标题风味，缺省「通用」）
+ * @returns Volume[]，章区间连续覆盖估算总章数，末卷覆盖至末章
+ */
+export function planVolumes(targetWords: number, genre = '通用'): Volume[] {
+  const words = Number.isFinite(targetWords) && targetWords > 0 ? targetWords : 300000;
+  const total = estimateTotalChapters(words);
+  const count = estimateVolumeCount(words);
+
+  const volumes: Volume[] = [];
+  let start = 1;
+  const base = Math.ceil(total / count);
+  for (let i = 0; i < count; i++) {
+    // 均分后把余量让给最后一卷，保证区间连续且覆盖全部章数
+    const isLast = i === count - 1;
+    const end = isLast ? total : Math.min(start + base - 1, total);
+    volumes.push({
+      volumeNo: i + 1,
+      title: volumeTitle(genre, i, count),
+      summary: volumeSummary(i, count),
+      chapterRange: [start, end],
+      coreConflict: volumeConflict(i, count),
+    });
+    start = end + 1;
+  }
+
+  return volumes;
+}
+
+/** 便于展示的摘要信息 */
+export function summarizePlan(
+  targetWords: number,
+  genre = '通用'
+): { totalChapters: number; volumeCount: number; volumes: Volume[] } {
+  const volumes = planVolumes(targetWords, genre);
+  return {
+    totalChapters: volumes[volumes.length - 1].chapterRange[1],
+    volumeCount: volumes.length,
+    volumes,
+  };
+}

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { NovelProject } from '@/types';
 import { formatTime } from '@/lib/utils';
+import { summarizePlan } from '@/lib/outline/volume-plan';
 
 interface ProjectCardProps {
   project: NovelProject;
@@ -31,6 +32,8 @@ export function ProjectCard({ project, stats, onArchive }: ProjectCardProps) {
     project.targetWords > 0
       ? Math.min(100, Math.round((stats.totalWords / project.targetWords) * 100))
       : 0;
+  // 按目标字数预估最终卷/章规模（百万字长篇预期管理）
+  const plan = summarizePlan(project.targetWords, project.genre);
 
   return (
     <Card className="group transition-shadow hover:shadow-md">
@@ -74,7 +77,7 @@ export function ProjectCard({ project, stats, onArchive }: ProjectCardProps) {
 
         <div className="flex items-center justify-between">
           <span className="text-xs text-stone-400">
-            更新于 {formatTime(project.updatedAt)}
+            预估 {plan.volumeCount} 卷 · {plan.totalChapters} 章 · 更新于 {formatTime(project.updatedAt)}
           </span>
           <div className="flex gap-1">
             <Link href={`/project/${project.id}`}>

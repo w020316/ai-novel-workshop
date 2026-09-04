@@ -40,4 +40,14 @@ describe('lib/outline/template', () => {
     a.volumes[0].title = '被我改掉了';
     expect(b.volumes[0].title).not.toBe('被我改掉了');
   });
+
+  it('百万字目标 → 按自适应分卷返回更多卷并覆盖更大章号', () => {
+    const t100 = generateOutlineTemplate('玄幻', 1_000_000);
+    expect(t100.volumes.length).toBeGreaterThanOrEqual(6);
+    expect(t100.volumes[t100.volumes.length - 1].chapterRange[1]).toBeGreaterThanOrEqual(390);
+    // 卷区间连续
+    for (let i = 1; i < t100.volumes.length; i++) {
+      expect(t100.volumes[i].chapterRange[0]).toBe(t100.volumes[i - 1].chapterRange[1] + 1);
+    }
+  });
 });

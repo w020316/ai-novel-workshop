@@ -42,8 +42,8 @@ export default function WorkbenchPage() {
   };
 
   const handleBatchWrite = async () => {
-    if (batchCount < 1 || batchCount > 20) {
-      toast.warning('连写章数需在 1~20 之间');
+    if (batchCount < 1 || batchCount > 50) {
+      toast.warning('连写章数需在 1~50 之间');
       return;
     }
     const startChapterNo = chapters.length + 1;
@@ -146,7 +146,7 @@ export default function WorkbenchPage() {
               )}
             </div>
             <p className="text-xs text-stone-500">
-              从第 {chapters.length + 1} 章起连写；每章沿用前章记忆回溯与大纲主线，保证长篇连续。若填写统一剧情模板会注入每章要点，留空则交由剧情 Agent 自动拟定。
+              从第 {chapters.length + 1} 章起连写（单批最多 50 章，百万字长篇可分多批）；每章沿用前章记忆回溯与大纲主线，保证长篇连续。若填写统一剧情模板会注入每章要点，留空则交由剧情 Agent 自动拟定。
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-stone-600">
@@ -154,7 +154,7 @@ export default function WorkbenchPage() {
                 <input
                   type="number"
                   min={1}
-                  max={20}
+                  max={50}
                   value={batchCount}
                   onChange={(e) => setBatchCount(Number(e.target.value))}
                   disabled={batchRunning}

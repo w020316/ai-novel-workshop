@@ -9,7 +9,9 @@ import { ChapterList } from '@/components/workbench/ChapterList';
 import { generateChaptersBatch, computeResumeCount, computeDoneCount } from '@/lib/agents/batch';
 import { startBatchJob, pauseBatchJob, clearBatchJob, getBatchJob } from '@/lib/batch/job-store';
 import type { Chapter, GenerationStage, BatchJob } from '@/types';
-import { Plus, Loader2, Layers, StopCircle } from 'lucide-react';
+import { loadLiveRankedTitles } from '@/lib/rank/store';
+import { scanChaptersOriginality, type ChapterScanResult } from '@/lib/originality/scan';
+import { Plus, Loader2, Layers, StopCircle, SearchCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function WorkbenchPage() {
@@ -27,6 +29,31 @@ export default function WorkbenchPage() {
   const [batchProgress, setBatchProgress] = useState<{ chapterNo: number; total: number; stage: string | null; done: number } | null>(null);
   const batchAbortRef = useRef<AbortController | null>(null);
   const [batchJob, setBatchJob] = useState<BatchJob | null>(null);
+
+  // 全书避撞体检
+  const [scanningBook, setScanningBook] = useState(false);
+  const [bookScan, setBookScan] = useState<ChapterScanResult | null>(null);
+
+  const handleBookScan = async () => {
+    setScanningBook(true);
+    try {
+      const liveTitles = await loadLiveRankedTitles();
+      const result = scanChaptersOriginality(
+        chapters.map((c) => ({ id: String(c.chapterNo), title: c.title, content: c.content })),
+        { liveTitles }
+      );
+      setBookScan(result);
+      toast.success(
+        result.passed
+          ? `全书避撞体检通过（${result.scanned} 章无撞梗）`
+          : `发现 ${result.totalHits} 处撞梗（${result.chaptersWithHits} 章），请在对应章修缮`
+      );
+    } catch (e) {
+      toast.error('体检失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setScanningBook(false);
+    }
+  };
 
   const load = useCallback(async () => {
     const list = await listChapters(projectId).catch(() => []);
@@ -273,6 +300,54 @@ export default function WorkbenchPage() {
           </div>
         </div>
       )}
+
+      {/* 全书避撞体检 */}
+      <Card className="border-amber-200 bg-amber-50/30">
+        <CardContent className="flex flex-wrap items-center justify-between gap-2 py-3">
+          <div className="text-sm text-stone-700">
+            <span className="font-medium">全书避撞体检</span>
+            <span className="ml-2 text-xs text-stone-500">
+              一键扫描全部章节，找出与平台代表作 / 实时热书撞梗的部分并按章定位
+            </span>
+          </div>
+          <Button size="sm" variant="outline" onClick={handleBookScan} disabled={scanningBook}>
+            {scanningBook ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <SearchCheck className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {scanningBook ? '体检中…' : '开始全书体检'}
+          </Button>
+        </CardContent>
+        {bookScan && bookScan.scanned > 0 && (
+          <CardContent className="border-t border-amber-100 pt-3 text-xs text-stone-600">
+            {bookScan.passed ? (
+              <p className="text-emerald-600">
+                ✓ 扫描 {bookScan.scanned} 章，未发现与平台代表作 / 实时热书撞梗，可放心推进。
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-amber-700">
+                  扫描 {bookScan.scanned} 章，发现 {bookScan.totalHits} 处撞梗（涉及{' '}
+                  {bookScan.chaptersWithHits} 章），建议在对应章节改设定 / 调整表述。
+                </p>
+                {bookScan.topWorks.length > 0 && (
+                  <div>
+                    <p className="mb-1 font-medium text-stone-600">全书最常被撞的作品：</p>
+                    <ul className="grid gap-1 md:grid-cols-2">
+                      {bookScan.topWorks.map((w) => (
+                        <li key={w.workTitle} className="truncate">
+                          《{w.workTitle}》× {w.count} 章（{w.chapters.join('、')}）
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
 
       {/* 章节列表 */}
       <ChapterList chapters={chapters} projectId={projectId} />

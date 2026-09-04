@@ -38,9 +38,21 @@ export function isReservedIpv4(ip: string): boolean {
   return RESERVED_IPV4_RE.test((ip || '').trim());
 }
 
-/** 校验 IPv6 字面量是否为环回/链路本地/唯一本地/文档保留段 */
+/** 校验 IPv6 字面量是否为环回/链路本地/唯一本地/文档保留段。
+ * 同时处理 IPv4-mapped IPv6（::ffff:0:0/96，含点分与 hex 两种形式）：
+ * 例如 ::ffff:127.0.0.1 / ::ffff:7f00:1 实际指向 127.0.0.1，必须按 IPv4 保留段判定。 */
 export function isReservedIpv6(ip: string): boolean {
   const low = (ip || '').trim().toLowerCase();
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f]{1,4}:[0-9a-f]{1,4})$/.exec(low);
+  if (mapped) {
+    const spec = mapped[1];
+    if (spec.includes('.')) return isReservedIpv4(spec);
+    // hex 形式 ::ffff:7f00:1 → 127.0.0.1
+    const [hiStr, loStr] = spec.split(':');
+    const hi = parseInt(hiStr, 16);
+    const lo = parseInt(loStr, 16);
+    return isReservedIpv4(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+  }
   return low === '::1' || low === '::' || /^fe80:/i.test(low) || /^fc00:/i.test(low) ||
     /^fd/i.test(low) || /^2001:db8:/i.test(low) || /^ff/.test(low);
 }
@@ -79,7 +91,8 @@ export function checkUrlTarget(url: string): string | null {
   // IPv6 字面量带方括号，先去掉再判定
   const bare = host.charAt(0) === '[' && host.endsWith(']') ? host.slice(1, -1) : host;
   if (/^\d+\.\d+\.\d+\.\d+$/.test(bare) && isReservedIpv4(bare)) return `不允许访问内网/本地地址：${bare}`;
-  if (/^[0-9a-f:]+$/i.test(bare) && isReservedIpv6(bare)) return `不允许访问本地/链路本地地址：${bare}`;
+  // IPv4-mapped IPv6 含点分后缀，字符白名单需放行「.」再交 isReservedIpv6 判定
+  if (/^[0-9a-f:.]+$/i.test(bare) && isReservedIpv6(bare)) return `不允许访问本地/链路本地地址：${bare}`;
   return null;
 }
 
@@ -147,12 +160,8 @@ export function parseSkillMarkdown(
   const description = (fDesc || '').trim().slice(0, 120);
   const category = classifyCategory(finalName, `${fields.category ?? ''} ${body}`);
 
-  // 指令正文：优先取 frontmatter 后的正文；正文过短时兜底整段原文
-  let instruction = body;
-  if (instruction.length < 20 || instruction.includes('usage') || instruction.includes('when to use')) {
-    // 某些 skill 站点正文以"## Usage / 何时使用"开头，正文在后续标题块，直接保留正文即可
-  }
-  instruction = instruction.trim();
+  // 指令正文：取 frontmatter 后的正文（含 "## Usage" 等标题块，由使用者自行取舍）
+  const instruction = body.trim();
 
   return {
     name: finalName,

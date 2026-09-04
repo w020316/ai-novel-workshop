@@ -57,7 +57,7 @@ export default function ExportPage() {
     if (chapters.length === 0) return undefined;
     try {
       const liveTitles = await loadLiveRankedTitles();
-      return buildCollisionAppendix(
+      return await buildCollisionAppendix(
         chapters.map((c) => ({ id: String(c.chapterNo), title: c.title, content: c.content })),
         { liveTitles }
       );

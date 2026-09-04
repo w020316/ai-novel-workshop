@@ -90,7 +90,17 @@ export async function generateChaptersBatch(
       signal,
     };
 
-    const result = await single(context);
+    let result: GenerationResult;
+    try {
+      result = await single(context);
+    } catch (err) {
+      // 中断落在中间阶段（剧情设计/记忆装配等）时底层 fetch 会以 AbortError 冒泡：
+      // 统一转为 aborted 语义，与「写章阶段中断」一致走暂停续写路径，而非误报失败
+      if ((err instanceof Error && err.name === 'AbortError') || signal?.aborted) {
+        return { results, chapterPLots, aborted: true };
+      }
+      throw err;
+    }
     // 本章生成被中断：残缺稿不进入结果（未落成 completed），stop 并标记 aborted，
     // 供「断点续写」从该章重新生成。
     if (result.interrupted) {
@@ -107,28 +117,31 @@ export async function generateChaptersBatch(
  * 计算断点续写时"还需续写的章数"。
  * @param originalTotal 原请求总章数
  * @param originalStart 原起始章号（如 1）
- * @param currentChapterCount 当前已生成的章节数（含之前完成的本批章节）
+ * @param currentLatestChapterNo 当前项目最新章号（max(chapterNo)）。
+ *        注意：不要传 chapters.length——章节被删除/章号有空洞时二者不等，
+ *        用数量反推会重复生成已有章号并把人工修改的章覆盖掉。
  * @returns 仍需要生成的章节数（>=0）；已全部生成为 0
  */
 export function computeResumeCount(
   originalTotal: number,
   originalStart: number,
-  currentChapterCount: number
+  currentLatestChapterNo: number
 ): number {
   if (originalTotal <= 0) return 0;
-  const made = Math.max(0, currentChapterCount - originalStart + 1);
+  const made = Math.max(0, currentLatestChapterNo - originalStart + 1);
   return Math.max(0, originalTotal - made);
 }
 
 /**
  * 计算"已完成本批的章数（用于进度展示，最多到 total）"。
+ * @param currentLatestChapterNo 当前项目最新章号（max(chapterNo)），同上勿传数量
  */
 export function computeDoneCount(
   originalTotal: number,
   originalStart: number,
-  currentChapterCount: number
+  currentLatestChapterNo: number
 ): number {
   if (originalTotal <= 0) return 0;
-  const made = Math.max(0, currentChapterCount - originalStart + 1);
+  const made = Math.max(0, currentLatestChapterNo - originalStart + 1);
   return Math.min(originalTotal, made);
 }

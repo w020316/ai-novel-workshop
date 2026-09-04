@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChapterList } from '@/components/workbench/ChapterList';
 import { generateChaptersBatch, computeResumeCount, computeDoneCount } from '@/lib/agents/batch';
-import { startBatchJob, pauseBatchJob, clearBatchJob, getBatchJob } from '@/lib/batch/job-store';
+import { startBatchJob, pauseBatchJob, clearBatchJob, getBatchJob, hasActiveBatchJob, touchBatchJob } from '@/lib/batch/job-store';
 import type { Chapter, GenerationStage, BatchJob, WritingSkill } from '@/types';
 import { getEnabledSkills } from '@/lib/skills/store';
 import { loadLiveRankedTitles } from '@/lib/rank/store';
@@ -51,7 +51,7 @@ export default function WorkbenchPage() {
     setScanningBook(true);
     try {
       const liveTitles = await loadLiveRankedTitles();
-      const result = scanChaptersOriginality(
+      const result = await scanChaptersOriginality(
         chapters.map((c) => ({ id: String(c.chapterNo), title: c.title, content: c.content })),
         { liveTitles }
       );
@@ -85,8 +85,9 @@ export default function WorkbenchPage() {
   }, [projectId]);
 
   const handleCreateChapter = () => {
-    const nextChapterNo = chapters.length + 1;
-    router.push(`/project/${projectId}/workbench/chapter/${nextChapterNo}`);
+    // 用最新章号（而非数量）推下一章：章号有空洞/删章时数量反推会指向已存在章
+    const maxChapterNo = chapters.reduce((m, c) => Math.max(m, c.chapterNo), 0);
+    router.push(`/project/${projectId}/workbench/chapter/${maxChapterNo + 1}`);
   };
 
   const handleBatchWrite = async () => {
@@ -94,15 +95,22 @@ export default function WorkbenchPage() {
       toast.warning('连写章数需在 1~50 之间');
       return;
     }
+    // 并发互斥：其他标签页有活跃批量任务时拒绝，防双写互覆
+    if (await hasActiveBatchJob(projectId)) {
+      toast.warning('该项目已有进行中的批量续写任务（可能在本页或其他标签页），请先完成或放弃');
+      return;
+    }
     const controller = new AbortController();
     batchAbortRef.current = controller;
     setBatchRunning(true);
 
     // 断点续写：存在未完成的上批任务则继续剩余章节（跳过已存在章）
+    // 章号推算一律用最新章号而非章节数量，避免删章/空洞导致重复生成覆盖已有章
+    const maxChapterNo = chapters.reduce((m, c) => Math.max(m, c.chapterNo), 0);
     const isResume = !!batchJob;
-    const startChapterNo = chapters.length + 1;
+    const startChapterNo = maxChapterNo + 1;
     const remaining = isResume
-      ? computeResumeCount(batchJob!.total, batchJob!.startChapterNo, chapters.length)
+      ? computeResumeCount(batchJob!.total, batchJob!.startChapterNo, maxChapterNo)
       : batchCount;
     const resolvedTemplate = isResume && batchJob!.plotTemplate
       ? batchJob!.plotTemplate
@@ -129,13 +137,16 @@ export default function WorkbenchPage() {
         skillIds: batchSkillIds && batchSkillIds.length < enabledSkills.length ? batchSkillIds : undefined,
         signal: controller.signal,
         plotPointsPerChapter: !resolvedTemplate ? undefined : () => [resolvedTemplate],
-        onProgress: (info) =>
+        onProgress: (info) => {
           setBatchProgress({
             chapterNo: info.chapterNo,
             total: info.total,
             stage: info.stage,
             done: info.index,
-          }),
+          });
+          // 每章完成时刷新任务心跳，向其他标签页证明任务活跃（并发互斥锁）
+          if (info.stage === 'completed') void touchBatchJob(projectId);
+        },
       });
       await load();
       if (res.aborted) {
@@ -351,7 +362,7 @@ export default function WorkbenchPage() {
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <span>
             上次批量续写未完成：已完成{' '}
-            {computeDoneCount(batchJob.total, batchJob.startChapterNo, chapters.length)} / {batchJob.total} 章，可继续生成剩余章节（已生成的章会自动跳过）。
+            {computeDoneCount(batchJob.total, batchJob.startChapterNo, chapters.reduce((m, c) => Math.max(m, c.chapterNo), 0))} / {batchJob.total} 章，可继续生成剩余章节（已生成的章会自动跳过）。
           </span>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={handleBatchWrite}>

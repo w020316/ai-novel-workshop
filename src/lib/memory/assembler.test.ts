@@ -2,7 +2,8 @@
 // 记忆装配器测试
 // ============================================================================
 import { describe, it, expect } from 'vitest';
-import { assembleMemory, memoryToPrompt } from './assembler';
+import { assembleMemory, memoryToPrompt, estimateMemoryTokens } from './assembler';
+import { estimateTokens } from '@/lib/utils';
 import type { LongTermMemory, MidTermMemory, ShortTermMemory, ChapterSummary, Foreshadowing } from '@/types';
 
 const emptyLongTerm: LongTermMemory = {
@@ -130,5 +131,75 @@ describe('assembleMemory', () => {
     });
     expect(prompt).toBe('');
     expect(prompt).not.toContain('【');
+  });
+});
+
+describe('estimateMemoryTokens', () => {
+  it('空记忆估算应为 0', () => {
+    const total = estimateMemoryTokens({
+      longTerm: emptyLongTerm,
+      midTerm: emptyMidTerm,
+      shortTerm: { prevChapters: [], currentPlotPoints: [] },
+      tokenEstimate: 0,
+    });
+    expect(total).toBe(0);
+  });
+
+  it('估算应覆盖 memoryToPrompt 注入的全部字段（含世界观全字段与卷计划，防止低估）', () => {
+    const longTerm: LongTermMemory = {
+      worldview: {
+        id: 'wv', projectId: 'p',
+        worldStructure: 'A'.repeat(100), powerSystem: 'B'.repeat(100),
+        geography: 'C'.repeat(100), era: 'D'.repeat(100),
+        factions: 'E'.repeat(100), rules: ['R'.repeat(50)],
+        locked: false, updatedAt: 0,
+      },
+      characters: [],
+      outline: {
+        id: 'o', projectId: 'p',
+        volumes: [
+          { volumeNo: 1, title: 'V'.repeat(50), summary: 'S'.repeat(200), chapterRange: [1, 50], coreConflict: 'K'.repeat(80) },
+        ],
+        mainPlotline: 'M'.repeat(100), climaxNodes: ['X'.repeat(50)], ending: 'E'.repeat(80),
+        updatedAt: 0,
+      },
+      pendingForeshadowings: [],
+      stylePreset: null,
+    };
+    const total = estimateMemoryTokens({
+      longTerm,
+      midTerm: emptyMidTerm,
+      shortTerm: { prevChapters: [], currentPlotPoints: [] },
+      tokenEstimate: 0,
+    });
+
+    // 旧口径仅计主线/高潮/结局；新口径必须显著更大（含世界观 6 字段 + 卷计划）
+    const legacyOnly =
+      estimateTokens('M'.repeat(100)) +
+      estimateTokens('X'.repeat(50)) +
+      estimateTokens('E'.repeat(80));
+    expect(total).toBeGreaterThan(legacyOnly * 3);
+  });
+
+  it('人物与文风字段应计入估算', () => {
+    const longTerm: LongTermMemory = {
+      worldview: null,
+      characters: [
+        { id: 'c', projectId: 'p', name: 'N'.repeat(40), role: 'protagonist', appearance: 'L'.repeat(100), personality: 'P'.repeat(60), catchphrase: '', background: 'B'.repeat(120), motivation: 'M'.repeat(40), weakness: 'W'.repeat(30), growthArc: 'G'.repeat(50), relationships: [], speechStyle: '', behaviorPattern: '', locked: false, updatedAt: 0 },
+      ],
+      outline: null,
+      pendingForeshadowings: [],
+      stylePreset: { id: 'st', name: '爽文风格名', narrativePerspective: 'first', pacing: 'fast', descriptionDensity: 'sparse', dialogueRatio: 0.3, sampleText: 'T'.repeat(150) },
+    };
+    const total = estimateMemoryTokens({
+      longTerm,
+      midTerm: emptyMidTerm,
+      shortTerm: { prevChapters: [], currentPlotPoints: [] },
+      tokenEstimate: 0,
+    });
+    // 至少应覆盖人物全字段 + 文风名称与样本
+    expect(total).toBeGreaterThanOrEqual(
+      estimateTokens('T'.repeat(150)) + estimateTokens('L'.repeat(100) + 'B'.repeat(120))
+    );
   });
 });

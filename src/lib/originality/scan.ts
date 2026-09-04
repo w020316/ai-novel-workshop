@@ -57,15 +57,22 @@ export interface ScanOptions {
   topN?: number;
 }
 
+/** 每扫描多少章让出一次主线程（分帧防 UI 冻结；百万字全书一次跑完会卡死页面） */
+const YIELD_EVERY = 20;
+
 /**
  * 对项目全部章节做一次避撞体检。
  * @param chapters 章节列表
  */
-export function scanChaptersOriginality(
+export async function scanChaptersOriginality(
   chapters: ChapterFragment[],
   options: ScanOptions = {}
-): ChapterScanResult {
-  const { liveTitles, genre, topN = 5 } = options;
+): Promise<ChapterScanResult> {
+  const { liveTitles, genre } = options;
+  // topN 归一化：缺省 5；非法值（0/负数/小数）回退，防止 slice(0, topN) 语义漂移
+  const topN = Number.isFinite(options.topN) && (options.topN ?? 0) > 0
+    ? Math.floor(options.topN!)
+    : 5;
   const hits: ChapterScanHit[] = [];
   let scanned = 0;
   let totalHits = 0;
@@ -84,6 +91,10 @@ export function scanChaptersOriginality(
         if (!list.includes(ch.id)) list.push(ch.id);
         workCount.set(h.workTitle, list);
       }
+    }
+    // 分帧：每 YIELD_EVERY 章让出主线程，避免长篇全书扫描冻结 UI
+    if (scanned % YIELD_EVERY === 0) {
+      await new Promise((r) => setTimeout(r, 0));
     }
   }
 

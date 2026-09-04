@@ -88,6 +88,22 @@ function now(): number {
   return Date.now();
 }
 
+/** 技能分类白名单：非法值（外部 JSON/导入源）统一回退 other，防止入库后永久不可见 */
+const CATEGORY_WHITELIST = new Set<string>(['style', 'plot', 'hook', 'outline', 'rewrite', 'review', 'other']);
+
+function safeCategory(value: unknown): WritingSkill['category'] {
+  return typeof value === 'string' && CATEGORY_WHITELIST.has(value)
+    ? (value as WritingSkill['category'])
+    : 'other';
+}
+
+/** 生成不碰撞的技能 id（时间戳+随机数在同毫秒批量导入时有生日碰撞，randomUUID 彻底避免） */
+function newSkillId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? `skill-${crypto.randomUUID()}`
+    : `skill-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
 /** 首次初始化：向空库写入内置技能（幂等）；并增量补齐新增/缺失的内置技能（不覆盖既有的用户启停状态） */
 export async function ensureSeedSkills(): Promise<void> {
   const existing = await db.skills.toArray();
@@ -144,12 +160,11 @@ export async function importSkillsJson(text: string): Promise<number> {
   const t = Date.now();
   for (const item of payload) {
     if (!item.name || !item.instruction) continue;
-    if (existingNames.has(item.name) && item.builtin) continue; // 跳过种子
-    if (existingNames.has(item.name)) continue; // 跳过同名（防重复堆积）
+    if (existingNames.has(item.name)) continue; // 跳过同名（防重复堆积与种子覆盖）
     await db.skills.put({
-      id: `skill-${t}-${Math.floor(Math.random() * 1e6)}`,
+      id: newSkillId(),
       name: item.name,
-      category: item.category ?? 'other',
+      category: safeCategory(item.category),
       source: item.source ?? 'custom',
       sourceName: item.sourceName,
       sourceUrl: item.sourceUrl,
@@ -175,13 +190,13 @@ export async function getSkill(id: string): Promise<WritingSkill | undefined> {
 
 /** 新增/覆盖技能（自定义或导入） */
 export async function saveSkill(skill: Partial<WritingSkill> & { name: string; instruction: string }): Promise<string> {
-  const id = skill.id ?? `skill-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const id = skill.id ?? newSkillId();
   const existing = await db.skills.get(id);
   const t = now();
   await db.skills.put({
     id,
     name: skill.name,
-    category: skill.category ?? 'other',
+    category: safeCategory(skill.category),
     source: skill.source ?? 'custom',
     sourceName: skill.sourceName,
     sourceUrl: skill.sourceUrl,

@@ -21,10 +21,31 @@ function isEnabled(): boolean {
   return process.env.LLM_RATE_LIMIT_ENABLED !== 'false';
 }
 
-function getClientIP(request: Request): string {
+function isPlausibleIp(value: string | undefined): value is string {
+  return (
+    !!value &&
+    value.length <= 45 && // IPv6 最长（含 IPv4 映射）约 45 字符
+    /^[0-9a-fA-F:.]+$/.test(value) // 仅 IP 字面量字符
+  );
+}
+
+/**
+ * 从请求中提取客户端 IP 作为限流桶 key。
+ * 信任假设：Vercel 等托管平台会用真实连接 IP 覆盖 x-real-ip / x-forwarded-for，
+ * 客户端伪造的同名头不会透传到应用层；自托管部署时需在反向代理层覆盖这两个头。
+ * 解析失败（缺头/垃圾值/超长值）统一回落 'anonymous' 共享桶：
+ * 既防止伪造头产生任意新桶绕过限流，也避免超长 key 撑爆内存。
+ */
+function extractClientIp(request: Request): string {
+  const real = request.headers.get('x-real-ip')?.trim();
+  if (isPlausibleIp(real)) return real;
+
   const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) return forwarded.split(',')[0].trim();
-  return request.headers.get('x-real-ip') ?? 'unknown';
+  if (forwarded) {
+    const first = forwarded.split(',')[0].trim();
+    if (isPlausibleIp(first)) return first;
+  }
+  return 'anonymous';
 }
 
 function refill(bucket: Bucket): void {
@@ -50,7 +71,7 @@ export function enforceRateLimit(request: Request): NextResponse | null {
     }
   }
 
-  const ip = getClientIP(request);
+  const ip = extractClientIp(request);
   const now = Date.now();
   let bucket = buckets.get(ip);
 

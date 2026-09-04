@@ -16,13 +16,14 @@ export interface CollisionAppendixOptions {
 /**
  * 构建「避撞体检报告」附录正文。
  * 无撞梗时返回精简的通过说明；有撞梗时列出全书最常被撞作品 + 命中章号。
+ * （扫描为分帧 async，避免长篇全书体检冻结 UI）
  */
-export function buildCollisionAppendix(
+export async function buildCollisionAppendix(
   chapters: ChapterFragment[],
   options: CollisionAppendixOptions = {}
-): string {
+): Promise<string> {
   const { liveTitles, genre } = options;
-  const r = scanChaptersOriginality(chapters, { liveTitles, genre });
+  const r = await scanChaptersOriginality(chapters, { liveTitles, genre });
   const L: string[] = [];
   L.push('');
   L.push('='.repeat(52));

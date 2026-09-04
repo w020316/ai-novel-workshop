@@ -1,5 +1,5 @@
 // ============================================================================
-// 全书级避撞体检 单测（纯函数）
+// 全书级避撞体检 单测（纯函数；分帧 yield 改 async 后用例统一 await）
 // ============================================================================
 import { describe, it, expect } from 'vitest';
 import { scanChaptersOriginality } from './scan';
@@ -7,16 +7,16 @@ import { scanChaptersOriginality } from './scan';
 describe('scanChaptersOriginality', () => {
   const tpl = (id: string, title: string, content: string) => ({ id, title, content });
 
-  it('空章节列表返回空结果且 passed=true', () => {
-    const r = scanChaptersOriginality([]);
+  it('空章节列表返回空结果且 passed=true', async () => {
+    const r = await scanChaptersOriginality([]);
     expect(r.scanned).toBe(0);
     expect(r.passed).toBe(true);
     expect(r.totalHits).toBe(0);
     expect(r.topWorks).toEqual([]);
   });
 
-  it('无撞梗章节全部通过，topWorks 为空', () => {
-    const r = scanChaptersOriginality([
+  it('无撞梗章节全部通过，topWorks 为空', async () => {
+    const r = await scanChaptersOriginality([
       tpl('c1', '第一章', '清早小镇的雾气漫过石阶，少年背起行囊走向渡口。'),
       tpl('c2', '第二章', '江上的白帆借着夜风离岸，船上人低声交谈着入冬的收成。'),
     ]);
@@ -26,8 +26,8 @@ describe('scanChaptersOriginality', () => {
     expect(r.passed).toBe(true);
   });
 
-  it('识别与平台代表作同名/同梗并在 topWorks 汇总跨章撞次', () => {
-    const r = scanChaptersOriginality([
+  it('识别与平台代表作同名/同梗并在 topWorks 汇总跨章撞次', async () => {
+    const r = await scanChaptersOriginality([
       tpl('c1', '第一章', '少年喃喃：三十年河东三十年河西，莫欺少年穷。'),
       tpl('c2', '第二章', '他被染香阁退婚，见证斗之气三段的耻辱。'),
       tpl('c3', '第三章', '凡人的戏院里唱着一出无关紧要的离合。'),
@@ -47,8 +47,8 @@ describe('scanChaptersOriginality', () => {
     }
   });
 
-  it('实时榜单热书同名命中同样被纳入全书扫描', () => {
-    const r = scanChaptersOriginality(
+  it('实时榜单热书同名命中同样被纳入全书扫描', async () => {
+    const r = await scanChaptersOriginality(
       [
         tpl('c1', '第一章', '这故事名叫《盘点万界战力等级》你得记得。'),
         tpl('c2', '第二章', '一切都寻常。'),
@@ -60,12 +60,20 @@ describe('scanChaptersOriginality', () => {
     expect(r.topWorks[0].workTitle).toBe('盘点万界战力等级');
   });
 
-  it('空正文章节被跳过不计入 scanned', () => {
-    const r = scanChaptersOriginality([
+  it('空正文章节被跳过不计入 scanned', async () => {
+    const r = await scanChaptersOriginality([
       tpl('c1', '第一章', ''),
       tpl('c2', '第二章', '   '),
       tpl('c3', '第三章', '有内容的正文。'),
     ]);
     expect(r.scanned).toBe(1);
+  });
+
+  it('topN 非法值（0/负数）安全回退为 5，不产生 slice 负数语义', async () => {
+    const r = await scanChaptersOriginality([
+      tpl('c1', '第一章', '少年喃喃：三十年河东三十年河西，莫欺少年穷。'),
+    ], { topN: 0 });
+    expect(r.totalHits).toBeGreaterThan(0);
+    expect(r.topWorks.length).toBeGreaterThan(0);
   });
 });

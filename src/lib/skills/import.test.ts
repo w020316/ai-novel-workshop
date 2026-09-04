@@ -95,6 +95,19 @@ describe('SSRF 防护：isReservedIpv6', () => {
   it('放行公网 IPv6', () => {
     expect(isReservedIpv6('2606:4700::1111')).toBe(false);
   });
+  it('拒绝 IPv4-mapped IPv6 点分形式（::ffff:127.0.0.1 等，实为 IPv4 环回/内网）', () => {
+    expect(isReservedIpv6('::ffff:127.0.0.1')).toBe(true);
+    expect(isReservedIpv6('::FFFF:169.254.169.254')).toBe(true);
+    expect(isReservedIpv6('::ffff:10.0.0.5')).toBe(true);
+    expect(isReservedIpv6('::ffff:192.168.1.1')).toBe(true);
+  });
+  it('拒绝 IPv4-mapped IPv6 hex 形式（::ffff:7f00:1 = 127.0.0.1）', () => {
+    expect(isReservedIpv6('::ffff:7f00:1')).toBe(true);
+  });
+  it('放行映射到公网 IPv4 的地址', () => {
+    expect(isReservedIpv6('::ffff:8.8.8.8')).toBe(false);
+    expect(isReservedIpv6('::ffff:104.16.132.229')).toBe(false);
+  });
 });
 
 describe('SSRF 防护：isInternalHostname / extractHostname', () => {
@@ -126,6 +139,11 @@ describe('SSRF 防护：checkUrlTarget', () => {
   });
   it('拒绝本地 IPv6', () => {
     expect(checkUrlTarget('http://[::1]:80/skill.md')).toContain('不允许');
+  });
+  it('拒绝 IPv4-mapped IPv6 字面量绕过（::ffff:127.0.0.1 / ::ffff:169.254.169.254）', () => {
+    expect(checkUrlTarget('http://[::ffff:127.0.0.1]/skill.md')).toContain('不允许');
+    expect(checkUrlTarget('http://[::ffff:169.254.169.254]/latest/meta-data/')).toContain('不允许');
+    expect(checkUrlTarget('http://[::ffff:10.0.0.5]/skill.md')).toContain('不允许');
   });
   it('放行公网目标', () => {
     expect(checkUrlTarget('https://raw.githubusercontent.com/a/b/main/SKILL.md')).toBeNull();

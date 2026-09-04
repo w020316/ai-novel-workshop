@@ -162,8 +162,9 @@ export function parseHongxiuHtml(html: string): RankedBook[] {
   return books;
 }
 
-/** 番茄 SSR：bookName + currentPos 成对解析 */
+/** 番茄 SSR：bookName + currentPos 成对解析（带标题去重，防页面附加推荐位错位污染） */
 export function parseFanqieHtml(html: string): RankedBook[] {
+  const seen = new Set<string>();
   const titles: string[] = [];
   const positions: number[] = [];
   const authors: string[] = [];
@@ -178,12 +179,13 @@ export function parseFanqieHtml(html: string): RankedBook[] {
   const books: RankedBook[] = [];
   for (let i = 0; i < titles.length; i++) {
     const title = cleanTitle(titles[i]);
-    if (!title) continue;
+    if (!title || seen.has(title)) continue;
+    seen.add(title);
     books.push({
       sourceId: 'fanqie',
       title,
       author: cleanTitle(authors[i] ?? '') ?? undefined,
-      rank: positions[i] ?? i + 1,
+      rank: Math.max(1, positions[i] ?? i + 1),
     });
   }
   return books;
@@ -304,15 +306,17 @@ export function clearRankCache(): void {
   MEM_CACHE.clear();
 }
 
-/** 获取未过期的缓存结果；过期则回收并返回 null */
+/** 获取未过期的缓存结果。过期条目保留在缓存中（作为抓取失败时的 stale-fallback 数据源），返回 null */
 function getCached(sourceId: string): RankFetchResult | null {
   const entry = MEM_CACHE.get(sourceId);
   if (!entry) return null;
-  if (Date.now() - entry.fetchedAt > DEFAULT_TTL_MS) {
-    MEM_CACHE.delete(sourceId);
-    return null;
-  }
+  if (Date.now() - entry.fetchedAt > DEFAULT_TTL_MS) return null;
   return entry.result;
+}
+
+/** 获取缓存结果（含过期条目）：仅用于抓取失败时降级返回上次成功数据 */
+function getCachedStale(sourceId: string): RankFetchResult | null {
+  return MEM_CACHE.get(sourceId)?.result ?? null;
 }
 
 /** 写入进程缓存 */
@@ -340,12 +344,12 @@ export async function scrapePlatform(sourceId: string): Promise<RankFetchResult>
   }
 
   if (!adapter) {
-    const res = {
+    // 未知平台不写缓存：platform 由客户端传入任意字符串，写缓存会造成
+    // 服务端进程内存无界增长
+    return {
       ok: false, sourceId, sourceName: name, url: '', fetchedAt,
       message: '暂未支持该平台的自动抓取，请使用「榜单粘贴拆解」。', books: [],
     };
-    setCached(sourceId, res);
-    return res;
   }
 
   // 已知被反爬/JS 渲染阻断：直接返回 blocked，不浪费请求
@@ -388,11 +392,12 @@ export async function scrapePlatform(sourceId: string): Promise<RankFetchResult>
     return result;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    // 失败 fallback：若有 15 分钟内的成功缓存，降级返回上次结果
-    const oldCached = getCached(sourceId);
+    // 失败 fallback：若有历史成功缓存（含过期条目），降级返回上次结果。
+    // 此前 getCached 会删除过期条目导致该降级路径永不生效，现改用 getCachedStale。
+    const oldCached = getCachedStale(sourceId);
     const fallback = !!oldCached && oldCached.ok && oldCached.books.length > 0;
     const msg = fallback
-      ? `当前抓取失败（${reason}），已降级返回 15 分钟内缓存的 ${oldCached.books.length} 部结果`
+      ? `当前抓取失败（${reason}），已降级返回最近一次缓存的 ${oldCached.books.length} 部结果`
       : `抓取失败（${reason}）——可能被风控拦截，请在浏览器打开目标地址复制后粘贴拆解。`;
     const res = fallback
       ? { ...oldCached, fetchedAt, message: msg }
@@ -401,7 +406,7 @@ export async function scrapePlatform(sourceId: string): Promise<RankFetchResult>
           message: msg,
           books: [],
         };
-    setCached(sourceId, res);
+    // 失败结果不写缓存：避免一次瞬时网络抖动把该平台「负缓存」15 分钟无法重试
     return res;
   }
 }

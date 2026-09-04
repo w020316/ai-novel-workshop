@@ -67,19 +67,60 @@ export async function assembleMemory(
 /**
  * 估算记忆的 Token 消耗
  * 导出供降级路径复用统一估算口径（避免降级时错误地记为 0）
+ * 口径对齐：覆盖 memoryToPrompt 实际注入 prompt 的全部字段
+ * （worldview 6 字段、人物全字段、大纲主线/高潮/结局、伏笔、文风、
+ *   中期摘要/支线、短期前情/要点），防止估算偏低使压缩阈值形同虚设。
  */
 export function estimateMemoryTokens(memory: AssembledMemory): number {
   let total = 0;
 
-  // 长期记忆
-  total += estimateStringTokens(memory.longTerm.worldview?.worldStructure ?? '');
-  total += estimateStringTokens(memory.longTerm.worldview?.powerSystem ?? '');
-  for (const c of memory.longTerm.characters) {
-    total += estimateStringTokens(c.appearance + c.personality + c.background);
+  // 长期记忆 · 世界观（与 memoryToPrompt 输出一致的全部字段）
+  if (memory.longTerm.worldview) {
+    const wv = memory.longTerm.worldview;
+    total += estimateStringTokens(wv.worldStructure ?? '');
+    total += estimateStringTokens(wv.powerSystem ?? '');
+    total += estimateStringTokens(wv.geography ?? '');
+    total += estimateStringTokens(wv.era ?? '');
+    total += estimateStringTokens(wv.factions ?? '');
+    total += estimateStringTokens((wv.rules ?? []).join('\n'));
   }
-  total += estimateStringTokens(memory.longTerm.outline?.mainPlotline ?? '');
+
+  // 长期记忆 · 人物（含 memoryToPrompt 会输出的 name/role/motivation/weakness）
+  for (const c of memory.longTerm.characters) {
+    total += estimateStringTokens(
+      [c.name, c.role, c.appearance, c.personality, c.background, c.motivation, c.weakness]
+        .map((s) => s ?? '')
+        .join('')
+    );
+    // growthArc/speechStyle/behaviorPattern 虽未进 memoryToPrompt，但会被人物卡等
+    // 下游消费，一并计入防止整体低估
+    total += estimateStringTokens([c.growthArc, c.speechStyle, c.behaviorPattern].map((s) => s ?? '').join(''));
+  }
+
+  // 长期记忆 · 大纲（主线 + 高潮节点 + 结局 + 卷计划）
+  if (memory.longTerm.outline) {
+    const o = memory.longTerm.outline;
+    total += estimateStringTokens(o.mainPlotline ?? '');
+    total += estimateStringTokens((o.climaxNodes ?? []).join('\n'));
+    total += estimateStringTokens(o.ending ?? '');
+    // 卷计划：memoryToPrompt 会注入当前卷的标题/核心冲突/剧情走向，
+    // 全量卷文本计入防止低估（高估只会提前触发压缩，处于安全侧）
+    for (const v of o.volumes ?? []) {
+      total += estimateStringTokens(
+        [v.title, v.coreConflict, v.summary].map((s) => s ?? '').join('')
+      );
+    }
+  }
+
+  // 长期记忆 · 伏笔
   for (const f of memory.longTerm.pendingForeshadowings) {
     total += estimateStringTokens(f.description);
+  }
+
+  // 长期记忆 · 文风预设（名称 + 样本）
+  if (memory.longTerm.stylePreset) {
+    total += estimateStringTokens(memory.longTerm.stylePreset.name ?? '');
+    total += estimateStringTokens(memory.longTerm.stylePreset.sampleText ?? '');
   }
 
   // 中期记忆

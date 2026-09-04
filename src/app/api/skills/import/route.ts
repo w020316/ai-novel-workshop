@@ -56,22 +56,44 @@ async function checkResolvedTarget(url: string): Promise<string | null> {
   return null;
 }
 
+/** 重定向最大跳数：超过即视为异常目标放弃抓取 */
+const MAX_REDIRECTS = 5;
+
+/**
+ * 抓取文本：redirect: 'manual' 逐跳校验后再跟随。
+ * 修复点：此前 redirect:'follow' 会在校验前就真实请求重定向落点（内网 GET 已发生），
+ * 现改为每一跳先过 checkResolvedTarget（静态 + DNS 双层校验），再手动跟随，
+ * 且限制最大跳数，杜绝「公网 302 转跳内网」与无限重定向。
+ */
 async function fetchText(url: string): Promise<string> {
-  const preErr = await checkResolvedTarget(url);
-  if (preErr) throw new Error(preErr);
-  const res = await fetch(url, {
-    headers: { 'user-agent': USER_AGENT, accept: 'text/*, text/markdown, */*' },
-    redirect: 'follow',
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  // 跟随重定向后再次校验落地 host，防止外部域名把请求转跳到内网
-  const finalErr = await checkResolvedTarget(res.url || url);
-  if (finalErr) throw new Error(finalErr);
-  const ct = res.headers.get('content-type') ?? '';
-  const buf = await res.arrayBuffer();
-  // 按 content-type 或 BOM 判断字符集
-  const dec = new TextDecoder(/gbk|gb2312/i.test(ct) ? 'gbk' : 'utf-8');
-  return dec.decode(buf);
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const preErr = await checkResolvedTarget(current);
+    if (preErr) throw new Error(preErr);
+
+    const res = await fetch(current, {
+      headers: { 'user-agent': USER_AGENT, accept: 'text/*, text/markdown, */*' },
+      redirect: 'manual',
+    });
+
+    // 3xx：校验下一跳目标后再手动跟随
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('location');
+      if (!loc) throw new Error(`HTTP ${res.status}（重定向缺少 location）`);
+      if (hop === MAX_REDIRECTS) throw new Error('重定向次数过多，已中止抓取');
+      // new URL 相对解析；非 http(s) 协议会被下一跳 checkUrlTarget 拒绝
+      current = new URL(loc, current).toString();
+      continue;
+    }
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const ct = res.headers.get('content-type') ?? '';
+    const buf = await res.arrayBuffer();
+    // 按 content-type 或 BOM 判断字符集
+    const dec = new TextDecoder(/gbk|gb2312/i.test(ct) ? 'gbk' : 'utf-8');
+    return dec.decode(buf);
+  }
+  throw new Error('重定向次数过多，已中止抓取');
 }
 
 async function tryGithubRepo(url: string): Promise<{ raw: string; fileUrl: string }> {

@@ -134,6 +134,35 @@ describe('generateChaptersBatch（依赖注入）', () => {
     expect(res.results).toHaveLength(0); // 残缺章不入结果，后续也不再生成
     expect(single).toHaveBeenCalledTimes(1);
   });
+
+  it('中断落在中间阶段（AbortError 冒泡）时应统一转为 aborted 而非抛错', async () => {
+    // 模拟 abort 发生在剧情设计/记忆装配等中间 await：底层 fetch reject AbortError
+    const controller = new AbortController();
+    const single = vi.fn(async () => {
+      controller.abort();
+      const e = new Error('This operation was aborted');
+      e.name = 'AbortError';
+      throw e;
+    });
+    const res = await generateChaptersBatch({
+      projectId: 'p1',
+      startChapterNo: 1,
+      count: 3,
+      signal: controller.signal,
+      single: single as never,
+    });
+    expect(res.aborted).toBe(true);
+    expect(res.results).toHaveLength(0);
+  });
+
+  it('非中止类错误应原样上抛（由调用方提示失败）', async () => {
+    const single = vi.fn(async () => {
+      throw new Error('上游 LLM 500');
+    });
+    await expect(
+      generateChaptersBatch({ projectId: 'p1', startChapterNo: 1, count: 2, single: single as never })
+    ).rejects.toThrow('上游 LLM 500');
+  });
 });
 describe('computeResumeCount / computeDoneCount（断点续写规划）', () => {
   it('未开始：无需跳过，剩余=总章数', () => {

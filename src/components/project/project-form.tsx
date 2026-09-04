@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -30,6 +30,7 @@ const STYLE_HINT: Record<string, string> = {
 };
 
 /** 灵感起点：给小白的快速选题（点击即填标题与题材） */
+const DRAFT_KEY = 'ai-novel-project-draft-v1';
 const INSPIRATION_STARTS: { title: string; genre: string }[] = [
   { title: '星河黎明', genre: '科幻' },
   { title: '赘婿归来', genre: '都市' },
@@ -73,6 +74,7 @@ export function ProjectForm() {
   const [submitting, setSubmitting] = useState(false);
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
   const [loadedPresets, setLoadedPresets] = useState(false);
+  const draftTimer = useRef<number | undefined>(undefined);
 
   // 懒加载文风预设
   if (!loadedPresets) {
@@ -130,6 +132,41 @@ export function ProjectForm() {
     if (changed) toast.info('已带入灵感，可再调整');
   }, [setValue]);
 
+  // 恢复未提交的草稿：仅当没有「灵感带入」query 时（避免覆盖带剧情境）
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('title')) return;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw) as Partial<ProjectFormValues>;
+      if (d.title && d.genre && GENRE_OPTIONS.some((o) => o.value === d.genre)) {
+        form.reset({ ...form.getValues(), ...d });
+        toast.info('已恢复上次未提交的内容，可直接修改后创建');
+      }
+    } catch {
+      /* 草稿损坏则忽略 */
+    }
+  }, [form]);
+
+  // 草稿自动保存（防中途离开丢失输入，减轻长表单弃单）
+  useEffect(() => {
+    const sub = form.watch((values) => {
+      window.clearTimeout(draftTimer.current);
+      draftTimer.current = window.setTimeout(() => {
+        try {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(values));
+        } catch {
+          /* 忽略：存储不可用时静默 */
+        }
+      }, 300);
+    });
+    return () => {
+      window.clearTimeout(draftTimer.current);
+      sub.unsubscribe();
+    };
+  }, [form]);
+
   const onSubmit = async (values: ProjectFormValues) => {
     setSubmitting(true);
     try {
@@ -149,6 +186,11 @@ export function ProjectForm() {
         },
       });
       toast.success('项目创建成功');
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* 忽略 */
+      }
       router.push(`/project/${id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '创建失败');

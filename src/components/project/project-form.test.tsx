@@ -34,6 +34,7 @@ vi.mock('@/lib/db/schema', () => ({
 describe('ProjectForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     createProjectMock.mockResolvedValue('proj-1');
     toArrayMock.mockResolvedValue([
       { id: 'style-preset-1', name: '硬核爽文' },
@@ -136,6 +137,33 @@ describe('ProjectForm', () => {
       expect(createProjectMock).toHaveBeenCalledWith(
         expect.objectContaining({ targetWords: 1_000_000 })
       )
+    );
+  });
+
+  it('输入标题后自动保存草稿，供中途离开恢复', async () => {
+    render(<ProjectForm />);
+    await screen.findByRole('option', { name: '硬核爽文' });
+    fireEvent.change(screen.getByPlaceholderText('如：星河黎明'), {
+      target: { value: '半城烟火' },
+    });
+    // 等待 300ms 防抖落库
+    await waitFor(() => {
+      const raw = localStorage.getItem('ai-novel-project-draft-v1');
+      expect(raw).toBeTruthy();
+      expect(JSON.parse(raw as string).title).toBe('半城烟火');
+    });
+  });
+
+  it('存在草稿时自动恢复标题并提示', async () => {
+    localStorage.setItem(
+      'ai-novel-project-draft-v1',
+      JSON.stringify({ title: '星河黎明', genre: '科幻', summary: '一段星空的冒险' })
+    );
+    render(<ProjectForm />);
+    await screen.findByRole('option', { name: '硬核爽文' });
+    expect(screen.getByDisplayValue('星河黎明')).toBeInTheDocument();
+    expect(toastMock.info).toHaveBeenCalledWith(
+      '已恢复上次未提交的内容，可直接修改后创建'
     );
   });
 });

@@ -13,7 +13,6 @@ import {
   getTrend,
   deriveTrendHints,
   generateTrendInspiration,
-  type TrendAnalysis,
 } from './trends';
 
 function chatResult(content: string): ChatResult {
@@ -23,10 +22,6 @@ function chatResult(content: string): ChatResult {
     provider: 'zhipu',
     model: 'glm-4-flash',
   };
-}
-
-function fallbackTrend(): TrendAnalysis {
-  return getTrend('fanqie', '都市')!;
 }
 
 describe('lib/trend/trends', () => {

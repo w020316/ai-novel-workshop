@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,7 @@ export default function ConsistencyPage() {
   const [rechecking, setRechecking] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const chs = await listChapters(projectId).catch(() => []);
     setChapters(chs);
@@ -29,9 +29,9 @@ export default function ConsistencyPage() {
     }
     setReports(r);
     setLoading(false);
-  };
+  }, [projectId]);
 
-  useEffect(() => { load(); }, [projectId]);
+  useEffect(() => { load(); }, [load]);
 
   const handleRecheckAll = async () => {
     setRechecking(true);

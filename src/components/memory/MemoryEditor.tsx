@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Save, Edit3 } from 'lucide-react';
@@ -24,7 +24,7 @@ export function MemoryEditor({ projectId }: MemoryEditorProps) {
   const [editingForeshadowId, setEditingForeshadowId] = useState<string | null>(null);
   const [editForeshadow, setEditForeshadow] = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       listChapterSummaries(projectId),
@@ -33,9 +33,9 @@ export function MemoryEditor({ projectId }: MemoryEditorProps) {
       .then(([sums, fs]) => { setSummaries(sums); setForeshadowings(fs); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, [projectId]);
 
-  useEffect(() => { load(); }, [projectId]);
+  useEffect(() => { load(); }, [load]);
 
   const saveSummary = async (s: ChapterSummary) => {
     await saveChapterSummary({ ...s, summary: editSummary });

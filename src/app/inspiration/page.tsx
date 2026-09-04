@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, TrendingUp, Loader2, Sparkles, Lightbulb, Copy, Check, Plus, Library as LibraryIcon } from 'lucide-react';
 import { RANK_SOURCES, getTrend, generateTrendInspiration } from '@/lib/trend/trends';

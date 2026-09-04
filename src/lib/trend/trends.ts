@@ -11,7 +11,7 @@
 // 复用：llm/client、deconstruct 的灵感卡落库、InspirationCard 类型。
 // ============================================================================
 import { chat } from '@/lib/llm/client';
-import { generateId, safeParseJSON } from '@/lib/utils';
+import { safeParseJSON } from '@/lib/utils';
 import type { InspirationCard } from '@/types';
 
 /** 小说平台渠道（各榜口径来源，仅作选题参考） */
@@ -167,7 +167,7 @@ export async function generateTrendInspiration(
         projectId,
         kind: 'structure',
         title: `${trend.genre} · ${trend.sourceName} 选题方向`,
-        content: trend.hotspot,
+        content: [trend.hotspot, ...base].join('\n'),
         sourceDeconstructionId: `trend_${sourceId}`,
         createdAt: Date.now(),
       },

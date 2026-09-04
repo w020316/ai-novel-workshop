@@ -14,7 +14,7 @@ import type {
   SceneDesign,
   Chapter,
 } from '@/types';
-import { assembleMemory } from '@/lib/memory/assembler';
+import { assembleMemory, estimateMemoryTokens } from '@/lib/memory/assembler';
 import { loadLongTermMemory } from '@/lib/memory/long-term';
 import { loadMidTermMemory } from '@/lib/memory/mid-term';
 import { useShortTermMemory } from '@/lib/store/short-term-memory';
@@ -158,6 +158,7 @@ async function consistencyAndRewriteLoop(
     !r.passed && r.issues.some((i) => i.severity === 'error');
 
   let attempts = 0;
+  let rewriteInterrupted = false;
   const MAX_REWRITES = 2;
   while (hasBlockingIssues(report) && attempts < MAX_REWRITES) {
     attempts++;
@@ -184,8 +185,25 @@ async function consistencyAndRewriteLoop(
       report = await checkConsistencyWithRetry(chapter, memory);
     } catch (err) {
       console.warn(`[Orchestrator] 一致性修正重写 #${attempts} 失败，沿用当前稿:`, err);
+      rewriteInterrupted = true;
       break;
     }
+  }
+
+  // 修正中断且最终报告仍有 error → 附加提示，避免用户误判"系统未尝试修正"
+  if (rewriteInterrupted && hasBlockingIssues(report)) {
+    report = {
+      ...report,
+      issues: [
+        ...report.issues,
+        {
+          type: 'plot',
+          severity: 'warning',
+          description: '自动修正未完成（重写失败或中断），以上 error 级问题保留原样',
+          suggestion: '请人工复核本章，或重新生成本章',
+        },
+      ],
+    };
   }
 
   return { result: { content: current }, consistencyReport: report };
@@ -216,7 +234,7 @@ async function assembleMemoryWithFallback(
     return assembleMemory(longTerm, midTerm, shortTerm);
   } catch (err) {
     console.warn('[Orchestrator] 记忆装配失败，尝试降级:', err);
-    // 降级：使用空记忆
+    // 降级：使用空记忆（token 估算沿用统一口径，含剧情要点，而非错误的 0）
     const emptyMemory = {
       worldview: null,
       characters: [],
@@ -224,7 +242,7 @@ async function assembleMemoryWithFallback(
       pendingForeshadowings: [],
       stylePreset: null,
     };
-    return {
+    const fallbackMemory: AssembledMemory = {
       longTerm: emptyMemory,
       midTerm: {
         relevantSummaries: [],
@@ -238,6 +256,8 @@ async function assembleMemoryWithFallback(
       },
       tokenEstimate: 0,
     };
+    fallbackMemory.tokenEstimate = estimateMemoryTokens(fallbackMemory);
+    return fallbackMemory;
   }
 }
 

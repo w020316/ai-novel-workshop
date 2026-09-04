@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, GripVertical } from 'lucide-react';
@@ -23,15 +23,15 @@ export function ForeshadowingBoard({ projectId }: ForeshadowingBoardProps) {
   const [foreshadowings, setForeshadowings] = useState<Foreshadowing[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     listForeshadowings(projectId)
       .then(setForeshadowings)
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, [projectId]);
 
-  useEffect(() => { load(); }, [projectId]);
+  useEffect(() => { load(); }, [load]);
 
   const moveTo = async (id: string, newStatus: ForeshadowingStatus) => {
     await saveForeshadowing({ ...foreshadowings.find((f) => f.id === id)!, status: newStatus });

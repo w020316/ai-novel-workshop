@@ -66,8 +66,9 @@ export async function assembleMemory(
 
 /**
  * 估算记忆的 Token 消耗
+ * 导出供降级路径复用统一估算口径（避免降级时错误地记为 0）
  */
-function estimateMemoryTokens(memory: AssembledMemory): number {
+export function estimateMemoryTokens(memory: AssembledMemory): number {
   let total = 0;
 
   // 长期记忆

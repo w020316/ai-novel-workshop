@@ -98,7 +98,7 @@ describe('generateChaptersBatch（依赖注入）', () => {
       };
       return r;
     });
-    const res = await generateChaptersBatch({
+    await generateChaptersBatch({
       projectId: 'p1',
       startChapterNo: 1,
       count: 5,

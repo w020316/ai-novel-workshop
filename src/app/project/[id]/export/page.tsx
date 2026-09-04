@@ -322,7 +322,8 @@ export default function ExportPage() {
               <CardTitle className="text-sm">封面预览</CardTitle>
             </CardHeader>
             <CardContent>
-              {/* 用 data URI 展示 SVG 封面预览 */}
+              {/* 用 data URI 展示 SVG 封面预览（本地内联 SVG，非远程图片，无需 next/image 优化） */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`data:image/svg+xml;utf8,${encodeURIComponent(
                   buildCoverSvg(

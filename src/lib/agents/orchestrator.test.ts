@@ -11,6 +11,10 @@ vi.mock('@/lib/memory/assembler', () => ({
     shortTerm: { prevChapters: [], currentPlotPoints: ['测试要点'] },
     tokenEstimate: 500,
   }),
+  estimateMemoryTokens: vi.fn(
+    (m: { shortTerm: { currentPlotPoints: string[] } }) =>
+      m.shortTerm.currentPlotPoints.join('').length
+  ),
 }));
 
 vi.mock('./plot-design', () => ({
@@ -161,6 +165,30 @@ describe('generateChapter', () => {
     warnSpy.mockRestore();
   });
 
+  it('记忆装配降级时 tokenEstimate 应按统一口径计算（含剧情要点），而非 0', async () => {
+    const { loadLongTermMemory } = await import('@/lib/memory/long-term');
+    const { estimateMemoryTokens } = await import('@/lib/memory/assembler');
+    vi.mocked(loadLongTermMemory).mockRejectedValueOnce(new Error('DB 不可用'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const context = {
+      projectId: 'proj-1',
+      chapterNo: 1,
+      plotPoints: ['测试要点甲', '测试要点乙'],
+      onStream: vi.fn(),
+      onProgress: vi.fn(),
+    };
+
+    await generateChapter(context);
+    // 降级路径应调用统一估算（而非硬编码 0），且以含剧情要点的降级记忆为入参
+    expect(vi.mocked(estimateMemoryTokens)).toHaveBeenCalled();
+    const arg = vi.mocked(estimateMemoryTokens).mock.calls[0][0] as {
+      shortTerm: { currentPlotPoints: string[] };
+    };
+    expect(arg.shortTerm.currentPlotPoints).toEqual(['测试要点甲', '测试要点乙']);
+    warnSpy.mockRestore();
+  });
+
   it('一致性校验失败时应降级到快速校验', async () => {
     const consistency = await import('./consistency');
     vi.mocked(consistency.checkConsistency).mockRejectedValueOnce(new Error('LLM 超时'));
@@ -225,16 +253,16 @@ describe('generateChapter', () => {
     void expectTitle;
   });
 
-  it('一致性修正重写失败时沿用原稿并降级到快速校验', async () => {
+  it('一致性修正重写失败时沿用原稿，报告附加"自动修正未完成"提示', async () => {
     const consistency = await import('./consistency');
-    vi.mocked(consistency.checkConsistency).mockResolvedValueOnce({
+    vi.mocked(consistency.checkConsistency).mockResolvedValue({
       chapterId: 'mock-ch',
       passed: false,
       issues: [{ type: 'plot', severity: 'error', description: '剧情矛盾', suggestion: '修正' }],
       checkedAt: Date.now(),
     });
     const { rewriteForConsistency } = await import('./rewrite');
-    vi.mocked(rewriteForConsistency).mockRejectedValueOnce(new Error('LLM 不可用'));
+    vi.mocked(rewriteForConsistency).mockRejectedValue(new Error('LLM 不可用'));
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const context = {
@@ -247,6 +275,14 @@ describe('generateChapter', () => {
 
     const result = await generateChapter(context);
     expect(result.content).toBeTruthy();
+    // 原始 error 保留 + 附加 warning 提示（避免用户误判系统未尝试修正）
+    const descriptions = result.consistencyReport.issues.map((i) => i.description);
+    expect(descriptions).toContain('剧情矛盾');
+    expect(descriptions.some((d) => d.includes('自动修正未完成'))).toBe(true);
+    const appended = result.consistencyReport.issues.find((i) =>
+      i.description.includes('自动修正未完成')
+    );
+    expect(appended?.severity).toBe('warning');
     warnSpy.mockRestore();
   });
 });

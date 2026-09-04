@@ -15,6 +15,7 @@ import { resolveProvider } from '@/lib/llm/providers';
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import { estimateTokens } from '@/lib/utils';
+import { safeParseProvider, corsPreflightResponse } from '@/lib/api/llm-shared';
 import type { LLMProvider } from '@/types';
 
 export const runtime = 'nodejs';
@@ -29,13 +30,6 @@ interface EmbeddingRequestBody {
   texts?: string[];
   provider?: LLMProvider;
   model?: string;
-}
-
-function safeParseProvider(value: unknown): LLMProvider | undefined {
-  if (value === 'gemini' || value === 'zhipu' || value === 'deepseek' || value === 'qwen') {
-    return value;
-  }
-  return undefined;
 }
 
 export async function POST(request: NextRequest) {
@@ -145,11 +139,5 @@ export async function POST(request: NextRequest) {
 }
 
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
+  return corsPreflightResponse();
 }

@@ -50,4 +50,33 @@ describe('loadMidTermMemory', () => {
     const result = await loadMidTermMemory('proj-1', 3, '测试');
     expect(result.foreshadowingsToRecover).toHaveLength(2);
   });
+
+  it('同一章命中多个状态时应合并而非覆盖（修复 last-write-wins）', async () => {
+    const summaries = [
+      { id: 's1', projectId: 'proj-1', chapterId: 'ch1', chapterNo: 1, volumeNo: 1, summary: '主角重伤之后闭关突破', keyEvents: [], characterStates: {}, embedding: new Float32Array(384), createdAt: 100 },
+    ];
+    vi.mocked(listChapterSummaries).mockResolvedValue(summaries);
+    vi.mocked(listForeshadowings).mockResolvedValue([]);
+
+    const result = await loadMidTermMemory('proj-1', 2, '');
+    // 修复前：只留下后遍历到的「突破」；修复后：两状态合并
+    expect(result.characterStates['chapter_1']).toBe('受伤、突破');
+  });
+
+  it('TF-IDF 索引签名缓存：摘要集合未变时两次检索结果一致', async () => {
+    const summaries = [
+      { id: 's1', projectId: 'proj-1', chapterId: 'ch1', chapterNo: 1, volumeNo: 1, summary: '主角在宗门修炼剑法', keyEvents: [], characterStates: {}, embedding: new Float32Array(384), createdAt: 100 },
+      { id: 's2', projectId: 'proj-1', chapterId: 'ch2', chapterNo: 2, volumeNo: 1, summary: '女主角追查家族阴谋', keyEvents: [], characterStates: {}, embedding: new Float32Array(384), createdAt: 200 },
+    ];
+    vi.mocked(listChapterSummaries).mockResolvedValue(summaries);
+    vi.mocked(listForeshadowings).mockResolvedValue([]);
+
+    const r1 = await loadMidTermMemory('proj-1', 3, '修炼剑法');
+    const r2 = await loadMidTermMemory('proj-1', 3, '修炼剑法');
+    // 第二次走缓存复用，结果必须一致
+    expect(r2.relevantSummaries.map((s) => s.chapterId)).toEqual(
+      r1.relevantSummaries.map((s) => s.chapterId)
+    );
+    expect(r1.relevantSummaries[0]?.chapterId).toBe('ch1');
+  });
 });

@@ -9,7 +9,7 @@
 // ============================================================================
 import type { MidTermMemory, ChapterSummary, PlotThread, Foreshadowing } from '@/types';
 import { listChapterSummaries, listForeshadowings } from '@/lib/db/queries';
-import { TfIdfIndex, type TfIdfDocument } from './tfidf';
+import { TfIdfIndex } from './tfidf';
 
 /**
  * 加载项目的中期记忆
@@ -34,7 +34,7 @@ export async function loadMidTermMemory(
 
   // 2. 检索相关摘要（基于 TF-IDF 关键词匹配）
   const relevantSummaries = query
-    ? searchRelevantSummaries(allSummaries, query, chapterNo, topK)
+    ? searchRelevantSummaries(projectId, allSummaries, query, chapterNo, topK)
     : getRecentSummaries(allSummaries, chapterNo, topK);
 
   // 3. 加载所有伏笔，筛选出待回收的
@@ -61,9 +61,15 @@ export async function loadMidTermMemory(
 }
 
 /**
- * 使用 TF-IDF 检索相关章节摘要
+ * 使用 TF-IDF 检索相关章节摘要。
+ * 性能：进程级签名缓存——同一次章节生成内（剧情设计/写作等多次调用）摘要集合
+ * 未变化时直接复用已建索引，避免全量重建；集合变化（章末写入新摘要）才重建。
+ * 取舍：未做增量 add（IDF 语义会漂移），百万字批量场景下重建次数已降为每章一次。
  */
+const tfidfCache = new Map<string, { sig: string; index: TfIdfIndex }>();
+
 function searchRelevantSummaries(
+  projectId: string,
   summaries: ChapterSummary[],
   query: string,
   currentChapterNo: number,
@@ -75,14 +81,27 @@ function searchRelevantSummaries(
   );
   if (prevSummaries.length === 0) return [];
 
-  // 构建 TF-IDF 索引
-  const index = new TfIdfIndex();
-  const docs: TfIdfDocument[] = prevSummaries.map((s) => ({
-    id: s.chapterId,
-    text: s.summary,
-    metadata: { chapterNo: s.chapterNo },
-  }));
-  index.build(docs);
+  const sig = `${prevSummaries.length}:${prevSummaries[prevSummaries.length - 1]?.chapterId ?? ''}`;
+  const cached = tfidfCache.get(projectId);
+  let index: TfIdfIndex;
+  if (cached && cached.sig === sig) {
+    index = cached.index;
+  } else {
+    index = new TfIdfIndex();
+    index.build(
+      prevSummaries.map((s) => ({
+        id: s.chapterId,
+        text: s.summary,
+        metadata: { chapterNo: s.chapterNo },
+      }))
+    );
+    tfidfCache.set(projectId, { sig, index });
+    // 防多项目长会话内存缓慢增长：只保留最近 4 个项目的索引
+    if (tfidfCache.size > 4) {
+      const oldest = tfidfCache.keys().next().value;
+      if (oldest !== undefined) tfidfCache.delete(oldest);
+    }
+  }
 
   // 搜索
   const results = index.search(query, topK);
@@ -166,7 +185,9 @@ function extractPlotThreads(
 }
 
 /**
- * 从章节摘要中提取人物状态
+ * 从章节摘要中提取人物状态。
+ * 修复：同一章命中多个状态时按发现顺序合并（顿号连接），
+ * 而非 last-write-wins 覆盖——此前「第3章 受伤+突破」只会留下「突破」。
  */
 function extractCharacterStates(
   summaries: ChapterSummary[]
@@ -183,11 +204,14 @@ function extractCharacterStates(
   };
 
   for (const summary of summaries) {
+    const key = `chapter_${summary.chapterNo}`;
     for (const [state, keywords] of Object.entries(characterKeywords)) {
-      for (const kw of keywords) {
-        if (summary.summary.includes(kw)) {
-          states[`chapter_${summary.chapterNo}`] = state;
-          break;
+      if (keywords.some((kw) => summary.summary.includes(kw))) {
+        const prev = states[key];
+        if (!prev) {
+          states[key] = state;
+        } else if (!prev.split('、').includes(state)) {
+          states[key] = `${prev}、${state}`;
         }
       }
     }

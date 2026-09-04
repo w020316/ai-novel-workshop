@@ -14,6 +14,7 @@ import { resolveProvider, geminiModelChain, geminiPrimaryForTask } from '@/lib/l
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import { validateMessages } from '@/lib/llm/message-validation';
+import { safeParseProvider, corsPreflightResponse } from '@/lib/api/llm-shared';
 import type { ChatMessage, LLMProvider } from '@/types';
 
 export const runtime = 'nodejs';
@@ -28,13 +29,6 @@ interface ChatRequestBody {
   topP?: number;
   maxTokens?: number;
   responseFormat?: 'text' | 'json';
-}
-
-function safeParseProvider(value: unknown): LLMProvider | undefined {
-  if (value === 'gemini' || value === 'zhipu' || value === 'deepseek' || value === 'qwen') {
-    return value;
-  }
-  return undefined;
 }
 
 export async function POST(request: NextRequest) {
@@ -145,11 +139,5 @@ export async function POST(request: NextRequest) {
 
 // 预检请求支持
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
+  return corsPreflightResponse();
 }

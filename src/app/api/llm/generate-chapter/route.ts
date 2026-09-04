@@ -14,6 +14,7 @@ import { resolveProvider } from '@/lib/llm/providers';
 import { LLMApiError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import { validateMessages } from '@/lib/llm/message-validation';
+import { safeParseProvider, corsPreflightResponse } from '@/lib/api/llm-shared';
 import type { ChatMessage, LLMProvider } from '@/types';
 
 export const runtime = 'nodejs';
@@ -27,13 +28,6 @@ interface GenerateChapterBody {
   temperature?: number;
   topP?: number;
   maxTokens?: number;
-}
-
-function safeParseProvider(value: unknown): LLMProvider | undefined {
-  if (value === 'gemini' || value === 'zhipu' || value === 'deepseek' || value === 'qwen') {
-    return value;
-  }
-  return undefined;
 }
 
 /** 数值消毒：非法/越界回退到 fallback 并夹取到 [min,max] */
@@ -188,11 +182,5 @@ export async function POST(request: NextRequest) {
 }
 
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
+  return corsPreflightResponse();
 }

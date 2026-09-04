@@ -170,8 +170,10 @@ export async function updateForeshadowings(
 }
 
 /**
- * 更新支线关联
- * 将当前章节关联到其所属的支线剧情
+ * 更新支线关联：将当前章节关联到其所属的支线剧情。
+ * 性能：thread 关键词预构建为 Set（O(1) 命中判断），替代此前
+ * 「要点关键词 × 数组 includes」的 O(P×K×M) 嵌套扫描——
+ * 百万字规模下 plotPoints×keywords 可达数万次比较，Set 化后线性。
  */
 export async function updatePlotThreads(
   projectId: string,
@@ -179,14 +181,18 @@ export async function updatePlotThreads(
 ): Promise<void> {
   const threads = await listPlotThreads(projectId);
 
+  // 本章全部要点关键词合并为一个 Set（一次提取，避免逐 thread 重复计算）
+  const pointKeywords = new Set<string>();
+  for (const point of chapter.plotPoints) {
+    for (const kw of extractKeywords(point)) {
+      pointKeywords.add(kw);
+    }
+  }
+
   for (const thread of threads) {
-    // 检查章节剧情要点与支线描述是否有共同关键词
-    const isRelated = chapter.plotPoints.some((point) => {
-      // 提取双方的关键词（取前 4 个字符进行双向匹配）
-      const pointKeywords = extractKeywords(point);
-      const threadKeywords = extractKeywords(thread.description);
-      return pointKeywords.some((kw) => threadKeywords.includes(kw));
-    });
+    // 检查章节剧情要点与支线描述是否有共同关键词（取前 2-4 字滑窗双向匹配）
+    const threadKeywords = extractKeywords(thread.description);
+    const isRelated = threadKeywords.some((kw) => pointKeywords.has(kw));
 
     if (isRelated && !thread.relatedChapters.includes(chapter.chapterNo)) {
       await savePlotThread({

@@ -331,6 +331,10 @@ export interface BatchJob {
   plotTemplate: string;
   status: 'running' | 'paused';
   updatedAt: number;
+  /** 上次失败卡住的章号（供断点续写精确定位重试该章） */
+  failedChapterNo?: number;
+  /** 上次失败的错误摘要（供 UI 展示失败原因） */
+  lastError?: string;
 }
 
 // ============ 写作技能库（Skills） ============

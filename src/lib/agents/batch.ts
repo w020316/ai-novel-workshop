@@ -14,7 +14,7 @@ import type { GenerationContext, GenerationResult, GenerationStage } from '@/typ
 /** 批量进度：逐章队列快照的一章状态（供 UI 队列可视化渲染） */
 export interface QueueChapterState {
   chapterNo: number;
-  status: 'pending' | 'running' | 'done';
+  status: 'pending' | 'running' | 'done' | 'failed';
   /** 进行中章当前阶段（仅 status=running 有意义） */
   stage: GenerationStage | null;
 }
@@ -33,23 +33,29 @@ export interface BatchQueueSnapshot {
  * 纯函数、确定性，便于单测；UI 据此渲染格子网格：
  *   - runningIndex=null → 全部 pending（未开始）
  *   - 序号 < runningIndex → done；== runningIndex → running；> → pending
+ *   - 序号 ∈ failedIndexes → failed（红格，重试失败后展示）
  * @param startChapterNo 本批次起始章号
  * @param count 本批章数
  * @param runningIndex 进行中的章序号（0-based，null=未开始）
  * @param stage 进行中章当前阶段
+ * @param failedIndexes 重试耗尽仍失败的章序号（0-based，相对本批）
  */
 export function computeBatchQueue(
   startChapterNo: number,
   count: number,
   runningIndex: number | null,
-  stage?: GenerationStage | null
+  stage?: GenerationStage | null,
+  failedIndexes: number[] = []
 ): BatchQueueSnapshot {
+  const failedSet = new Set(failedIndexes);
   const chapters: QueueChapterState[] = [];
   let doneCount = 0;
   for (let i = 0; i < count; i++) {
     let status: QueueChapterState['status'];
     let s: GenerationStage | null = null;
-    if (runningIndex === null || i > runningIndex) {
+    if (failedSet.has(i)) {
+      status = 'failed';
+    } else if (runningIndex === null || i > runningIndex) {
       status = 'pending';
     } else if (i === runningIndex) {
       status = 'running';
@@ -67,6 +73,22 @@ export function computeBatchQueue(
     allDone: runningIndex !== null && runningIndex >= count - 1,
   };
 }
+
+/** 单章重试耗尽仍失败：携带章号与尝试次数，供调用方精确定位并持久化失败现场 */
+export class BatchChapterError extends Error {
+  readonly chapterNo: number;
+  /** 实际尝试次数（首跑 + 重试） */
+  readonly attempts: number;
+  constructor(chapterNo: number, attempts: number, cause: unknown) {
+    const msg = cause instanceof Error ? cause.message : String(cause);
+    super(`第 ${chapterNo} 章 ${attempts} 次尝试均失败：${msg}`);
+    this.name = 'BatchChapterError';
+    this.chapterNo = chapterNo;
+    this.attempts = attempts;
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** 批量续写的分章剧情要点：给第 indexT 章（0 起）提供的要点数组 */
 export interface BatchPlanItem {
@@ -86,6 +108,10 @@ export interface GenerateBatchOptions {
   skillIds?: string[];
   /** 中止信号（贯通到各章上游请求） */
   signal?: AbortSignal;
+  /** 单章生成失败时的最大重试次数（默认 2，指数退避；AbortError 不重试直接中止） */
+  maxRetriesPerChapter?: number;
+  /** 首次重试等待毫秒数（默认 1500，逐次翻倍；测试可注入 0 加速） */
+  retryDelayMs?: number;
   /** 进度上报：章节号 / 总章 / 阶段 */
   onProgress?: (info: {
     chapterNo: number;
@@ -121,6 +147,8 @@ export async function generateChaptersBatch(
     plotPointsPerChapter,
     skillIds,
     signal,
+    maxRetriesPerChapter = 2,
+    retryDelayMs = 1500,
     onProgress,
     single = generateChapter,
   } = options;
@@ -147,16 +175,35 @@ export async function generateChaptersBatch(
       signal,
     };
 
-    let result: GenerationResult;
-    try {
-      result = await single(context);
-    } catch (err) {
-      // 中断落在中间阶段（剧情设计/记忆装配等）时底层 fetch 会以 AbortError 冒泡：
-      // 统一转为 aborted 语义，与「写章阶段中断」一致走暂停续写路径，而非误报失败
-      if ((err instanceof Error && err.name === 'AbortError') || signal?.aborted) {
-        return { results, chapterPLots, aborted: true };
+    let result: GenerationResult | undefined;
+    // 单章重试：网络抖动 / LLM 瞬时 429、5xx 常见，指数退避重试；
+    // 重试耗尽仍失败才抛 BatchChapterError（由调用方暂停任务并持久化失败章号）
+    const maxAttempts = Math.max(1, maxRetriesPerChapter + 1);
+    let lastErr: unknown;
+    let attempt = 0;
+    for (; attempt < maxAttempts; attempt++) {
+      try {
+        result = await single(context);
+        break;
+      } catch (err) {
+        // 中断落在中间阶段（剧情设计/记忆装配等）时底层 fetch 会以 AbortError 冒泡：
+        // 统一转为 aborted 语义，与「写章阶段中断」一致走暂停续写路径，而非误报失败（不重试）
+        if ((err instanceof Error && err.name === 'AbortError') || signal?.aborted) {
+          return { results, chapterPLots, aborted: true };
+        }
+        lastErr = err;
+        if (attempt < maxAttempts - 1) {
+          await sleep(retryDelayMs * 2 ** attempt);
+          if (signal?.aborted) {
+            return { results, chapterPLots, aborted: true };
+          }
+        }
       }
-      throw err;
+    }
+    if (!result) {
+      // 循环耗尽仍未成功：抛章级错误（携带章号），调用方据此标记失败章并停止整批
+      // —— 不跳章续写：后续章依赖前章记忆，跳过会产生记忆断层
+      throw new BatchChapterError(chapterNo, maxAttempts, lastErr);
     }
     // 本章生成被中断：残缺稿不进入结果（未落成 completed），stop 并标记 aborted，
     // 供「断点续写」从该章重新生成。

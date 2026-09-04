@@ -59,12 +59,31 @@ export async function hasActiveBatchJob(projectId: string): Promise<boolean> {
   return !!cur && cur.status === 'running' && Date.now() - cur.updatedAt < RUNNING_LOCK_MS;
 }
 
-/** 任务暂停（保留现场，供刷新后继续） */
-export async function pauseBatchJob(projectId: string): Promise<void> {
+/** 任务暂停（保留现场，供刷新后继续）。
+ * 传入 failure 时同时持久化失败章号与原因，供 UI 精确提示「第 X 章失败」并重试该章。 */
+export async function pauseBatchJob(
+  projectId: string,
+  failure?: { failedChapterNo: number; lastError: string }
+): Promise<void> {
   const id = batchJobId(projectId);
   const cur = await db.batchJobs.get(id);
   if (!cur) return;
-  await db.batchJobs.put({ ...cur, status: 'paused', updatedAt: Date.now() });
+  await db.batchJobs.put({
+    ...cur,
+    status: 'paused',
+    updatedAt: Date.now(),
+    ...(failure ? { failedChapterNo: failure.failedChapterNo, lastError: failure.lastError } : {}),
+  });
+}
+
+/** 清除失败标记（新一轮批量运行开始时调用，避免残留旧失败信息误导 UI） */
+export async function clearBatchJobFailure(projectId: string): Promise<void> {
+  const id = batchJobId(projectId);
+  const cur = await db.batchJobs.get(id);
+  if (cur && (cur.failedChapterNo !== undefined || cur.lastError !== undefined)) {
+    const { failedChapterNo: _f, lastError: _e, ...rest } = cur;
+    await db.batchJobs.put(rest);
+  }
 }
 
 /** 完成任务（删除现场） */

@@ -6,8 +6,8 @@ import { listChapters } from '@/lib/db/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChapterList } from '@/components/workbench/ChapterList';
-import { generateChaptersBatch, computeResumeCount, computeDoneCount, computeBatchQueue } from '@/lib/agents/batch';
-import { startBatchJob, pauseBatchJob, clearBatchJob, getBatchJob, hasActiveBatchJob, touchBatchJob } from '@/lib/batch/job-store';
+import { generateChaptersBatch, computeResumeCount, computeDoneCount, computeBatchQueue, BatchChapterError } from '@/lib/agents/batch';
+import { startBatchJob, pauseBatchJob, clearBatchJob, getBatchJob, hasActiveBatchJob, touchBatchJob, clearBatchJobFailure } from '@/lib/batch/job-store';
 import type { Chapter, GenerationStage, BatchJob, WritingSkill } from '@/types';
 import { getEnabledSkills } from '@/lib/skills/store';
 import { loadLiveRankedTitles } from '@/lib/rank/store';
@@ -128,6 +128,8 @@ export default function WorkbenchPage() {
     if (!isResume) {
       await startBatchJob({ projectId, total: batchCount, startChapterNo, plotTemplate: resolvedTemplate });
     }
+    // 新一轮运行开始：清除上次的失败标记，避免残留红格误导本轮队列
+    await clearBatchJobFailure(projectId);
     setBatchProgress({ chapterNo: startChapterNo, total: remaining, stage: null, done: 0 });
     try {
       const res = await generateChaptersBatch({
@@ -163,9 +165,20 @@ export default function WorkbenchPage() {
         setBatchPlot('');
       }
     } catch (e) {
-      await pauseBatchJob(projectId);
+      // 章级失败：持久化失败章号与原因，供 UI 红格定位与「继续」时从该章重试
+      const failed = e instanceof BatchChapterError ? e : null;
+      await pauseBatchJob(
+        projectId,
+        failed ? { failedChapterNo: failed.chapterNo, lastError: failed.message } : undefined
+      );
       setBatchJob(await getBatchJob(projectId));
-      toast.error('批量续写失败', { description: e instanceof Error ? e.message : String(e) });
+      toast.error(failed ? `第 ${failed.chapterNo} 章生成失败（已自动重试 ${failed.attempts} 次）` : '批量续写失败', {
+        description: failed
+          ? `${failed.message}。点击「继续批量续写」将从该章重试`
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      });
       await load();
     } finally {
       setBatchRunning(false);
@@ -195,14 +208,21 @@ export default function WorkbenchPage() {
     failed: '失败',
   };
 
-  // 队列可视化快照：由当前进行中章序号推导整批逐章状态
+  // 队列可视化快照：由当前进行中章序号推导整批逐章状态；
+  // 重试耗尽的失败章以红格展示（章号换算为本批内序号）
   const batchRunningIndex = batchProgress ? batchProgress.done : null;
   const batchStartNo = batchProgress ? Math.max(1, batchProgress.chapterNo - batchProgress.done) : 1;
+  const batchTotal = batchProgress?.total ?? 0;
+  const failedIndex =
+    batchJob?.failedChapterNo != null && batchTotal > 0
+      ? batchJob.failedChapterNo - batchStartNo
+      : -1;
   const batchQueue = computeBatchQueue(
     batchStartNo,
-    batchProgress?.total ?? 0,
+    batchTotal,
     batchRunningIndex,
-    (batchProgress?.stage as GenerationStage | null) ?? null
+    (batchProgress?.stage as GenerationStage | null) ?? null,
+    failedIndex >= 0 && failedIndex < batchTotal ? [failedIndex] : []
   );
 
   if (loading) {
@@ -348,16 +368,19 @@ export default function WorkbenchPage() {
                       title={
                         cq.status === 'running'
                           ? `第 ${cq.chapterNo} 章 · ${cq.stage ? stageLabel[cq.stage as GenerationStage] ?? cq.stage : '写入中'}`
-                          : `第 ${cq.chapterNo} 章 · ${cq.status === 'done' ? '已完成' : '待生成'}`
+                          : cq.status === 'failed'
+                            ? `第 ${cq.chapterNo} 章 · 重试失败：${batchJob?.lastError ?? ''}`
+                            : `第 ${cq.chapterNo} 章 · ${cq.status === 'done' ? '已完成' : '待生成'}`
                       }
                       className={cn(
                         'flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium',
                         cq.status === 'done' && 'bg-brand-500 text-white',
                         cq.status === 'running' && 'bg-amber-400 text-white animate-pulse',
+                        cq.status === 'failed' && 'bg-red-500 text-white',
                         cq.status === 'pending' && 'border border-stone-200 bg-stone-50 text-stone-400'
                       )}
                     >
-                      {cq.status === 'done' ? '✓' : cq.chapterNo}
+                      {cq.status === 'done' ? '✓' : cq.status === 'failed' ? '✕' : cq.chapterNo}
                     </span>
                   ))}
                 </div>
@@ -393,10 +416,17 @@ export default function WorkbenchPage() {
       {/* 断点续写横幅 */}
       {!batchRunning && batchJob && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <span>
-            上次批量续写未完成：已完成{' '}
-            {computeDoneCount(batchJob.total, batchJob.startChapterNo, chapters.reduce((m, c) => Math.max(m, c.chapterNo), 0))} / {batchJob.total} 章，可继续生成剩余章节（已生成的章会自动跳过）。
-          </span>
+          <div className="min-w-0 space-y-0.5">
+            <span className="block">
+              上次批量续写未完成：已完成{' '}
+              {computeDoneCount(batchJob.total, batchJob.startChapterNo, chapters.reduce((m, c) => Math.max(m, c.chapterNo), 0))} / {batchJob.total} 章，可继续生成剩余章节（已生成的章会自动跳过）。
+            </span>
+            {batchJob.failedChapterNo != null && (
+              <span className="block text-xs text-red-700">
+                上次在第 {batchJob.failedChapterNo} 章失败（已自动重试仍未成功）：{batchJob.lastError ?? '未知错误'}。继续时将从该章重试。
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={handleBatchWrite}>
               继续批量续写

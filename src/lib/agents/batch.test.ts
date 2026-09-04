@@ -2,7 +2,7 @@
 // 批量续写 单元测试（注入 mock single，不消耗真实 LLM）
 // ============================================================================
 import { describe, it, expect, vi } from 'vitest';
-import { generateChaptersBatch, computeResumeCount, computeDoneCount, computeBatchQueue } from './batch';
+import { generateChaptersBatch, computeResumeCount, computeDoneCount, computeBatchQueue, BatchChapterError } from './batch';
 import type { GenerationResult } from '@/types';
 
 function mockSingle() {
@@ -163,6 +163,76 @@ describe('generateChaptersBatch（依赖注入）', () => {
       generateChaptersBatch({ projectId: 'p1', startChapterNo: 1, count: 2, single: single as never })
     ).rejects.toThrow('上游 LLM 500');
   });
+
+  it('单章瞬时失败应自动重试并继续整批（retryDelayMs=0 加速）', async () => {
+    const single = vi.fn(async (ctx: { chapterNo: number }) => {
+      // 第 6 章首跑失败一次，重试成功
+      if (ctx.chapterNo === 6 && single.mock.calls.length === 2) {
+        throw new Error('网络抖动');
+      }
+      return {
+        content: `第${ctx.chapterNo}章正文`,
+        sceneDesign: { setting: 's', conflict: '', highlight: '', foreshadowingToPlant: [], foreshadowingToRecover: [], characterAppearances: [] },
+        consistencyReport: { chapterId: `c${ctx.chapterNo}`, passed: true, issues: [], checkedAt: 0 },
+        wordCount: 1,
+      } as GenerationResult;
+    });
+    const res = await generateChaptersBatch({
+      projectId: 'p1',
+      startChapterNo: 5,
+      count: 3,
+      retryDelayMs: 0,
+      single: single as never,
+    });
+    expect(res.aborted).toBe(false);
+    expect(res.results).toHaveLength(3);
+    // 第 6 章多跑一次：3 章 + 1 次重试 = 4 次调用
+    expect(single).toHaveBeenCalledTimes(4);
+  });
+
+  it('重试耗尽应抛 BatchChapterError 且携带章号与尝试次数', async () => {
+    const single = vi.fn(async () => {
+      throw new Error('上游 LLM 500');
+    });
+    try {
+      await generateChaptersBatch({
+        projectId: 'p1',
+        startChapterNo: 7,
+        count: 2,
+        maxRetriesPerChapter: 2,
+        retryDelayMs: 0,
+        single: single as never,
+      });
+      expect.unreachable('应抛出 BatchChapterError');
+    } catch (e) {
+      expect(e).toBeInstanceOf(BatchChapterError);
+      const err = e as BatchChapterError;
+      expect(err.chapterNo).toBe(7); // 首章失败即停止（不跳章，避免记忆断层）
+      expect(err.attempts).toBe(3); // 首跑 + 2 次重试
+      expect(err.message).toContain('第 7 章');
+      expect(err.message).toContain('上游 LLM 500');
+    }
+    expect(single).toHaveBeenCalledTimes(3);
+  });
+
+  it('AbortError 不应触发重试（直接转 aborted 语义）', async () => {
+    let calls = 0;
+    const single = vi.fn(async () => {
+      calls++;
+      const e = new Error('This operation was aborted');
+      e.name = 'AbortError';
+      throw e;
+    });
+    const res = await generateChaptersBatch({
+      projectId: 'p1',
+      startChapterNo: 1,
+      count: 3,
+      retryDelayMs: 0,
+      single: single as never,
+    });
+    expect(res.aborted).toBe(true);
+    expect(calls).toBe(1); // 不重试
+  });
 });
 describe('computeBatchQueue（队列可视化快照）', () => {
   it('未开始：全部 pending，doneCount=0', () => {
@@ -192,6 +262,18 @@ describe('computeBatchQueue（队列可视化快照）', () => {
     const q = computeBatchQueue(10, 3, 0, 'writing');
     expect(q.chapters.map((c) => c.chapterNo)).toEqual([10, 11, 12]);
     expect(q.chapters[0].status).toBe('running');
+  });
+
+  it('failedIndexes 命中的章显示为 failed（重试耗尽红格）', () => {
+    const q = computeBatchQueue(1, 4, 1, 'writing', [1]);
+    expect(q.chapters.map((c) => c.status)).toEqual(['done', 'failed', 'pending', 'pending']);
+    expect(q.chapters[1].chapterNo).toBe(2);
+    expect(q.doneCount).toBe(1);
+  });
+
+  it('failedIndexes 为空数组时行为与旧版一致（向后兼容）', () => {
+    const q = computeBatchQueue(1, 3, 2, 'completed', []);
+    expect(q.chapters.map((c) => c.status)).toEqual(['done', 'done', 'running']);
   });
 });
 

@@ -1,0 +1,94 @@
+# AI 小说制作工坊 · 竣工审计轮次 2 报告（代码审查 + 安全加固 + 演练验证）
+
+> 本轮聚焦「系统性代码审查 → 分级定位问题 → 落地安全/健壮性修复 → 回归验证 → 交付归档」。
+> 关联：QA 审计轮 `docs/2026-09-04-audit-round.md`；主交付 `docs/2026-09-03-delivery-report.md`；阶段十五 `docs/2026-09-04-delivery-summary.md`。
+> 提交：`2bf3f66`（已推送 master，Vercel 部署触发）。
+
+---
+
+## 一、质量基线（本轮实测）
+
+| 项 | 结果 |
+| --- | --- |
+| 类型检查 `tsc --noEmit` | ✅ 零错误 |
+| Lint `eslint .`（Flat v9） | ✅ 0 错误 / 0 警告 |
+| 生产构建 `next build` | ✅ Compiled successfully · generate static 通过 |
+| 单元测试（全量） | ✅ **92 文件 / 793 用例全绿**（较上轮 +27） |
+| 代码覆盖率（v8） | 行 89.86% · 语句 87.98% · 函数 87.23% · 分支 75.74%（前两普超 80% 红线；分支接近） |
+
+---
+
+## 二、代码审查（范围与结论）
+
+定向审查全部 25 个 `lib/` 模块 + `api/` 全部 route：`agents`、`originality`、`batch`、`skills`、`rank`、`review`、`health`、`memory`、`outline`、`export`、`character`、`worldview`、`inspiration`、`compliance`。
+
+**总体结论**：架构健康，确定性规则多数为纯函数无 LLM/网络、可测可回归，是亮点。发现 2 个高严重度风险与若干中/低项，本轮落地修复最高的 2 项；其余如实列入「识别待排期」。
+
+| 严重度 | 问题 | 处置 |
+| --- | --- | --- |
+| 🔴 高 | **SSRF**：`POST /api/skills/import` 服务端 fetch 任意用户 URL，未经校验可诱导请求内网/云元数据地址 | ✅ 本轮加固 |
+| 🔴 高 | **限流可绕过**：`rate-limit.ts` 仅信任 `x-forwarded-for`，无头请求并入同一桶，速率与宣称不符 | ⏳ 识别待排期（动 LLM 入口需谨慎回归） |
+| 🟠 中 | **榜单黑名单无限膨胀**：运行时查重库每次抓取带新时间戳，无 TTL | ✅ 本轮修复 |
+| 🟠 中 | Abort 中断的残缺章以 `completed` 落库（与断点续写强耦合） | ⏳ 识别待排期（改动有回归风险，需单测兜底） |
+| 🟠 中 | `mid-term` 角色状态 last-write-wins；`updatePlotThreads` O(N·M²)；TF-IDF 每章重建 | ⏳ 识别，百万字后优化 |
+| 🟡 低 | memory token 三套估算口径不一致；`generate-chapter` route 消息校验弱于 `chat` route；多处 CORS 重复 | ⏳ 识别待排期 |
+
+---
+
+## 三、问题修复记录（本轮落地）
+
+### 修复 1 · SSRF 加固（安全 · 高）
+- **位置**：`src/app/api/skills/import/route.ts`、`src/lib/skills/import.ts`
+- **问题**：技能导入需服务端 `fetch` 用户提交的任意 URL，属典型 SSRF 向量；`redirect:'follow'` 放大风险。
+- **方案**：
+  1. 新增纯函数 `checkUrlTarget` / `isReservedIpv4` / `isReservedIpv6` / `isInternalHostname` / `extractHostname`，拒绝内网/环回/链路本地/云元数据保留段（IPv4/IPv6/IP 字面量/内部网域），并限定 `http(s)` 协议。
+  2. 路由层用 `node:dns/promises` 解析域名，任何解析地址落到保留段即拒绝（纵深防御）。
+  3. 跟随重定向后再校验落地 host，阻断「公网转跳内网」。
+- **验证**：新增 15 条 SSRF 用例全绿；`tsc/eslint/build` 通过。
+
+### 修复 2 · 实时榜单查重库 TTL 清理（健壮性 · 中）
+- **位置**：`src/lib/rank/store.ts`
+- **问题**：`id` 每次抓取带新时间戳、`loadLiveRankedTitles` 返回全部历史，反复「一键抓取」使黑名单无限膨胀、误报陈年热梗。
+- **方案**：新增 `purgeStaleLiveRankedWorks`（默认 7 天保活窗口），`saveLiveRankedWorks` 写入前自动清理；失败降级场景保持原有「返回上次成功缓存」语义。
+- **验证**：新增 3 条用例（过期清理 / 窗口内保留 / 写入自动清理），全绿。
+
+---
+
+## 四、测试结果（按类型）
+
+| 类型 | 结果 |
+| --- | --- |
+| 单元测试（Vitest） | ✅ 92 文件 / 793 用例通过，0 失败 |
+| 本轮新增 | ✅ +27（SSRF 校验 15 · 榜单保活清理 3 · 既有路径回归） |
+| 类型检查 | ✅ tsc 零错误 |
+| Lint | ✅ 0 问题 |
+| 生产构建 | ✅ next build 通过 / 静态页生成 8/8 |
+| E2E（Playwright，历史） | ✅ 移动端 4 核心路由 + 桌面流程此前已覆盖 |
+
+---
+
+## 五、前端优化方向（基于既定设计系统）
+
+已经齐全的《砚斋·墨印》文房设计系统（`docs/design/*`）提供纸墨/松烟墨/青竹色/朱砂四色系、排版层级与组件规范，本轮不重造轮子。建议的增量（待排期）：
+1. 工作台移动端左导航折叠为抽屉，提升信息密度。
+2. 新建项目长表单加黏性提交条 + 分步引导，降低中途放弃率。
+3. 统一 `api/*/route.ts` CORS 与 provider 解析为共享工具，消除三处重复。
+4. 记忆 token 估算与 `memoryToPrompt` 实际注入字段对齐，防止超长 prompt 冲顶。
+
+---
+
+## 六、交付 / 部署
+
+- 提交 `2bf3f66 fix(安全): 技能导入 URL 服务端抓取 SSRF 加固 + 实时榜单查重库 TTL 清理` → 已推送 `master`。
+- 工作流由「推送 master」触发部署（其余阶段依赖 GitHub Actions 已在 `.github/workflows` 配置）。
+- 交付物：本报告 + 既有主交付/UX/交接/设计/用户手册/测试文档构成完整交付套件。
+
+---
+
+## 七、新功能建议（可行性 · 已备选）
+
+| # | 建议 | 用户价值 | 实现难度 | 优先级 |
+| --- | --- | --- | --- | --- |
+| 1 | SSRF 校验「仅白名单源」模式开关（github/hf/自定义三档） | 安全与开放平衡 | 低 | 高 |
+| 2 | 榜单保活窗口可视化（趋势页展示各平台黑名单条数与过期时间） | 透明可控 | 低 | 中 |
+| 3 | 章节中断稿标记 `interrupted`（可续写而非以 completed 落库） | 防止脏稿污染成稿 | 中 | 高 |

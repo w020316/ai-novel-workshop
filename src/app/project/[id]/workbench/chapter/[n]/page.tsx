@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { getChapter, saveChapter, saveChapterVersion, listChapterVersions } from '@/lib/db/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -391,27 +392,25 @@ export default function ChapterPage() {
             </select>
           </label>
         </div>
-        {/* 本轮技能选择 */}
-        {enabledSkills.length > 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-stone-500">
-            <button
-              type="button"
-              onClick={() => setShowSkillPicker((v) => !v)}
-              className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-xs text-stone-600 hover:border-brand-300"
-            >
-              <Wand2 className="h-3.5 w-3.5 text-brand-500" />
-              本轮技能
-              {showSkillPicker && ' · 关闭'}
-              {!showSkillPicker && (selectedSkillIds ? `（已选 ${selectedSkillIds.length}/${enabledSkills.length}）` : '（全部）')}
-            </button>
-          </div>
-        )}
-        {showSkillPicker && enabledSkills.length > 0 && (
+        {/* 本轮技能选择（常驻入口，无启用技能时引导去技能库） */}
+        <div className="flex items-center gap-1.5 text-xs text-stone-500">
+          <button
+            type="button"
+            onClick={() => setShowSkillPicker((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-xs text-stone-600 hover:border-brand-300"
+          >
+            <Wand2 className="h-3.5 w-3.5 text-brand-500" />
+            本轮技能
+            {showSkillPicker && ' · 关闭'}
+            {!showSkillPicker && (selectedSkillIds ? `（已选 ${selectedSkillIds.length}/${enabledSkills.length}）` : enabledSkills.length > 0 ? '（全部）' : '（未启用）')}
+          </button>
+        </div>
+        {showSkillPicker && (
           <div className="w-full rounded-md border border-stone-100 bg-white p-2.5">
             <div className="mb-1.5 flex items-center justify-between">
               <p className="flex items-center gap-1.5 text-xs font-medium text-stone-600">
                 <Wand2 className="h-3.5 w-3.5 text-brand-500" />
-                本轮应用技能（不勾选即全量生效）
+                本轮应用技能
               </p>
               <button
                 type="button"
@@ -421,6 +420,15 @@ export default function ChapterPage() {
                 复位全部
               </button>
             </div>
+            {enabledSkills.length === 0 ? (
+              <p className="rounded-md bg-stone-50 p-2.5 text-xs text-stone-500">
+                尚未启用任何写作技能。可前往{' '}
+                <Link href="/skills" className="font-medium text-brand-600 hover:text-brand-700">
+                  写作技能库
+                </Link>{' '}
+                启用或导入技能，启用后即可在此自由选择本轮应用的技能。
+              </p>
+            ) : (
             <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {enabledSkills.map((s) => (
                 <label
@@ -453,6 +461,7 @@ export default function ChapterPage() {
                 </label>
               ))}
             </div>
+            )}
           </div>
         )}
         {generating && (

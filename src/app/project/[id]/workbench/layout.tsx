@@ -9,20 +9,21 @@ export default function WorkbenchLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
 
   const tabs = [
-    { href: '/chapters', label: '章节列表', icon: ListOrdered },
-    { href: '/outline', label: '大纲视图', icon: BookText },
+    // 章节列表就在 /workbench 根路径（不要指向不存在的 /workbench/chapters）
+    { href: '/workbench', label: '章节列表', icon: ListOrdered },
+    { href: '/workbench/outline', label: '大纲视图', icon: BookText },
   ];
 
   // 用当前路径判断当前子页签
-  const currentPath = pathname.split('/workbench')[1] || '/chapters';
+  const currentPath = pathname.split('/workbench')[1] || '';
 
   return (
     <div>
       {/* 子导航 */}
       <div className="mb-6 flex items-center gap-1 border-b border-paper-200">
         {tabs.map((tab) => {
-          const href = pathname.replace(/\/workbench(\/.*)?$/, `/workbench${tab.href}`);
-          const isActive = currentPath === tab.href || currentPath.startsWith(tab.href + '/');
+          const href = pathname.replace(/\/workbench(\/.*)?$/, tab.href);
+          const isActive = currentPath === tab.href.replace('/workbench', '') || currentPath.startsWith(tab.href.replace('/workbench', '') + '/');
           const Icon = tab.icon;
           return (
             <Link

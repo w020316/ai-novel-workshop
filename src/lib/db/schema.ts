@@ -18,6 +18,7 @@ import type {
   Deconstruction,
   InspirationCard,
   ChapterVersion,
+  LiveRankedWork,
 } from '@/types';
 
 export class NovelDB extends Dexie {
@@ -35,6 +36,7 @@ export class NovelDB extends Dexie {
   deconstructions!: Table<Deconstruction, string>;
   inspirationCards!: Table<InspirationCard, string>;
   chapterVersions!: Table<ChapterVersion, string>;
+  liveRankedWorks!: Table<LiveRankedWork, string>;
 
   constructor() {
     super('ai_novel_workshop');
@@ -59,6 +61,10 @@ export class NovelDB extends Dexie {
     // 章节版本：正文历史快照（阶段二·版本回滚）
     this.version(3).stores({
       chapterVersions: 'id, chapterId, projectId, chapterNo, createdAt',
+    });
+    // 实时榜单动态查重库（阶段十七）
+    this.version(4).stores({
+      liveRankedWorks: 'id, sourceId, title, fetchedAt',
     });
   }
 }

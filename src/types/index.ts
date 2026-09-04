@@ -305,6 +305,19 @@ export interface InspirationCard {
   createdAt: number;
 }
 
+
+// ============ 实时榜单 - 动态查重库 ============
+export interface LiveRankedWork {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  title: string;
+  author?: string;
+  rank?: number;
+  url?: string;
+  fetchedAt: number;
+}
+
 // ============ 起名工具 ============
 export type NameCategory = 'person' | 'place' | 'skill' | 'sect' | 'weapon' | 'treasure';
 

@@ -13,6 +13,7 @@ import type { AiTraceReport, HumanizeSpotFix } from '@/lib/humanize';
 import { reviewChapter, readerReviewVerdictLabel } from '@/lib/review/reader-review';
 import type { ReaderReview } from '@/lib/review/reader-review';
 import { checkContentCompliance } from '@/lib/compliance/check';
+import { loadLiveRankedTitles } from '@/lib/rank/store';
 import type { ComplianceReport } from '@/lib/compliance/check';
 import {
   Loader2,
@@ -257,9 +258,16 @@ export default function ChapterPage() {
     }
   }, [reviewing, streamingContent, title, chapterNo]);
 
-  // 投稿合规体检：投递前一次性自查违规/敏感/广告/格式残留/AI痕迹/章节尺度
-  const handleCompliance = useCallback(() => {
-    const report = checkContentCompliance(streamingContent);
+  // 投稿合规体检：投递前一次性自查违规/敏感/广告/格式残留/AI痕迹/章节尺度；
+  // 并叠加"实时榜单动态黑名单"，对照最新热书做原创性提醒
+  const handleCompliance = useCallback(async () => {
+    let liveTitles: string[] = [];
+    try {
+      liveTitles = await loadLiveRankedTitles();
+    } catch {
+      liveTitles = [];
+    }
+    const report = checkContentCompliance(streamingContent, liveTitles);
     setCompliance(report);
     toast.info(
       report.passed

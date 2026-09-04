@@ -619,42 +619,31 @@
 
 ***
 
-## 阶段十七 · 实时榜单抓取（突破 CORS/反爬）+ 趋势页增强（2026-09-04）
+## 阶段十七补充 · 实时榜单→运行时查重（动态黑名单，2026-09-04）
 
-### 1. 背景
+### 1. 目的
 
-上一轮小说榜单为"内置静态参考"；用户要求解决"依赖实时榜单、但平台普遍反爬/CORS 挡抓取"的问题。
+让"不与平台小说重复"不只依赖内置 static 库，而是把每次抓取到的**实时热书名**持久化，叠加进查重与生成规避，对照最新热书。
 
-### 2. 破解思路（实测验证）
+### 2. 实现
 
-| 阻碍    | 真相                            | 方案                                   |
-| ----- | ----------------------------- | ------------------------------------ |
-| CORS  | 只挡浏览器，服务端 fetch 无 CORS        | 榜单改为**服务端爬取**（Node fetch + 真实 UA）    |
-| 起点反爬  | 返回 202 JS-验证/盾                | 标为 `blocked`，提示浏览器打开→粘贴→拆解           |
-| 七猫/晋江 | 前端 JS 渲染，静态 HTML 无数据          | 同上降级                                 |
-| 番茄/飞卢 | **服务端直出**（SSR/静态 HTML）        | 服务端实时解析 ✔                            |
-| 飞卢编码  | GBK，`text()` 默认 UTF-8 解码 → 乱码 | 按响应头/meta charset 用 TextDecoder 正确解码 |
+- 数据层 `schema.ts` 新增 `version(4).liveRankedWorks` 表；`LiveRankedWork` 类型
 
-### 3. 交付物
+- `src/lib/rank/store.ts`：`saveLiveRankedWorks`（按 title 全库去重）/ `loadLiveRankedTitles` / `countLiveRankedWorks` / `clearLiveRankedWorks`
 
-- `src/lib/rank/scraper.ts`：源适配器表 + 番茄(SSR JSON)/飞卢(静态HTML锚点) 实时解析 + charset 探测解码 + 超时降级；`scrapePlatform` 对 blocked/未知/失败平台给出明确提示
+- `checkOriginality` 新增 `liveTitles` 运行时叠加黑名单，标题级匹配，命中记为「实时榜单」维度并扣分
 
-- `src/app/api/rank/fetch/route.ts`：`GET /api/rank/fetch?platform=xx`
+- `buildAvoidance` 新增 `liveTitles`，Prompt 追加「实时榜单·慎撞」负例
 
-- 趋势页 `/settings/trend`：新增「实时榜单抓取」卡片——平台可实时标记(绿"实时")、一键抓取、抓取列表展示、"拆解成灵感"并入收藏卡；blocked 平台给出"在浏览器打开榜单→"外链
+- 合规体检 `checkContentCompliance(content, liveTitles?)` 透传
 
-- 单测 +6（解析fixture/blocked/未知/可抓平台）
+- 章节页投稿体检 `handleCompliance` 异步加载实时黑名单后体检
 
-### 4. 端到端验证（真实生产构建 `next start`）
+- 趋势页：抓取成功即 `saveLiveRankedWorks` 并入运行时查重（toast 提示）＋「运行时查重库」状态条（条数/平台数/清空按钮）
 
-- 番茄：`/api/rank/fetch?platform=fanqie` → ok，10 部实时作品（含作者/名次）
+### 3. 验证
 
-- 飞卢：`/api/rank/fetch?platform=feilu` → ok，50 部实时作品，书名中文正确（GBK 解码修复生效）
+- 单测 +3（liveTitles 命中/未命中/buildAvoidance 慎撞），累计 **712 全绿**
 
-- 起点：`blocked=true`，返回浏览器打开建议
+- `typecheck` 0 错，`next build` 成功
 
-- 全量回归 **84 文件 / 709 用例全绿**；`typecheck` 0 错；`next build` 成功
-
-### 5. 说明
-
-对验证/JS 渲染型平台，自动抓取不可行（不代做绕过登录/验证，符合平台条款与信息获取边界），统一降级到"浏览器打开 → 粘贴 → 拆解"，体验闭环。

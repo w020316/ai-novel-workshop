@@ -39,6 +39,8 @@ export interface OriginalityOptions {
   genre?: string;
   /** 最多上报几部作品 */
   maxHits?: number;
+  /** 运行时叠加黑名单：实时榜单抓取到的热书作品名，按标题级比对 */
+  liveTitles?: string[];
 }
 
 /**
@@ -73,6 +75,25 @@ export function checkOriginality(text: string, options: OriginalityOptions = {})
         genre: work.genre,
         matched,
       });
+    }
+  }
+
+  // 运行时叠加黑名单：实时榜单热书名（标题级，逐字命中）
+  if (options.liveTitles && options.liveTitles.length && hits.length < maxHits + 3) {
+    const c = normalize(content);
+    const addedHere: string[] = [];
+    for (const title of options.liveTitles) {
+      if (!title || addedHere.includes(title)) continue;
+      if (hits.length >= maxHits) break;
+      if (c.includes(normalize(title))) {
+        hits.push({
+          workTitle: title,
+          platform: 'live',
+          genre: '实时榜单',
+          matched: '实时榜单热书',
+        });
+        addedHere.push(title);
+      }
     }
   }
 
@@ -117,7 +138,7 @@ function platformName(id: string): string {
   const map: Record<string, string> = {
     qidian: '起点', fanqie: '番茄', jinjiang: '晋江',
     feilu: '飞卢', qimao: '七猫', xiaoxiang: '潇湘',
-    hongxiu: '红袖', yuewen: '阅文',
+    hongxiu: '红袖', yuewen: '阅文', live: '实时榜单',
   };
   return map[id] ?? id;
 }
@@ -129,6 +150,8 @@ export interface AvoidanceInput {
   platformId?: string;
   /** 自填的项目定位/梗（可选），追加在负例前，引导沿自我设定创新 */
   premise?: string;
+  /** 运行时叠加黑名单：实时榜单热书名（可选） */
+  liveTitles?: string[];
 }
 
 export interface AvoidanceBlock {
@@ -146,7 +169,7 @@ export interface AvoidanceBlock {
  * 引导在同热梗方向下做差异化创新。
  */
 export function buildAvoidance(input: AvoidanceInput = {}): AvoidanceBlock {
-  const { genre, platformId, premise } = input;
+  const { genre, platformId, premise, liveTitles } = input;
   const pool = genre ? WORKS_DB.filter((w) => w.genre === genre) : WORKS_DB;
   const works = pool.length > 0 ? pool : WORKS_DB;
   // 去重后取若干代表作为负例
@@ -167,6 +190,10 @@ ${avoidLine || '（暂无内置代表作品，请保持设定自洽原创）'}`)
     parts.push('');
     parts.push(`【目标平台榜单参考】
 ${rankingHint}`);
+  }
+  if (liveTitles && liveTitles.length) {
+    parts.push('');
+    parts.push(`【实时榜单·慎撞】以下为当前平台/全网高热热书名，请勿直接套用同名或同梗设定：${liveTitles.slice(0, 20).join('、')}`);
   }
 
   return { prompt: parts.join('\n'), avoid, rankingHint };

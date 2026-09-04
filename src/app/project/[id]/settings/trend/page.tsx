@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { TrendingUp, Loader2, Sparkles, Lightbulb, ScanText, Radio } from 'lucide-react';
 import type { InspirationCard } from '@/types';
 import type { RankFetchResult } from '@/lib/rank/scraper';
+import { saveLiveRankedWorks, countLiveRankedWorks, clearLiveRankedWorks } from '@/lib/rank/store';
 
 const GENRES = ['玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他'];
 const RHYTHM_LABEL: Record<string, string> = { fast: '快节奏', medium: '中等', slow: '慢节奏' };
@@ -40,6 +41,10 @@ export default function TrendPage() {
   const [pasting, setPasting] = useState(false);
   const [rank, setRank] = useState<RankFetchResult | null>(null);
   const [fetchingRank, setFetchingRank] = useState(false);
+  const [liveStats, setLiveStats] = useState<{ total: number; platforms: number }>({
+    total: 0,
+    platforms: 0,
+  });
 
   const loadCards = useCallback(async () => {
     setSavedCards(await listInspirationCards(projectId));
@@ -104,6 +109,28 @@ export default function TrendPage() {
 
   const SCRAPABLE = ['fanqie', 'feilu'];
 
+  const refreshLiveStats = useCallback(async () => {
+    try {
+      setLiveStats(await countLiveRankedWorks());
+    } catch {
+      setLiveStats({ total: 0, platforms: 0 });
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshLiveStats();
+  }, [refreshLiveStats]);
+
+  const handleClearLive = async () => {
+    try {
+      await clearLiveRankedWorks();
+      setLiveStats({ total: 0, platforms: 0 });
+      toast.success('已清空运行时查重库');
+    } catch {
+      toast.error('清空失败');
+    }
+  };
+
   const handleFetchRank = async () => {
     setFetchingRank(true);
     setRank(null);
@@ -111,6 +138,11 @@ export default function TrendPage() {
       const res = await fetch(`/api/rank/fetch?platform=${encodeURIComponent(sourceId)}`);
       const data: RankFetchResult = await res.json();
       setRank(data);
+      if (data.ok && data.books.length > 0) {
+        await saveLiveRankedWorks(data.books, data.sourceName);
+        await refreshLiveStats();
+        toast.success(`已将 ${data.books.length} 部实时热书并入运行时查重`);
+      }
     } catch (e) {
       setRank({
         ok: false,
@@ -358,6 +390,21 @@ export default function TrendPage() {
               </a>
             )}
           </div>
+
+          {liveStats.total > 0 && (
+            <p className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-700">
+              <span>
+                运行时查重库：已并入 {liveStats.total} 部热书 / 覆盖 {liveStats.platforms} 个平台（生成与投稿体检会对照提醒）
+              </span>
+              <button
+                type="button"
+                onClick={handleClearLive}
+                className="font-medium underline decoration-emerald-300 hover:text-emerald-600"
+              >
+                清空
+              </button>
+            </p>
+          )}
 
           {rank && (
             <div className="rounded-md border border-stone-200 bg-stone-50/70 p-3 text-xs">

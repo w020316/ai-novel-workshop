@@ -40,6 +40,23 @@ describe('originality / checkOriginality', () => {
     const r = checkOriginality('   ');
     expect(r.passed).toBe(true);
   });
+
+  it('实时榜单热书名命中：不通过并标注为实时榜单', () => {
+    const r = checkOriginality('我把《盘点万界战力等级》的设定又翻改了一下。', {
+      liveTitles: ['盘点万界战力等级', '雾镇银鱼'],
+    });
+    expect(r.passed).toBe(false);
+    const hit = r.hits.find((h) => h.genre === '实时榜单' && h.workTitle === '盘点万界战力等级');
+    expect(hit).toBeDefined();
+  });
+
+  it('liveTitles 未出现：不影响原创性', () => {
+    const r = checkOriginality('雾镇的银鱼会数涨潮的时辰。', {
+      liveTitles: ['盘点万界战力等级'],
+      genre: '玄幻',
+    });
+    expect(r.passed).toBe(true);
+  });
 });
 
 describe('originality / buildAvoidance', () => {
@@ -60,6 +77,12 @@ describe('originality / buildAvoidance', () => {
   it('无题材时退化为全库负例', () => {
     const b = buildAvoidance({});
     expect(b.avoid.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('liveTitles 追加"实时榜单·慎撞"负例', () => {
+    const b = buildAvoidance({ liveTitles: ['盘点万界战力等级', '雾镇银鱼'] });
+    expect(b.prompt).toContain('实时榜单·慎撞');
+    expect(b.prompt).toContain('盘点万界战力等级');
   });
 });
 

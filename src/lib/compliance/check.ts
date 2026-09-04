@@ -133,7 +133,7 @@ const AI_FLAG_THRESHOLD = 6;
  * 对章节正文做投稿前合规体检。
  * @param content 章节正文
  */
-export function checkContentCompliance(content: string): ComplianceReport {
+export function checkContentCompliance(content: string, liveTitles?: string[]): ComplianceReport {
   const text = content.trim();
   const categories: ComplianceCategory[] = [];
   const priorities: string[] = [];
@@ -234,7 +234,7 @@ export function checkContentCompliance(content: string): ComplianceReport {
 
 
   // ---- 4) 原创性查重（复用作品库，命中即提示避免复刻平台代表作）----
-  const orig = checkOriginality(text);
+  const orig = checkOriginality(text, { liveTitles });
   if (orig.hits.length > 0) {
     categories.push({
       id: 'originality',

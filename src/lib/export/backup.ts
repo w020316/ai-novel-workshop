@@ -42,7 +42,9 @@ export function downloadBackup(backup: ProjectBackup, filename?: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename ?? `backup_${backup.project.title}_${new Date().toISOString().slice(0, 10)}.json`;
+  // 清洗文件名：项目标题可能含 \/:*?"<>| 等非法字符或空白
+  const safeTitle = backup.project.title.replace(/[\\/:*?"<>|\s]+/g, '_');
+  a.download = filename ?? `backup_${safeTitle}_${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }

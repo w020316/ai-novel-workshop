@@ -24,7 +24,7 @@ import { checkConsistency, quickCheck } from './consistency';
 import { rewriteForConsistency } from './rewrite';
 import { generateChapterTitle } from '@/lib/llm/generators/chapter-title';
 import { updateMemoryAfterChapter } from '@/lib/memory/updater';
-import { saveChapter, getProject, getStylePreset } from '@/lib/db/queries';
+import { saveChapter, getChapter, getProject, getStylePreset, saveConsistencyReport } from '@/lib/db/queries';
 import { withRetry } from '@/lib/llm/retry';
 import { generateId } from '@/lib/utils';
 import { localReaderReview } from '@/lib/review/reader-review';
@@ -99,11 +99,17 @@ export async function generateChapter(
 
     // ===== Stage 5: 记忆更新 =====
     context.onProgress('memory_updating');
-    const chapter = await buildChapter(context, sceneDesign, result.content, title);
+    const chapter = await buildChapter(context, sceneDesign, result.content, title, memory);
     await updateMemoryAfterChapter(context.projectId, chapter);
 
     // ===== 保存章节 =====
     await saveChapter(chapter);
+    // 一致性报告同步落库：此前从不持久化，导出备份的 consistencyReports 恒为空
+    try {
+      await saveConsistencyReport({ ...consistencyReport, chapterId: chapter.id });
+    } catch (err) {
+      console.warn('[Orchestrator] 一致性报告落库失败（不影响章节）:', err);
+    }
 
     context.onProgress('completed');
 
@@ -181,6 +187,9 @@ async function consistencyAndRewriteLoop(
   let rewriteInterrupted = false;
   const MAX_REWRITES = 2;
   while (hasBlockingIssues(report) && attempts < MAX_REWRITES) {
+    // 中止后不再消耗 LLM 配额跑校验/重写（writeChapter 感知 abort 返回部分稿后，
+    // 上层会走 interrupted 分支，此循环不应继续）
+    if (context.signal?.aborted) break;
     attempts++;
     const stage: GenerationStage = attempts === 1 ? 'rewriting_1' : 'rewriting_2';
     context.onProgress(stage);
@@ -413,21 +422,34 @@ async function checkConsistencyWithRetry(
 }
 
 /**
- * 构建章节对象
+ * 构建章节对象。
+ * 数据完整性：按 (projectId, chapterNo) 复用已有章节的 id——saveChapter 是按
+ * 主键 id 的 put 覆盖，若每次生成新 id，重新生成已有章会插入同章号重复记录
+ * （导出重复、getChapter 取到任意一版、字数翻倍）。复用 id 即「更新旧章」。
  */
 async function buildChapter(
   context: GenerationContext,
   sceneDesign: SceneDesign,
   content: string,
-  title: string
+  title: string,
+  memory?: AssembledMemory
 ): Promise<Chapter> {
   // 中文计数
   const chineseChars = (content.match(/[\u4e00-\u9fff]/g) ?? []).length;
 
+  // 复用同章号已有记录的 id（存在人工修改稿时其版本快照逻辑仍由上层负责）
+  const existing = await getChapter(context.projectId, context.chapterNo).catch(() => undefined);
+
+  // 依据大纲卷区间反查所属卷，替代硬编码 1（多卷规划的按卷统计/体检依赖正确卷号）
+  const volumes = memory?.longTerm.outline?.volumes ?? [];
+  const activeVolume = volumes.find(
+    (v) => context.chapterNo >= v.chapterRange[0] && context.chapterNo <= v.chapterRange[1]
+  );
+
   return {
-    id: generateId('ch'),
+    id: existing?.id ?? generateId('ch'),
     projectId: context.projectId,
-    volumeNo: 1, // 默认第一卷
+    volumeNo: activeVolume?.volumeNo ?? existing?.volumeNo ?? 1,
     chapterNo: context.chapterNo,
     title: title || `第${context.chapterNo}章`,
     plotPoints: context.plotPoints,
@@ -435,7 +457,7 @@ async function buildChapter(
     content,
     wordCount: chineseChars,
     status: 'completed',
-    createdAt: Date.now(),
+    createdAt: existing?.createdAt ?? Date.now(),
     updatedAt: Date.now(),
   };
 }

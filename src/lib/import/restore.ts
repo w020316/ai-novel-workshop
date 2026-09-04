@@ -43,15 +43,17 @@ export async function restoreBackup(data: ProjectBackup): Promise<string> {
       db.consistencyReports, db.plotThreads, db.stylePresets,
     ],
     async () => {
+      // 数组字段归一：旧版/外部构造的备份缺字段时避免 for...of undefined 抛 TypeError
+      const arr = <T>(v: T[] | undefined): T[] => (Array.isArray(v) ? v : []);
       await db.projects.add(data.project);
       if (data.worldview) await db.worldviews.add(data.worldview);
-      for (const c of data.characters) await db.characters.add(c);
+      for (const c of arr(data.characters)) await db.characters.add(c);
       if (data.outline) await db.outlines.add(data.outline);
-      for (const f of data.foreshadowings) await db.foreshadowings.add(f);
-      for (const ch of data.chapters) await db.chapters.add(ch);
-      for (const s of data.chapterSummaries) await db.chapterSummaries.add(s);
-      for (const r of data.consistencyReports) await db.consistencyReports.add(r);
-      for (const t of data.plotThreads) await db.plotThreads.add(t);
+      for (const f of arr(data.foreshadowings)) await db.foreshadowings.add(f);
+      for (const ch of arr(data.chapters)) await db.chapters.add(ch);
+      for (const s of arr(data.chapterSummaries)) await db.chapterSummaries.add(s);
+      for (const r of arr(data.consistencyReports)) await db.consistencyReports.add(r);
+      for (const t of arr(data.plotThreads)) await db.plotThreads.add(t);
       if (data.stylePreset) await db.stylePresets.add(data.stylePreset);
     }
   );

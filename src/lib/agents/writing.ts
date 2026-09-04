@@ -208,5 +208,9 @@ export async function rewriteParagraph(
   }
 
   const result = await response.json();
+  // 响应防御：API 异常时可能返回无 content 的 JSON，原样返回 undefined 会静默污染正文
+  if (typeof result.content !== 'string' || result.content.trim().length === 0) {
+    throw new Error('重写失败：模型返回内容为空');
+  }
   return result.content;
 }

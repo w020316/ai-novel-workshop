@@ -91,7 +91,9 @@ export async function generateChapterSummary(
 
 /**
  * 从章节中提取人物状态快照
- * 简化版：根据人物 ID 列表和章节内容推断状态
+ * 简化版：根据人物 ID 列表和章节内容推断状态。
+ * 已知局限：无人物级 NER，关键词命中的状态会标注给全部出场人物；
+ * 同一角色多状态按要点顺序合并（顿号连接），不再后者覆盖前者。
  */
 function extractCharacterStatesFromChapter(
   chapter: Chapter
@@ -104,7 +106,7 @@ function extractCharacterStatesFromChapter(
     }
   }
 
-  // 从剧情要点中提取关键状态
+  // 从剧情要点中提取关键状态（按要点顺序演进，合并而非覆盖）
   const stateKeywords: Record<string, string> = {
     '受伤': '重伤',
     '突破': '突破',
@@ -116,13 +118,14 @@ function extractCharacterStatesFromChapter(
     '获救': '获救',
   };
 
+  const appearances = chapter.sceneDesign?.characterAppearances ?? [];
   for (const point of chapter.plotPoints) {
     for (const [keyword, state] of Object.entries(stateKeywords)) {
-      if (point.includes(keyword) && chapter.sceneDesign?.characterAppearances) {
-        for (const charId of chapter.sceneDesign.characterAppearances) {
-          // 如果剧情要点包含关键字且有人物，记录状态
-          if (point.includes(keyword)) {
-            states[charId] = state;
+      if (point.includes(keyword)) {
+        for (const charId of appearances) {
+          const prev = states[charId] ?? '';
+          if (!prev.split('、').includes(state)) {
+            states[charId] = prev ? `${prev}、${state}` : state;
           }
         }
       }

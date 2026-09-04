@@ -29,7 +29,9 @@ export function serializeSettingsBundle(
   return JSON.stringify(bundle, null, 2);
 }
 
-/** 解析并校验一个设定包 JSON（非法则抛错） */
+/** 解析并校验一个设定包 JSON（非法则抛错）。
+ * 内容防御：外部构造的包可能缺字段/含 null 元素——worldview 缺关键字段剔除、
+ * 人物缺 name 剔除，避免残缺数据入库后渲染崩溃。 */
 export function parseSettingsBundle(json: string): SettingsBundle {
   let raw: unknown;
   try {
@@ -47,12 +49,36 @@ export function parseSettingsBundle(json: string): SettingsBundle {
   if (!Array.isArray(b.characters)) {
     throw new Error('设定包缺少人物档案');
   }
+
+  // worldview 必填字段白名单校验（worldStructure/powerSystem 至少其一非空）
+  let worldview: Worldview | undefined;
+  const wv = b.worldview as Partial<Worldview> | undefined;
+  if (
+    wv &&
+    typeof wv === 'object' &&
+    (typeof wv.worldStructure === 'string' || typeof wv.powerSystem === 'string')
+  ) {
+    worldview = {
+      ...(wv as Worldview),
+      rules: Array.isArray(wv.rules) ? wv.rules : [],
+    };
+  }
+
+  // 人物元素：name 必须为非空字符串，否则剔除
+  const characters = (b.characters as unknown[]).filter(
+    (c): c is Character =>
+      !!c &&
+      typeof c === 'object' &&
+      typeof (c as Partial<Character>).name === 'string' &&
+      (c as Partial<Character>).name!.trim().length > 0
+  );
+
   return {
     kind: 'novel-settings-bundle',
     version: 1,
     exportedAt: b.exportedAt ?? Date.now(),
-    worldview: b.worldview ?? undefined,
-    characters: b.characters as Character[],
+    worldview,
+    characters,
   };
 }
 
@@ -103,7 +129,9 @@ export async function importSettingsBundle(
   let importedWorldview = false;
   if (worldview) {
     const existing = await writers.resolveWorldview(targetProjectId);
-    if (!existing || existing.rules.length === 0) {
+    // 旧数据可能缺 rules 字段：先归一为数组再判空，避免 TypeError 中断导入
+    const existingRules = Array.isArray(existing?.rules) ? existing!.rules : [];
+    if (!existing || existingRules.length === 0) {
       await writers.saveWorldview(worldview);
       importedWorldview = true;
     }

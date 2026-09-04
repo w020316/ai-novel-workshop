@@ -45,7 +45,8 @@ export function buildDashboardData(chapters: Chapter[]): DashboardData {
     };
   });
 
-  const maxChapterWords = Math.max(1, ...series.map((p) => p.wordCount));
+  // reduce 求最大值：章节数接近 1 万时 Math.max(...spread) 会触发调用栈溢出
+  const maxChapterWords = Math.max(1, series.reduce((m, p) => Math.max(m, p.wordCount), 0));
   let longest: DashboardData['longestChapter'] = null;
   let longestWords = 0;
   for (const p of series) {

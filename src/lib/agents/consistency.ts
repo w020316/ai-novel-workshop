@@ -154,7 +154,10 @@ function buildConsistencyPrompt(
 }
 
 /**
- * 解析一致性校验报告
+ * 解析一致性校验报告。
+ * 形状防御：LLM 返回形状不符的合法 JSON（如 {}、{"issues":"无"}、顶层数组）时，
+ * 下游 r.issues.some() 会抛 TypeError 使已生成正文的整章被误标 failed。
+ * 此处校验 passed/issues 形状，不符即回退默认报告（走 quickCheck 补充确定性检查）。
  */
 function parseConsistencyReport(content: string): Omit<ConsistencyReport, 'chapterId' | 'checkedAt'> {
   const defaultReport = {
@@ -162,7 +165,18 @@ function parseConsistencyReport(content: string): Omit<ConsistencyReport, 'chapt
     issues: [] as ConsistencyIssue[],
   };
 
-  return safeParseJSON(content, defaultReport);
+  const parsed = safeParseJSON<unknown>(content, defaultReport);
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    !Array.isArray(parsed) &&
+    typeof (parsed as { passed?: unknown }).passed === 'boolean' &&
+    Array.isArray((parsed as { issues?: unknown }).issues)
+  ) {
+    return parsed as Omit<ConsistencyReport, 'chapterId' | 'checkedAt'>;
+  }
+  console.warn('[Consistency] LLM 返回的报告形状不符，回退默认报告');
+  return defaultReport;
 }
 
 /**

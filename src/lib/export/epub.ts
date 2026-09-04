@@ -159,7 +159,8 @@ ${dcDescription}  </metadata>
  * 生成 SVG 书封面（文房风格：暖纸底 + 翰墨青描边 + 朱砂点缀 + 标题/题材/字数）
  */
 export function buildCoverSvg(title: string, genre: string, words: string, author = 'AI 小说制作工坊'): string {
-  const safeTitle = escapeXml(title).slice(0, 24);
+  // 先截断再转义：转义后截断会把 &amp; 等实体拦腰截断（&am）产出非法 XML 使整本 EPUB 损坏
+  const safeTitle = escapeXml(title.slice(0, 24));
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800">
   <rect width="600" height="800" fill="#f5f0e6"/>

@@ -85,9 +85,10 @@ export async function humanizeChapter(input: HumanizeInput): Promise<HumanizeRes
   const trimmed = content.trim();
   const report = detectAITraces(trimmed);
 
-  // 无痕迹则无需改写
+  // 无痕迹则原样返回（含首尾空白）——changed:false 时内容必须与输入完全一致，
+  // 否则 UI 会把「无改动」误当新稿覆盖编辑区（trim 后无痕迹 ⇒ 原文同样无痕迹命中）
   if (report.totalCount === 0) {
-    return { content: trimmed, changed: false, report, mode, spots: [] };
+    return { content, changed: false, report, mode, spots: [] };
   }
 
   // 1) 定点修复（spot）：只改命中句

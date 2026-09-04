@@ -78,6 +78,8 @@ vi.mock('@/lib/memory/updater', () => ({
 
 vi.mock('@/lib/db/queries', () => ({
   saveChapter: vi.fn(),
+  getChapter: vi.fn().mockResolvedValue(undefined),
+  saveConsistencyReport: vi.fn().mockResolvedValue(undefined),
   getProject: vi.fn().mockResolvedValue({
     id: 'proj-1', title: '测试', genre: '玄幻', summary: '', targetWords: 100000,
     stylePresetId: '', llmConfig: { provider: 'deepseek', model: 'deepseek-chat', temperature: 0.8, topP: 0.9, maxTokens: 4096 },
@@ -108,6 +110,42 @@ describe('generateChapter', () => {
     expect(result.content).toBeTruthy();
     expect(result.consistencyReport).toBeDefined();
     expect(result.wordCount).toBeGreaterThan(0);
+  });
+
+  it('重新生成已有章节时应复用旧 id 落库（防同章号重复）并按大纲反查卷号', async () => {
+    const queries = await import('@/lib/db/queries');
+    vi.mocked(queries.getChapter).mockResolvedValue({
+      id: 'ch_existing', projectId: 'proj-1', volumeNo: 3, chapterNo: 1,
+      title: '旧章', plotPoints: [], wordCount: 10, status: 'completed',
+      createdAt: 111, updatedAt: 111,
+    } as never);
+    // 大纲含卷区间：第 1 章属于第 2 卷（orchestrator 的 memory 来自 assembleMemory，mock 它的返回）
+    const { assembleMemory } = await import('@/lib/memory/assembler');
+    vi.mocked(assembleMemory).mockResolvedValueOnce({
+      longTerm: {
+        worldview: null, characters: [],
+        outline: { id: 'o', projectId: 'proj-1', volumes: [{ volumeNo: 2, title: '卷二', summary: '', chapterRange: [1, 50], coreConflict: '' }], mainPlotline: '', climaxNodes: [], ending: '', updatedAt: 0 },
+        pendingForeshadowings: [], stylePreset: null,
+      },
+      midTerm: { relevantSummaries: [], activePlotThreads: [], foreshadowingsToRecover: [], characterStates: {} },
+      shortTerm: { prevChapters: [], currentPlotPoints: ['测试要点'] },
+      tokenEstimate: 500,
+    } as never);
+
+    const context = {
+      projectId: 'proj-1',
+      chapterNo: 1,
+      plotPoints: ['测试要点'],
+      onStream: vi.fn(),
+      onProgress: vi.fn(),
+    };
+    await generateChapter(context);
+
+    const saved = vi.mocked(queries.saveChapter).mock.calls[0][0];
+    expect(saved.id).toBe('ch_existing'); // 复用旧 id：put 覆盖而非新增重复记录
+    expect(saved.volumeNo).toBe(2); // 按大纲卷区间反查
+    expect(saved.createdAt).toBe(111); // 保留原创建时间
+    expect(queries.saveConsistencyReport).toHaveBeenCalled(); // 报告落库
   });
 
   it('应在生成失败时抛出错误', async () => {

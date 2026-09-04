@@ -104,6 +104,10 @@ export default function ChapterPage() {
 
     const validPlotPoints = plotPoints.filter((p) => p.trim().length > 0);
 
+    // 中止控制器：让「停止生成」按钮真正贯通到编排器（此前 abortRef 从未赋值，中断是死路径）
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const context: GenerationContext = {
       projectId,
       chapterNo,
@@ -111,6 +115,7 @@ export default function ChapterPage() {
       candidateCount,
       // 用户勾选的技能；全部勾选时沿用全部（undefined）
       skillIds: selectedSkillIds && selectedSkillIds.length < enabledSkills.length ? selectedSkillIds : undefined,
+      signal: controller.signal,
       onStream: handleStream,
       onProgress: handleProgress,
     };
@@ -130,18 +135,29 @@ export default function ChapterPage() {
       setError(msg);
       setStage('failed');
     } finally {
+      abortRef.current = null;
       setGenerating(false);
     }
   }, [projectId, chapterNo, plotPoints, candidateCount, handleStream, handleProgress, selectedSkillIds, enabledSkills]);
 
   const handleAbort = useCallback(() => {
     abortRef.current?.abort();
-    setGenerating(false);
-    setStage(null);
+    // generating/stage 状态由 generateChapter 的 interrupted 分支收尾，避免与异步竞态
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (!chapter) {
+    // 保存前同步 DB 最新记录：生成完成后 chapter state 可能为 null，
+    // 若直接用新 id 落库会与编排器已保存的同章号记录重复（导出重复/取到任意一版）
+    let current = chapter;
+    if (!current) {
+      try {
+        current = (await getChapter(projectId, chapterNo)) ?? null;
+        if (current) setChapter(current);
+      } catch {
+        /* 查询失败则按新建处理 */
+      }
+    }
+    if (!current) {
       const newChapter: Chapter = {
         id: `ch_${Date.now()}`,
         projectId,
@@ -159,21 +175,21 @@ export default function ChapterPage() {
       setChapter(newChapter);
     } else {
       // 保存前先把旧版内容快照为历史版本（仅当正文/标题/要点有变化时）
-      if (chapter.content !== streamingContent) {
+      if (current.content !== streamingContent) {
         await saveChapterVersion({
           id: `ver_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          chapterId: chapter.id,
+          chapterId: current.id,
           projectId,
           chapterNo,
-          title: chapter.title,
-          plotPoints: chapter.plotPoints,
-          content: chapter.content,
-          wordCount: chapter.wordCount,
+          title: current.title,
+          plotPoints: current.plotPoints,
+          content: current.content,
+          wordCount: current.wordCount,
           createdAt: Date.now(),
         });
       }
       await saveChapter({
-        ...chapter,
+        ...current,
         title,
         plotPoints: plotPoints.filter((p) => p.trim()),
         content: streamingContent,

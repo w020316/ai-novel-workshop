@@ -2,6 +2,8 @@
 // 实时榜单抓取测试
 // ============================================================================
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   parseFanqieHtml,
   parseFalooHtml,
@@ -14,12 +16,16 @@ import {
   clearRankCache,
 } from './scraper';
 
+// 与真实页面一致的条目结构：每条为独立扁平 JSON 对象，字段顺序不固定
 const FANQIE_FIXTURE = `
-<script>window.__DATA__=[{
-  "lastChapterTitle":"第10章","author":"作者甲","bookName":"雾镇银鱼","currentPos":1,
-  "lastChapterTitle":"第9章","author":"作者乙","bookName":"远山有信","currentPos":2,
-  "author":"作者丙","bookName":"深海电台","currentPos":3
-}]</script>`;
+<script>window.__DATA__=[
+  {"lastChapterTitle":"第10章","author":"作者甲","bookName":"雾镇银鱼","currentPos":1},
+  {"author":"作者乙","bookName":"远山有信","lastChapterTitle":"第9章","currentPos":2},
+  {"bookName":"深海电台","currentPos":3,"author":"作者丙"}
+]</script>`;
+
+// 页面头部推荐位：只有 bookName 无 currentPos（真实快照确认存在此形态）
+const FANQIE_RECOMMEND_NOISE = `{"bookName":"热推位不是榜单","wordNumber":"0"}`;
 
 const FALOO_FIXTURE = `
 <a href="https://b.faloo.com/1484744.html">盘点万界战力等级</a>
@@ -29,11 +35,39 @@ const FALOO_FIXTURE = `
 <a href="https://b.faloo.com/1481863.html">崩铁我为创世神</a>`;
 
 describe('scraper / parseFanqieHtml', () => {
-  it('从 SSR 内嵌 JSON 解析书名、作者与名次', () => {
+  it('从 SSR 内嵌 JSON 按对象解析书名、作者与名次（字段顺序不敏感）', () => {
     const books = parseFanqieHtml(FANQIE_FIXTURE);
     expect(books.length).toBe(3);
     expect(books[0]).toMatchObject({ title: '雾镇银鱼', author: '作者甲', rank: 1 });
-    expect(books[2].title).toBe('深海电台');
+    expect(books[1]).toMatchObject({ title: '远山有信', author: '作者乙', rank: 2 });
+    expect(books[2]).toMatchObject({ title: '深海电台', author: '作者丙', rank: 3 });
+  });
+
+  it('页面头部推荐位（无 currentPos 的 bookName）不污染榜单', () => {
+    const books = parseFanqieHtml(`${FANQIE_RECOMMEND_NOISE}${FANQIE_FIXTURE}`);
+    expect(books.length).toBe(3);
+    expect(books.some((b) => b.title === '热推位不是榜单')).toBe(false);
+  });
+
+  it('真实快照（fanqienovel.com/rank 抓取存档）：10 条、名次连续、作者正确归属', () => {
+    const snapshot = readFileSync(
+      join(process.cwd(), 'tests/fixtures/fanqie-rank.snapshot.html'),
+      'utf8'
+    );
+    const books = parseFanqieHtml(snapshot);
+    expect(books.length).toBe(10);
+    // 名次 1-10 连续
+    expect(books.map((b) => b.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    // 快照实测：第 4 名《掌娇娇》作者支云、第 1 名《惹枝》作者空留
+    expect(books[0]).toMatchObject({ title: '惹枝', author: '空留', rank: 1 });
+    expect(books[3]).toMatchObject({ title: '掌娇娇', author: '支云', rank: 4 });
+  });
+
+  it('剥离书名中的 PUA 反爬混淆字符（U+E000-F8FF），保证查重可匹配', () => {
+    // 番茄真实页面在书名中插 PUA 字符：'惹\uE49C枝' 若不剥离则查重永不命中
+    const books = parseFanqieHtml('{"bookName":"惹\uE49C枝","author":"空留","currentPos":1}');
+    expect(books.length).toBe(1);
+    expect(books[0].title).toBe('惹枝');
   });
 
   it('忽略无中文的噪声串', () => {

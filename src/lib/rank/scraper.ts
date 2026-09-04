@@ -132,9 +132,13 @@ async function fetchText(url: string): Promise<string> {
   return decodeText(arr, charset);
 }
 
-/** 清洗书名：去空白/实体，返回长度合理且含中文的标题 */
+/** 清洗书名：去空白/实体/反爬混淆字符，返回长度合理且含中文的标题 */
 function cleanTitle(raw: string): string | null {
-  const t = raw.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").trim();
+  const t = raw
+    // 番茄等站点在书名中插入 PUA 私用区字符（如 U+E49C）做反爬混淆，
+    // 不剥离会导致查重黑名单与用户正文永远无法匹配（漏报）
+    .replace(/[\uE000-\uF8FF\u200B-\u200D\uFEFF]/g, '')
+    .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").trim();
   if (t.length < 2 || t.length > 40) return null;
   if (!/[\u4e00-\u9fff]/.test(t)) return null;
   return t;
@@ -162,30 +166,34 @@ export function parseHongxiuHtml(html: string): RankedBook[] {
   return books;
 }
 
-/** 番茄 SSR：bookName + currentPos 成对解析（带标题去重，防页面附加推荐位错位污染） */
+/**
+ * 番茄 SSR 解析（真实快照验证版）。
+ * 榜单条目为扁平 JSON 对象，字段顺序不固定（author 可能在 bookName 前/后），
+ * 页面头部还可能有不含 currentPos 的推荐位 bookName。
+ * 旧实现三路独立正则按下标硬对齐，遇到上述任一情形即整体错位。
+ * 现改为：单趟捕获「含 bookName 的整个扁平对象」，再在对象内分别提取
+ * bookName / currentPos / author —— 同对象内字段天然对齐，非榜单对象自动排除。
+ */
 export function parseFanqieHtml(html: string): RankedBook[] {
   const seen = new Set<string>();
-  const titles: string[] = [];
-  const positions: number[] = [];
-  const authors: string[] = [];
-  const nameRe = /"bookName":"([^"]+)"/g;
-  const posRe = /"currentPos":(\d+)/g;
-  const authRe = /"author":"([^"]+)"/g;
-  let m: RegExpExecArray | null;
-  while ((m = nameRe.exec(html))) titles.push(m[1]);
-  while ((m = posRe.exec(html))) positions.push(Number(m[1]));
-  while ((m = authRe.exec(html))) authors.push(m[1]);
-
   const books: RankedBook[] = [];
-  for (let i = 0; i < titles.length; i++) {
-    const title = cleanTitle(titles[i]);
+  // [^{}] 线性匹配扁平对象（值均为标量，无嵌套），无灾难性回溯风险
+  const objRe = /\{[^{}]*"bookName":"([^"]+)"[^{}]*\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = objRe.exec(html))) {
+    const obj = m[0];
+    const posM = /"currentPos":(\d+)/.exec(obj);
+    // 榜单条目必有名次：页面头部推荐位等无名次对象直接跳过
+    if (!posM) continue;
+    const title = cleanTitle(m[1]);
     if (!title || seen.has(title)) continue;
+    const authorM = /"author":"([^"]*)"/.exec(obj);
     seen.add(title);
     books.push({
       sourceId: 'fanqie',
       title,
-      author: cleanTitle(authors[i] ?? '') ?? undefined,
-      rank: Math.max(1, positions[i] ?? i + 1),
+      author: cleanTitle(authorM?.[1] ?? '') ?? undefined,
+      rank: Math.max(1, Number(posM[1])),
     });
   }
   return books;

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { listChapters } from '@/lib/db/queries';
 import { multiPlatformReview, PLATFORMS, platformVerdictLabel } from '@/lib/review/multi-platform-review';
+import { scanBookReaderReview, type BookReviewSummary } from '@/lib/review/book-review';
 import type { MultiPlatformReview, PlatformId, PlatformScore } from '@/lib/review/multi-platform-review';
 import type { Chapter } from '@/types';
 import {
@@ -16,6 +17,8 @@ import {
   CheckCircle2,
   Lightbulb,
   ChevronDown,
+  ScrollText,
+  TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, countChineseWords } from '@/lib/utils';
@@ -42,6 +45,7 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
   const [review, setReview] = useState<MultiPlatformReview | null>(null);
+  const [bookReview, setBookReview] = useState<BookReviewSummary | null>(null);
   const [activeTab, setActiveTab] = useState<PlatformId>('fanqie');
   const [chapterDropdownOpen, setChapterDropdownOpen] = useState(false);
 
@@ -87,6 +91,24 @@ export default function ReviewPage() {
     }
   };
 
+  const handleBookScan = async () => {
+    const completed = chapters.filter((c) => c.status === 'completed');
+    if (completed.length === 0) {
+      toast.warning('暂无已完成章节，无法执行全书质量体检');
+      return;
+    }
+    const result = scanBookReaderReview(
+      completed.map((c) => ({ chapterNo: c.chapterNo, title: c.title, content: c.content }))
+    );
+    setBookReview(result);
+    if (result.scanned === 0) {
+      toast.info('没有达到评审下限字数的章节');
+    } else if (result.redCount > 0) {
+      toast.warning('全书红黄榜：红榜 ' + result.redCount + ' 章建议优先整改');
+    } else {
+      toast.success('全书扫描通过，平均分 ' + result.avgScore);
+    }
+  };
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -109,6 +131,119 @@ export default function ReviewPage() {
         </div>
       </div>
 
+      {/* 全书红黄榜（跨章汇总） */}
+      <Card className="border-brand-200 bg-white">
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <ScrollText className="mt-0.5 h-4 w-4 text-brand-500" />
+              <div>
+                <p className="text-sm font-medium text-stone-800">全书质量红黄榜</p>
+                <p className="mt-0.5 text-xs text-stone-500">
+                  用本地读者评审扫描全部已完成章节，跨章汇总共性问题，定位「先改哪几章」
+                </p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" onClick={handleBookScan}>
+              <TrendingUp className="mr-1.5 h-3.5 w-3.5" />
+              扫描全书
+            </Button>
+          </div>
+
+          {bookReview && bookReview.scanned > 0 && (
+            <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md bg-stone-100 px-2 py-1 text-xs text-stone-600">
+                  参与扫描 {bookReview.scanned} 章
+                </span>
+                <span className="rounded-md bg-stone-100 px-2 py-1 text-xs text-stone-600">
+                  平均分 {bookReview.avgScore}
+                </span>
+                <span className={cn('rounded-md px-2 py-1 text-xs font-medium', bookReview.greenCount > 0 ? 'bg-green-50 text-green-700' : 'bg-stone-100 text-stone-400')}>
+                  绿 {bookReview.greenCount}
+                </span>
+                <span className={cn('rounded-md px-2 py-1 text-xs font-medium', bookReview.yellowCount > 0 ? 'bg-amber-50 text-amber-700' : 'bg-stone-100 text-stone-400')}>
+                  黄 {bookReview.yellowCount}
+                </span>
+                <span className={cn('rounded-md px-2 py-1 text-xs font-medium', bookReview.redCount > 0 ? 'bg-red-50 text-red-600' : 'bg-stone-100 text-stone-400')}>
+                  红 {bookReview.redCount}
+                </span>
+              </div>
+
+              {bookReview.aggregated.length > 0 && (
+                <div className="rounded-md border border-amber-200 bg-amber-50/40 p-3">
+                  <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-amber-700">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    全书高频共性问题（跨章出现越多越优先）
+                  </p>
+                  <ul className="list-disc space-y-1 pl-4 text-xs text-stone-600">
+                    {bookReview.aggregated.map((a, i) => (
+                      <li key={i}>
+                        {a.issue} <span className="text-amber-500">× {a.count} 章</span>
+                        <span className="text-stone-400">（第 {a.chapters.slice(0, 6).join('、')}{a.chapters.length > 6 ? '…' : ''} 章）</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {bookReview.weakest.length > 0 && (
+                <div className="overflow-hidden rounded-md border border-stone-200">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-stone-50 text-stone-500">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">等级</th>
+                        <th className="px-3 py-2 font-medium">章节</th>
+                        <th className="px-3 py-2 font-medium">评分</th>
+                        <th className="px-3 py-2 font-medium">主要问题</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bookReview.weakest.slice(0, 8).map((v) => (
+                        <tr key={v.chapterNo} className="border-t border-stone-100">
+                          <td className="px-3 py-2">
+                            <span
+                              className={cn(
+                                'rounded px-1.5 py-0.5 font-medium',
+                                v.verdict === 'dull'
+                                  ? 'bg-red-50 text-red-600'
+                                  : v.verdict === 'ok'
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-green-50 text-green-700'
+                              )}
+                            >
+                              {v.verdict === 'dull' ? '红' : v.verdict === 'ok' ? '黄' : '绿'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 font-medium text-stone-700">
+                            第 {v.chapterNo} 章{v.title ? ` ${v.title}` : ''}
+                          </td>
+                          <td className="px-3 py-2 text-stone-600">{v.score}</td>
+                          <td className="px-3 py-2 text-stone-500">
+                            {v.weaknesses.length > 0 ? v.weaknesses.slice(0, 2).join('、') : '整体均衡'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {bookReview.redCount > 0 && (
+                <p className="text-[11px] text-stone-400">
+                  提示：红榜（偏弱）章节建议按「改进建议」先差异化改写；黄色警告代表中规中矩，可择机强化钩子与断章。
+                </p>
+              )}
+            </div>
+          )}
+
+          {bookReview && bookReview.scanned === 0 && (
+            <p className="mt-3 text-xs text-amber-600">
+              未能找到正文达到 100 字下限的已完成章节，未执行全书体检。
+            </p>
+          )}
+        </CardContent>
+      </Card>
       {/* 章节选择 */}
       <Card>
         <CardContent className="py-4">

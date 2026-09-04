@@ -6,9 +6,11 @@ import type { Chapter, NovelProject } from '@/types';
 export interface ExportMarkdownOptions {
   project: NovelProject;
   chapters: Chapter[];
+  /** 导出末尾附加的附录文本（如避撞体检报告，可选） */
+  appendix?: string;
 }
 
-export function exportMarkdown({ project, chapters }: ExportMarkdownOptions): string {
+export function exportMarkdown({ project, chapters, appendix }: ExportMarkdownOptions): string {
   const parts: string[] = [];
 
   // 元数据
@@ -44,6 +46,14 @@ export function exportMarkdown({ project, chapters }: ExportMarkdownOptions): st
     parts.push(ch.content || '');
     parts.push('');
     parts.push('---');
+    parts.push('');
+  }
+
+  // 附录（可选：如避撞体检报告）
+  if (appendix) {
+    parts.push('---');
+    parts.push('');
+    parts.push(appendix.replace(/^\n+|\n+$/g, ''));
     parts.push('');
   }
 

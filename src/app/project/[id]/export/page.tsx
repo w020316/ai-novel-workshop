@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Download, FileText, BookMarked, Archive, Upload, ShieldCheck, CheckSquare, Image as ImageIcon } from 'lucide-react';
 import { exportTxt, downloadTxt } from '@/lib/export/txt';
+import { buildCollisionAppendix } from '@/lib/export/collision-appendix';
+import { loadLiveRankedTitles } from '@/lib/rank/store';
 import { exportMarkdown, downloadMarkdown } from '@/lib/export/markdown';
 import { exportEpub, downloadEpub, buildCoverSvg } from '@/lib/export/epub';
 import { createBackup, downloadBackup } from '@/lib/export/backup';
@@ -51,6 +53,19 @@ export default function ExportPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const buildCollisionAppendixText = async (): Promise<string | undefined> => {
+    if (chapters.length === 0) return undefined;
+    try {
+      const liveTitles = await loadLiveRankedTitles();
+      return buildCollisionAppendix(
+        chapters.map((c) => ({ id: String(c.chapterNo), title: c.title, content: c.content })),
+        { liveTitles }
+      );
+    } catch {
+      return undefined;
+    }
+  };
+
   const completedCount = chapters.filter((c) => c.status === 'completed').length;
   const totalWords = chapters.reduce((s, c) => s + c.wordCount, 0);
 
@@ -58,7 +73,8 @@ export default function ExportPage() {
     if (!project) return;
     setExporting('txt');
     try {
-      const content = exportTxt({ project, chapters });
+      const appendix = await buildCollisionAppendixText();
+      const content = exportTxt({ project, chapters, appendix });
       downloadTxt(content, `${project.title}_全文`);
       toast.success('TXT 导出成功');
     } catch {
@@ -71,7 +87,8 @@ export default function ExportPage() {
     if (!project) return;
     setExporting('md');
     try {
-      const content = exportMarkdown({ project, chapters });
+      const appendix = await buildCollisionAppendixText();
+      const content = exportMarkdown({ project, chapters, appendix });
       downloadMarkdown(content, `${project.title}_全文`);
       toast.success('Markdown 导出成功');
     } catch {

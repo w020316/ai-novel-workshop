@@ -7,9 +7,11 @@ export interface ExportTxtOptions {
   project: NovelProject;
   chapters: Chapter[];
   includeOutline?: boolean;
+  /** 导出末尾附加的附录文本（如避撞体检报告，可选） */
+  appendix?: string;
 }
 
-export function exportTxt({ project, chapters }: ExportTxtOptions): string {
+export function exportTxt({ project, chapters, appendix }: ExportTxtOptions): string {
   const lines: string[] = [];
 
   // 标题
@@ -34,6 +36,14 @@ export function exportTxt({ project, chapters }: ExportTxtOptions): string {
     lines.push('─'.repeat(20));
     lines.push('');
     lines.push(ch.content || '');
+    lines.push('');
+    lines.push('');
+  }
+
+  // 附录（可选：如避撞体检报告）
+  if (appendix) {
+    lines.push('');
+    lines.push(appendix.replace(/^\n+|\n+$/g, ''));
     lines.push('');
     lines.push('');
   }

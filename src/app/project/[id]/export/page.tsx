@@ -12,6 +12,7 @@ import { loadLiveRankedTitles } from '@/lib/rank/store';
 import { exportMarkdown, downloadMarkdown } from '@/lib/export/markdown';
 import { exportEpub, downloadEpub, buildCoverSvg } from '@/lib/export/epub';
 import { createBackup, downloadBackup } from '@/lib/export/backup';
+import { compileExportPackManifest, buildExportPackZip } from '@/lib/export/export-pack';
 import { readBackupFile, restoreBackup } from '@/lib/import/restore';
 import { toast } from 'sonner';
 import type { NovelProject, Chapter } from '@/types';
@@ -155,6 +156,38 @@ export default function ExportPage() {
     setExporting(null);
   };
 
+  /** 一键打包全部格式（TXT + Markdown + EPUB + 无 JSON 备份）为单个 zip */
+  const handleExportPack = async () => {
+    if (!project) return;
+    setExporting('pack');
+    try {
+      const appendix = await buildCollisionAppendixText();
+      const epubBlob = await exportEpub({
+        project,
+        chapters,
+        meta: { coverTitle: coverTitle.trim(), author: author.trim(), description: description.trim() },
+      });
+      const manifest = compileExportPackManifest({
+        txt: { project, chapters, appendix },
+        markdown: { project, chapters, appendix },
+        epub: { filename: '封面.epub', blob: epubBlob },
+      });
+      const zip = await buildExportPackZip(manifest);
+
+      const url = URL.createObjectURL(zip);
+      const a = document.createElement('a');
+      const safeTitle = project.title.replace(/[\\/:*?"<>|\s]+/g, '_');
+      a.href = url;
+      a.download = `${safeTitle}_全格式.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('已打包全部格式（TXT / Markdown / EPUB / 避撞附录）');
+    } catch {
+      toast.error('打包失败，请确认已安装 jszip 依赖');
+    }
+    setExporting(null);
+  };
+
   const handleImportBackup = async () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -226,6 +259,14 @@ export default function ExportPage() {
       icon: Archive,
       action: handleExportBackup,
       disabled: false,
+    },
+    {
+      key: 'pack',
+      label: '一键打包全部格式',
+      desc: 'TXT + Markdown + EPUB + 避撞附录，一次导出为一个 zip',
+      icon: CheckSquare,
+      action: handleExportPack,
+      disabled: completedCount === 0,
     },
   ];
 

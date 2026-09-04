@@ -7,6 +7,7 @@ import { getProjectStats } from '@/lib/db/queries';
 import { getProviders, type ProvidersResult } from '@/lib/llm/client';
 import { ProjectCard } from '@/components/project/project-card';
 import { EmptyState } from '@/components/project/empty-state';
+import { FirstVisitTour } from '@/components/onboarding/first-visit-tour';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2, TrendingUp, ShieldCheck, Info } from 'lucide-react';
 import { toast } from 'sonner';
@@ -211,6 +212,9 @@ export default function Home() {
       <footer className="mt-16 border-t border-paper-200 pt-6 text-center text-xs text-ink-300">
         <p>所有数据存储在浏览器本地 · 隐私 100% 安全 · 数据不离机</p>
       </footer>
+
+      {/* 首访引导（light-tour，仅首次展示） */}
+      <FirstVisitTour />
     </main>
   );
 }

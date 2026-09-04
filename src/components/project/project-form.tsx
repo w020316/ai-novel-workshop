@@ -41,6 +41,7 @@ const INSPIRATION_STARTS: { title: string; genre: string }[] = [
 /** 目标字数快捷档（覆盖标准长篇与百万字超长篇） */
 const TARGET_WORD_PRESETS: { value: number; label: string }[] = [
   { value: 300000, label: '30 万（标准）' },
+  { value: 500000, label: '50 万（中长篇）' },
   { value: 1_000_000, label: '100 万（百万长篇）' },
   { value: 2_000_000, label: '200 万（超长篇）' },
   { value: 5_000_000, label: '500 万（巨著）' },

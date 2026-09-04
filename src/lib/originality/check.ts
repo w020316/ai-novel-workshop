@@ -138,7 +138,7 @@ function platformName(id: string): string {
   const map: Record<string, string> = {
     qidian: '起点', fanqie: '番茄', jinjiang: '晋江',
     feilu: '飞卢', qimao: '七猫', xiaoxiang: '潇湘',
-    hongxiu: '红袖', yuewen: '阅文', live: '实时榜单',
+    hongxiu: '红袖', yuewen: '阅文', zongheng: '纵横', live: '实时榜单',
   };
   return map[id] ?? id;
 }

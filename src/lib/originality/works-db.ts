@@ -75,6 +75,13 @@ export const PLATFORMS: Platform[] = [
     representative: ['何以笙箫默', '三生三世十里桃花', '琅琊榜'],
   },
   {
+    id: 'zongheng',
+    name: '纵横中文网',
+    note: '男频热血爽文，玄幻/都市黄金三章导向',
+    tags: ['玄幻热血', '都市', '武仙', '灵气复苏', '神豪'],
+    representative: ['道君', '造化之门', '我的老婆是狐狸精', '齐天'],
+  },
+  {
     id: 'yuewen',
     name: '阅文作家（起点APP）',
     note: '男频作者后台榜单，作家助手热榜参考',

@@ -23,6 +23,8 @@ export const RANK_SOURCES: { id: string; name: string; focus: string; reader: st
   { id: 'feilu', name: '飞卢小说', focus: '脑洞/同人/无限流，设定新颖、爽点直接', reader: '点子取胜、读起来不累' },
   { id: 'qimao', name: '七猫中文', focus: '免费长篇，追读与完读率权重高', reader: '骨架稳、长篇不断更流畅' },
   { id: 'hongxiu', name: '红袖添香', focus: '女频情感向长篇，现代/古代言情均衡', reader: '人设细腻、情感浓度高、古风/现言均衡' },
+  { id: 'zongheng', name: '纵横中文网', focus: '男频热血爽文，玄幻/都市黄金三章导向', reader: '开头抓人、阵容升级流畅' },
+  { id: 'xiaoxiang', name: '潇湘书院', focus: '女频长篇言情，穿越/重生/宫斗权重高', reader: '情感浓度、虐爽转折' },
 ];
 
 /** 各题材的「爆款风向」通用画像（内置参考，非实时榜单） */

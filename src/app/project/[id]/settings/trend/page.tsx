@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { cn } from '@/lib/utils';
 import { TrendingUp, Loader2, Sparkles, Lightbulb, ScanText, Radio } from 'lucide-react';
 import type { InspirationCard } from '@/types';
+import { scrapableSourceIds } from '@/lib/rank/scraper';
 import type { RankFetchResult } from '@/lib/rank/scraper';
 import { saveLiveRankedWorks, countLiveRankedWorks, clearLiveRankedWorks } from '@/lib/rank/store';
 
@@ -107,7 +108,7 @@ export default function TrendPage() {
     }
   };
 
-  const SCRAPABLE = ['fanqie', 'feilu', 'hongxiu'];
+  const SCRAPABLE = scrapableSourceIds();
 
   const refreshLiveStats = useCallback(async () => {
     try {
@@ -370,7 +371,7 @@ export default function TrendPage() {
             实时榜单抓取
           </CardTitle>
           <CardDescription className="text-xs">
-            CORS 只挡浏览器，服务端直接抓取可解析 SSR / 静态直出平台（番茄、飞卢带<span className="text-emerald-600 font-medium">实时</span>标记）；被 JS 渲染 / 反爬盾阻断的平台会提示改用浏览器打开后粘贴拆解
+            CORS 只挡浏览器，服务端直接抓取可解析 SSR / 静态直出平台（番茄、飞卢、纵横、潇湘等带<span className="text-emerald-600 font-medium">实时</span>标记）；被 JS 渲染 / 反爬盾阻断的平台会提示改用浏览器打开后粘贴拆解
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

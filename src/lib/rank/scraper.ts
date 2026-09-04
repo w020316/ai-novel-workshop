@@ -202,6 +202,50 @@ export function parseFalooHtml(html: string): RankedBook[] {
   return books;
 }
 
+/** 纵横 SSR：//www.zongheng.com/detail/<id> 锚点 + 书名文本（排除 author 页） */
+export function parseZonghengHtml(html: string): RankedBook[] {
+  const seen = new Set<string>();
+  const books: RankedBook[] = [];
+  const re = /<a[^>]+href="\/\/www\.zongheng\.com\/detail\/(\d+)"[^>]*>([^<>]{2,30})<\/a>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const id = m[1];
+    const title = cleanTitle(m[2]);
+    if (!title || seen.has(title)) continue;
+    seen.add(title);
+    books.push({
+      sourceId: 'zongheng',
+      title,
+      rank: books.length + 1,
+      url: `https://www.zongheng.com/detail/${id}`,
+    });
+    if (books.length >= 50) break;
+  }
+  return books;
+}
+
+/** 潇湘 SSR：/book/<longid> 锚点 + 书名文本 */
+export function parseXiaoxiangHtml(html: string): RankedBook[] {
+  const seen = new Set<string>();
+  const books: RankedBook[] = [];
+  const re = /<a[^>]+href="\/book\/(\d{6,})"[^>]*>([^<>]{2,30})<\/a>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const id = m[1];
+    const title = cleanTitle(m[2]);
+    if (!title || seen.has(title)) continue;
+    seen.add(title);
+    books.push({
+      sourceId: 'xiaoxiang',
+      title,
+      rank: books.length + 1,
+      url: `https://www.xxsy.net/book/${id}`,
+    });
+    if (books.length >= 50) break;
+  }
+  return books;
+}
+
 /** 取平台展示名（回退到适配器名） */
 function sourceName(id: string): string {
   const p = PLATFORMS.find((x) => x.id === id);
@@ -244,6 +288,10 @@ export async function scrapePlatform(sourceId: string): Promise<RankFetchResult>
         ? parseFalooHtml(html)
         : sourceId === 'hongxiu'
         ? parseHongxiuHtml(html)
+        : sourceId === 'zongheng'
+        ? parseZonghengHtml(html)
+        : sourceId === 'xiaoxiang'
+        ? parseXiaoxiangHtml(html)
         : [];
     const ok = books.length > 0;
     return {

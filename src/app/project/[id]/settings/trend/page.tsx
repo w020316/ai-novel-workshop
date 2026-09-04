@@ -12,8 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea, Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { TrendingUp, Loader2, Sparkles, Lightbulb, ScanText } from 'lucide-react';
+import { TrendingUp, Loader2, Sparkles, Lightbulb, ScanText, Radio } from 'lucide-react';
 import type { InspirationCard } from '@/types';
+import type { RankFetchResult } from '@/lib/rank/scraper';
 
 const GENRES = ['玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他'];
 const RHYTHM_LABEL: Record<string, string> = { fast: '快节奏', medium: '中等', slow: '慢节奏' };
@@ -37,6 +38,8 @@ export default function TrendPage() {
   const [savedCards, setSavedCards] = useState<InspirationCard[]>([]);
   const [listText, setListText] = useState('');
   const [pasting, setPasting] = useState(false);
+  const [rank, setRank] = useState<RankFetchResult | null>(null);
+  const [fetchingRank, setFetchingRank] = useState(false);
 
   const loadCards = useCallback(async () => {
     setSavedCards(await listInspirationCards(projectId));
@@ -99,6 +102,51 @@ export default function TrendPage() {
     }
   };
 
+  const SCRAPABLE = ['fanqie', 'feilu'];
+
+  const handleFetchRank = async () => {
+    setFetchingRank(true);
+    setRank(null);
+    try {
+      const res = await fetch(`/api/rank/fetch?platform=${encodeURIComponent(sourceId)}`);
+      const data: RankFetchResult = await res.json();
+      setRank(data);
+    } catch (e) {
+      setRank({
+        ok: false,
+        sourceId,
+        sourceName: platform?.name ?? sourceId,
+        url: '',
+        fetchedAt: Date.now(),
+        message: e instanceof Error ? e.message : String(e),
+        books: [],
+      });
+    } finally {
+      setFetchingRank(false);
+    }
+  };
+
+  const handleRankToCards = async () => {
+    if (!rank || rank.books.length === 0) {
+      toast.warning('暂无抓取到的作品可拆解');
+      return;
+    }
+    setPasting(true);
+    try {
+      const text = rank.books
+        .map((b) => `${b.rank}、${b.title}${b.author ? `（作者 ${b.author}）` : ''}`)
+        .join('\n');
+      const { cards } = await generateDeconstruction(projectId, `${rank.sourceName} 实时榜单`, text);
+      if (cards.length > 0) await saveInspirationCards(cards);
+      await loadCards();
+      toast.success(cards.length ? `已从实时榜单拆出 ${cards.length} 条灵感` : '未拆出灵感卡');
+    } catch (e) {
+      toast.error('拆解失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setPasting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* 说明 */}
@@ -133,6 +181,9 @@ export default function TrendPage() {
                     )}
                   >
                     {s.name}
+                    {SCRAPABLE.includes(s.id) && (
+                      <span className="ml-1 rounded bg-emerald-100 px-1 text-[10px] text-emerald-700">实时</span>
+                    )}
                   </span>
                 </label>
               ))}
@@ -278,6 +329,65 @@ export default function TrendPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* 实时榜单抓取 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Radio className="h-4 w-4 text-emerald-500" />
+            实时榜单抓取
+          </CardTitle>
+          <CardDescription className="text-xs">
+            CORS 只挡浏览器，服务端直接抓取可解析 SSR / 静态直出平台（番茄、飞卢带<span className="text-emerald-600 font-medium">实时</span>标记）；被 JS 渲染 / 反爬盾阻断的平台会提示改用浏览器打开后粘贴拆解
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={handleFetchRank} disabled={fetchingRank}>
+              {fetchingRank && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              抓取 {platform?.name ?? sourceId} 实时榜单
+            </Button>
+            {rank?.blocked && rank.targetUrl && (
+              <a
+                href={rank.targetUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-brand-600 underline decoration-brand-300 hover:text-brand-700"
+              >
+                在浏览器打开榜单 →
+              </a>
+            )}
+          </div>
+
+          {rank && (
+            <div className="rounded-md border border-stone-200 bg-stone-50/70 p-3 text-xs">
+              <p className={rank.ok ? 'text-emerald-600' : 'text-stone-500'}>{rank.message}</p>
+              {rank.books.length > 0 && (
+                <>
+                  <ol className="mt-2 grid gap-1 md:grid-cols-2">
+                    {rank.books.map((b, idx) => (
+                      <li
+                        key={`${b.title}-${idx}`}
+                        className="truncate text-stone-600"
+                      >
+                        <span className="mr-1 inline-block w-4 text-right text-stone-400">{b.rank ?? idx + 1}</span>
+                        {b.title}
+                        {b.author && <span className="text-stone-400">（{b.author}）</span>}
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="mt-3">
+                    <Button variant="outline" size="sm" onClick={handleRankToCards} disabled={pasting}>
+                      {pasting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                      拆解成灵感（并入下方收藏卡）
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* 榜单粘贴拆解 */}
       <Card>

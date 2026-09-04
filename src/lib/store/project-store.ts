@@ -97,8 +97,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   archiveProject: async (id) => {
-    await queries.archiveProject(id);
-    await get().loadProjects();
+    set({ loading: true, error: null });
+    try {
+      await queries.archiveProject(id);
+      await get().loadProjects();
+      set({ loading: false });
+    } catch (e) {
+      set({
+        loading: false,
+        error: e instanceof Error ? e.message : '归档项目失败',
+      });
+      throw e;
+    }
   },
 
   deleteProject: async (id) => {
@@ -124,8 +134,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   refreshCurrentProject: async () => {
     const { currentProject } = get();
     if (!currentProject) return;
-    const refreshed = await queries.getProject(currentProject.id);
-    set({ currentProject: refreshed ?? null });
+    set({ loading: true, error: null });
+    try {
+      const refreshed = await queries.getProject(currentProject.id);
+      set({ currentProject: refreshed ?? null });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : '刷新项目失败' });
+      throw e;
+    } finally {
+      set({ loading: false });
+    }
   },
 
   clearError: () => set({ error: null }),

@@ -9,7 +9,7 @@ import { ProjectCard } from '@/components/project/project-card';
 import { EmptyState } from '@/components/project/empty-state';
 import { FirstVisitTour } from '@/components/onboarding/first-visit-tour';
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, TrendingUp, ShieldCheck, Info } from 'lucide-react';
+import { Plus, Loader2, TrendingUp, ShieldCheck, Info, BookOpenCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProjectStatsMap {
@@ -91,6 +91,10 @@ export default function Home() {
           <Link href="/inspiration" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
             <TrendingUp className="h-4 w-4" />
             找灵感
+          </Link>
+          <Link href="/skills" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+            <BookOpenCheck className="h-4 w-4" />
+            写作技能
           </Link>
           {projects.length > 0 && (
             <Link href="/project/new">

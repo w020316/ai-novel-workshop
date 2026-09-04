@@ -20,6 +20,7 @@ import type {
   ChapterVersion,
   LiveRankedWork,
   BatchJob,
+  WritingSkill,
 } from '@/types';
 
 export class NovelDB extends Dexie {
@@ -39,6 +40,7 @@ export class NovelDB extends Dexie {
   chapterVersions!: Table<ChapterVersion, string>;
   liveRankedWorks!: Table<LiveRankedWork, string>;
   batchJobs!: Table<BatchJob, string>;
+  skills!: Table<WritingSkill, string>;
 
   constructor() {
     super('ai_novel_workshop');
@@ -71,6 +73,10 @@ export class NovelDB extends Dexie {
     // 批量续写任务（断点续写·暂停恢复）
     this.version(5).stores({
       batchJobs: 'id, projectId, updatedAt',
+    });
+    // 写作技能库（Skills，跨项目全局）
+    this.version(6).stores({
+      skills: 'id, name, category, source, builtin, enabled',
     });
   }
 }

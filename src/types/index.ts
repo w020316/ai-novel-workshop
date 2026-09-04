@@ -333,6 +333,35 @@ export interface BatchJob {
   updatedAt: number;
 }
 
+// ============ 写作技能库（Skills） ============
+/** 技能来源：内置 / GitHub / HuggingFace / 其它平台 / 自定义（手动粘贴） */
+export type SkillSourceType = 'builtin' | 'github' | 'huggingface' | 'web' | 'custom';
+
+export interface WritingSkill {
+  id: string;
+  name: string;
+  /** 适用环节：风格 / 情节 / 开篇钩子 / 审稿 / 修改 / 大纲 / 其它 */
+  category: 'style' | 'plot' | 'hook' | 'review' | 'rewrite' | 'outline' | 'other';
+  /** 来源类型 */
+  source: SkillSourceType;
+  /** 来源描述（仓库 / 平台 / 网址名称） */
+  sourceName?: string;
+  /** 来源链接（可选） */
+  sourceUrl?: string;
+  author?: string;
+  version?: string;
+  /** 一句话说明（列表展示） */
+  description: string;
+  /** 注入到写作 prompt 的指令块（核心内容） */
+  instruction: string;
+  /** 是否内置示例技能 */
+  builtin: boolean;
+  /** 是否启用（启用后才注入到写作流程） */
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // ============ 起名工具 ============
 export type NameCategory = 'person' | 'place' | 'skill' | 'sect' | 'weapon' | 'treasure';
 

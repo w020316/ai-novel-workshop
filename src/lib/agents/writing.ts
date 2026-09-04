@@ -11,6 +11,7 @@ import { memoryToPrompt } from '@/lib/memory/assembler';
 import { streamChapter } from '@/lib/llm/client-stream';
 import { styleGuideToPrompt } from '@/lib/style/clone';
 import { buildAvoidance } from '@/lib/originality/check';
+import { getEnabledSkills, buildSkillsPromptBlock } from '@/lib/skills/store';
 
 /**
  * 文笔创作 Agent 的默认 System Prompt
@@ -129,6 +130,11 @@ export async function writeChapter(
     { role: 'system' as const, content: SYSTEM_PROMPT },
     { role: 'user' as const, content: userPrompt },
   ];
+  // 注入已启用的写作技能指令（无启用时为空，不影响既有行为）
+  const skillsBlock = buildSkillsPromptBlock(await getEnabledSkills());
+  if (skillsBlock) {
+    messages[0] = { role: 'system' as const, content: `${SYSTEM_PROMPT}\n\n${skillsBlock}` };
+  }
 
   // 使用流式调用
   let fullContent = '';

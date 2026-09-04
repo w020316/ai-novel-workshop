@@ -17,6 +17,7 @@ import type { InspirationCard } from '@/types';
 import { scrapableSourceIds } from '@/lib/rank/scraper';
 import type { RankFetchResult } from '@/lib/rank/scraper';
 import { saveLiveRankedWorks, countLiveRankedWorks, clearLiveRankedWorks } from '@/lib/rank/store';
+import { fetchAllRankSources, type SourceOutcome } from '@/lib/rank/all';
 
 const GENRES = ['玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他'];
 const RHYTHM_LABEL: Record<string, string> = { fast: '快节奏', medium: '中等', slow: '慢节奏' };
@@ -46,6 +47,9 @@ export default function TrendPage() {
     total: 0,
     platforms: 0,
   });
+
+  const [fetchingAll, setFetchingAll] = useState(false);
+  const [allOutcomes, setAllOutcomes] = useState<SourceOutcome[] | null>(null);
 
   const loadCards = useCallback(async () => {
     setSavedCards(await listInspirationCards(projectId));
@@ -156,6 +160,26 @@ export default function TrendPage() {
       });
     } finally {
       setFetchingRank(false);
+    }
+  };
+
+  const handleFetchAll = async () => {
+    setFetchingAll(true);
+    setAllOutcomes(null);
+    try {
+      const res = await fetchAllRankSources();
+      setAllOutcomes(res.outcomes);
+      if (res.saved > 0) await refreshLiveStats();
+      const failed = res.outcomes.filter((o) => !o.ok).length;
+      toast.success(
+        failed === 0
+          ? `一手抓全部：${res.successCount}/${res.outcomes.length} 平台成功，并入 ${res.saved} 部热书`
+          : `完成：${res.successCount}/${res.outcomes.length} 平台成功，${failed} 个失败，并入 ${res.saved} 部热书`
+      );
+    } catch (e) {
+      toast.error('一键抓取失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setFetchingAll(false);
     }
   };
 
@@ -380,6 +404,10 @@ export default function TrendPage() {
               {fetchingRank && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               抓取 {platform?.name ?? sourceId} 实时榜单
             </Button>
+            <Button size="sm" variant="outline" onClick={handleFetchAll} disabled={fetchingAll}>
+              {fetchingAll && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              一键抓取全部可直抓平台
+            </Button>
             {rank?.blocked && rank.targetUrl && (
               <a
                 href={rank.targetUrl}
@@ -391,6 +419,22 @@ export default function TrendPage() {
               </a>
             )}
           </div>
+
+          {allOutcomes && allOutcomes.length > 0 && (
+            <div className="rounded-md border border-stone-200 bg-stone-50/70 p-3 text-xs">
+              <p className="mb-1 font-medium text-stone-600">本轮抓取汇总：</p>
+              <ul className="grid gap-1 md:grid-cols-2">
+                {allOutcomes.map((o) => (
+                  <li key={o.sourceId} className="truncate text-stone-600">
+                    <span className={o.ok ? 'text-emerald-600' : 'text-stone-400'}>
+                      {o.ok ? '✓' : '—'}
+                    </span>{' '}
+                    {o.sourceName}（{o.ok ? o.count + ' 部' : '失败'}）
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {liveStats.total > 0 && (
             <p className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-700">

@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseFanqieHtml,
   parseFalooHtml,
+  parseHongxiuHtml,
   scrapePlatform,
   scrapableSourceIds,
 } from './scraper';
@@ -49,9 +50,19 @@ describe('scraper / parseFalooHtml', () => {
   });
 });
 
+describe('scraper / parseHongxiuHtml', () => {
+  it('解析红袖 /book/<id> 锚点书名', () => {
+    const html =
+      '<a href="/book/1001" title="x">恰似寒光遇骄阳</a><a href="/book/1002">摄政王他又在掐我桃花</a><a href="/nav">导航</a>';
+    const books = parseHongxiuHtml(html);
+    expect(books.map((b) => b.title)).toEqual(['恰似寒光遇骄阳', '摄政王他又在掐我桃花']);
+    expect(books[0].url).toContain('/book/1001');
+  });
+});
+
 describe('scraper / scrapePlatform (offline 分支)', () => {
   it('支持实时抓取的平台为番茄与飞卢', () => {
-    expect(scrapableSourceIds().sort()).toEqual(['fanqie', 'feilu']);
+    expect(new Set(scrapableSourceIds())).toEqual(new Set(['fanqie', 'feilu', 'hongxiu']));
   });
 
   it('反爬/JS 渲染平台返回 blocked + 浏览器建议', async () => {

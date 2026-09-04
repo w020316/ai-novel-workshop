@@ -22,6 +22,7 @@ export const RANK_SOURCES: { id: string; name: string; focus: string; reader: st
   { id: 'jinjiang', name: '晋江文学城', focus: '女频言情/纯爱/衍生，人设与情感张力', reader: '人设惊艳、情感细腻、文笔到位' },
   { id: 'feilu', name: '飞卢小说', focus: '脑洞/同人/无限流，设定新颖、爽点直接', reader: '点子取胜、读起来不累' },
   { id: 'qimao', name: '七猫中文', focus: '免费长篇，追读与完读率权重高', reader: '骨架稳、长篇不断更流畅' },
+  { id: 'hongxiu', name: '红袖添香', focus: '女频情感向长篇，现代/古代言情均衡', reader: '人设细腻、情感浓度高、古风/现言均衡' },
 ];
 
 /** 各题材的「爆款风向」通用画像（内置参考，非实时榜单） */

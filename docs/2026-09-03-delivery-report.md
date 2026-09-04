@@ -619,31 +619,32 @@
 
 ***
 
-## 阶段十七补充 · 实时榜单→运行时查重（动态黑名单，2026-09-04）
+## 阶段十七补充2 · 实时榜单源扩容：新增红袖（男频+女频覆盖，2026-09-04）
 
-### 1. 目的
+### 概述
 
-让"不与平台小说重复"不只依赖内置 static 库，而是把每次抓取到的**实时热书名**持久化，叠加进查重与生成规避，对照最新热书。
+在番茄（SSR）、飞卢（静态HTML）之上，实测并新增**红袖添香** **`/rank`**（UTF-8、服务端直出、女频），实时可抓源达到 **3 个**，补齐女频实时覆盖面。
 
-### 2. 实现
+### 改动
 
-- 数据层 `schema.ts` 新增 `version(4).liveRankedWorks` 表；`LiveRankedWork` 类型
+- `scraper.ts`：新增 `hongxiu` 适配器 + `parseHongxiuHtml`（`/book/<id>` 锚点解析，50 部上限、去重）
 
-- `src/lib/rank/store.ts`：`saveLiveRankedWorks`（按 title 全库去重）/ `loadLiveRankedTitles` / `countLiveRankedWorks` / `clearLiveRankedWorks`
+- `trends.ts` `RANK_SOURCES` 加入红袖，趋势页平台 chips 可选
 
-- `checkOriginality` 新增 `liveTitles` 运行时叠加黑名单，标题级匹配，命中记为「实时榜单」维度并扣分
+- 趋势页 `SCRAPABLE` 加入 `hongxiu`（绿"实时"标记）
 
-- `buildAvoidance` 新增 `liveTitles`，Prompt 追加「实时榜单·慎撞」负例
+- 单测 +1（parseHongxiuHtml fixture），scrapable 断言更新为三源
 
-- 合规体检 `checkContentCompliance(content, liveTitles?)` 透传
+### 验证
 
-- 章节页投稿体检 `handleCompliance` 异步加载实时黑名单后体检
+- `typecheck` 0 错；`next build` 成功；全量回归 **713 用例全绿**
 
-- 趋势页：抓取成功即 `saveLiveRankedWorks` 并入运行时查重（toast 提示）＋「运行时查重库」状态条（条数/平台数/清空按钮）
+- 端到端（真实生产构建）：`/api/rank/fetch?platform=hongxiu` → ok，50 部女频实时作品（恰似寒光遇骄阳/摄政王他又在掐我桃花/穿成权臣的首富娇妻…）
 
-### 3. 验证
+### 源现状
 
-- 单测 +3（liveTitles 命中/未命中/buildAvoidance 慎撞），累计 **712 全绿**
-
-- `typecheck` 0 错，`next build` 成功
+| 平台           | 类型          | 抓取             |
+| ------------ | ----------- | -------------- |
+| 番茄 / 飞卢 / 红袖 | SSR / 静态直出  | ✔ 实时           |
+| 起点 / 七猫 / 晋江 | 反爬盾 / JS 渲染 | 降级：浏览器打开→粘贴→拆解 |
 

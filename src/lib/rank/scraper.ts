@@ -51,6 +51,10 @@ const ADAPTERS: Record<string, SourceAdapter> = {
     id: 'feilu', name: '飞卢小说', url: 'https://b.faloo.com/', kind: 'ssr',
     hint: '实时热度榜单（静态 HTML，可解析）',
   },
+  hongxiu: {
+    id: 'hongxiu', name: '红袖添香', url: 'https://www.hongxiu.com/rank', kind: 'ssr',
+    hint: '女频实时榜单（服务端直出，可解析）',
+  },
   qidian: {
     id: 'qidian', name: '起点中文网', url: 'https://www.qidian.com/rank/yuepiao/', kind: 'blocked',
     hint: '起点启用 JS-验证/盾，服务端直抓返回 202',
@@ -122,6 +126,28 @@ function cleanTitle(raw: string): string | null {
   if (t.length < 2 || t.length > 40) return null;
   if (!/[\u4e00-\u9fff]/.test(t)) return null;
   return t;
+}
+
+/** 红袖 SSR：/book/<id> 锚点 + 书名文本 */
+export function parseHongxiuHtml(html: string): RankedBook[] {
+  const seen = new Set<string>();
+  const books: RankedBook[] = [];
+  const re = /<a[^>]+href="\/book\/(\d+)"[^>]*>([^<>]{2,30})<\/a>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const id = m[1];
+    const title = cleanTitle(m[2]);
+    if (!title || seen.has(title)) continue;
+    seen.add(title);
+    books.push({
+      sourceId: 'hongxiu',
+      title,
+      rank: books.length + 1,
+      url: `https://www.hongxiu.com/book/${id}`,
+    });
+    if (books.length >= 50) break;
+  }
+  return books;
 }
 
 /** 番茄 SSR：bookName + currentPos 成对解析 */
@@ -211,7 +237,14 @@ export async function scrapePlatform(sourceId: string): Promise<RankFetchResult>
 
   try {
     const html = await fetchText(adapter.url);
-    const books = sourceId === 'fanqie' ? parseFanqieHtml(html) : sourceId === 'feilu' ? parseFalooHtml(html) : [];
+    const books =
+      sourceId === 'fanqie'
+        ? parseFanqieHtml(html)
+        : sourceId === 'feilu'
+        ? parseFalooHtml(html)
+        : sourceId === 'hongxiu'
+        ? parseHongxiuHtml(html)
+        : [];
     const ok = books.length > 0;
     return {
       ok, sourceId, sourceName: name, url: adapter.url, fetchedAt,

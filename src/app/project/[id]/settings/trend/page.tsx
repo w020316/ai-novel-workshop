@@ -107,7 +107,7 @@ export default function TrendPage() {
     }
   };
 
-  const SCRAPABLE = ['fanqie', 'feilu'];
+  const SCRAPABLE = ['fanqie', 'feilu', 'hongxiu'];
 
   const refreshLiveStats = useCallback(async () => {
     try {

@@ -8,6 +8,8 @@ import {
   loadLiveRankedTitles,
   countLiveRankedWorks,
   clearLiveRankedWorks,
+  purgeStaleLiveRankedWorks,
+  LIVE_RANK_TTL_MS,
 } from './store';
 
 function mkWork(sourceId: string, title: string, extra: Partial<{ author: string; rank: number; url: string }> = {}) {
@@ -62,5 +64,33 @@ describe('rank/store 实时榜单查重库', () => {
     await clearLiveRankedWorks();
     rows = await db.liveRankedWorks.toArray();
     expect(rows.length).toBe(0);
+  });
+
+  it('purgeStaleLiveRankedWorks 清除超过保活窗口的过期条目', async () => {
+    const now = Date.now();
+    // 直接以显式时间戳落库，避免 ms 级时序抖动（确定性）
+    await db.liveRankedWorks.add({
+      id: 'old_1', sourceId: 'fanqie', sourceName: 'fanqie', title: '陈年热梗',
+      rank: 1, fetchedAt: now - LIVE_RANK_TTL_MS - 1000,
+    } as never);
+    await db.liveRankedWorks.add({
+      id: 'in_1', sourceId: 'fanqie', sourceName: 'fanqie', title: '窗口内',
+      rank: 2, fetchedAt: now - LIVE_RANK_TTL_MS / 2,
+    } as never);
+    const removed = await purgeStaleLiveRankedWorks();
+    expect(removed).toBe(1); // 仅陈年热梗被清
+    const titles = (await db.liveRankedWorks.toArray()).map((r) => r.title);
+    expect(titles).toEqual(['窗口内']);
+  });
+
+  it('saveLiveRankedWorks 会自动清理过期条目避免无限膨胀', async () => {
+    await db.liveRankedWorks.add({
+      id: 'ancient_1', sourceId: 'fanqie', sourceName: 'fanqie', title: '远古热梗',
+      rank: 1, fetchedAt: Date.now() - LIVE_RANK_TTL_MS * 2,
+    } as never);
+    await saveLiveRankedWorks([mkWork('feilu', '榜单新书')]);
+    const titles = (await db.liveRankedWorks.toArray()).map((r) => r.title);
+    expect(titles).not.toContain('远古热梗');
+    expect(titles).toContain('榜单新书');
   });
 });

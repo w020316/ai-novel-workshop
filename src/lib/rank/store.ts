@@ -7,12 +7,30 @@ import { db } from '@/lib/db/schema';
 import type { LiveRankedWork } from '@/types';
 import type { RankedBook } from './scraper';
 
+/** 运行时黑名单的保活窗口：超过该时长的抓取条目视为陈年老梗，不参与查重叠加 */
+export const LIVE_RANK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
+
+/**
+ * 清理超过保活窗口的过期条目，防止「一键抓取」反复累积使查重黑名单无限膨胀、
+ * 误报陈年热梗。纯 Dexie 操作，确定性可测。
+ */
+export async function purgeStaleLiveRankedWorks(ttlMs: number = LIVE_RANK_TTL_MS): Promise<number> {
+  const cutoff = Date.now() - ttlMs;
+  const rows = await db.liveRankedWorks.toArray();
+  const stale = rows.filter((r) => r.fetchedAt < cutoff);
+  const ids = stale.map((r) => r.id);
+  if (ids.length) await db.liveRankedWorks.bulkDelete(ids);
+  return ids.length;
+}
+
 /** 覆盖/增量写入一批抓取到的实时作品，按 (title) 全库去重，返回新增条数 */
 export async function saveLiveRankedWorks(
   works: RankedBook[],
   sourceName = ''
 ): Promise<number> {
   if (!works.length) return 0;
+  // 先清理过期条目，控制黑名单只保留保活窗口内的热书
+  await purgeStaleLiveRankedWorks();
   const fetchedAt = Date.now();
   const existing = await db.liveRankedWorks.toArray();
   const seenTitle = new Set(existing.map((w) => w.title));

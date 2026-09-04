@@ -4,7 +4,15 @@
 // 技能原文并解析为草稿。返回给前端预览确认后入库。
 // ============================================================================
 import { NextResponse } from 'next/server';
-import { parseSkillMarkdown, normalizeRawUrl } from '@/lib/skills/import';
+import { lookup } from 'node:dns/promises';
+import {
+  parseSkillMarkdown,
+  normalizeRawUrl,
+  checkUrlTarget,
+  extractHostname,
+  isReservedIpv4,
+  isReservedIpv6,
+} from '@/lib/skills/import';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -25,12 +33,40 @@ function extractTextFromHtml(html: string): string {
   return t.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/**
+ * SSRF 纵深防御：解析 host 的全部 IP，拒绝任何解析地址落在内网/本地/链路本地/元数据段。
+ * 纯静态的 checkUrlTarget 先挡 IP 字面量与明显内部网域；此函数补 DNS 域名解析场景。
+ */
+async function checkResolvedTarget(url: string): Promise<string | null> {
+  const host = extractHostname(url);
+  if (!host) return '无效的 URL';
+  // IP 字面量由纯函数直接判定（无需解析）
+  const staticErr = checkUrlTarget(url);
+  if (staticErr) return staticErr;
+  try {
+    const addrs = await lookup(host, { all: true });
+    for (const a of addrs) {
+      if (isReservedIpv4(a.address) || isReservedIpv6(a.address)) {
+        return `目标解析到内网/本地地址：${a.address}`;
+      }
+    }
+  } catch {
+    // DNS 解析失败交给后续 fetch 决定（不把解析失败当成安全拒绝意外阻断正常域名）
+  }
+  return null;
+}
+
 async function fetchText(url: string): Promise<string> {
+  const preErr = await checkResolvedTarget(url);
+  if (preErr) throw new Error(preErr);
   const res = await fetch(url, {
     headers: { 'user-agent': USER_AGENT, accept: 'text/*, text/markdown, */*' },
     redirect: 'follow',
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  // 跟随重定向后再次校验落地 host，防止外部域名把请求转跳到内网
+  const finalErr = await checkResolvedTarget(res.url || url);
+  if (finalErr) throw new Error(finalErr);
   const ct = res.headers.get('content-type') ?? '';
   const buf = await res.arrayBuffer();
   // 按 content-type 或 BOM 判断字符集

@@ -22,6 +22,74 @@ export interface SkillImportDraft {
   instruction: string;
 }
 
+// ---------------- SSRF 防护：URL 目标安全校验 ----------------
+// 技能导入需要服务端 fetch 用户提交的任意 URL，属典型的 SSRF 向量。下列纯函数
+// 用于判定目标是否指向内网/本地/云元数据保留地址，返回 true 表示应拒绝放行。
+// 独立成纯函数便于单测，route 层再叠加 DNS 解析校验做纵深防御。
+
+export const RESERVED_IPV4_RE =
+  /^(?:0\.|10\.|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|127\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.0\.0\.|192\.168\.|198\.18\.|198\.19\.|224\.|255\.)/;
+
+/** 校验 IPv4 字面量是否落在内网/环回/链路本地/组播等保留段 */
+export function isReservedIpv4(ip: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec((ip || '').trim());
+  if (!m) return false;
+  for (const oct of m.slice(1)) if (Number(oct) > 255) return false;
+  return RESERVED_IPV4_RE.test((ip || '').trim());
+}
+
+/** 校验 IPv6 字面量是否为环回/链路本地/唯一本地/文档保留段 */
+export function isReservedIpv6(ip: string): boolean {
+  const low = (ip || '').trim().toLowerCase();
+  return low === '::1' || low === '::' || /^fe80:/i.test(low) || /^fc00:/i.test(low) ||
+    /^fd/i.test(low) || /^2001:db8:/i.test(low) || /^ff/.test(low);
+}
+
+/** 主机名是否明显指向本机/内部网域（localhost、*.local、*.internal 等） */
+export function isInternalHostname(host: string): boolean {
+  const h = (host || '').trim().toLowerCase().replace(/\.$/, '');
+  if (!h) return true;
+  if (h === 'localhost' || h === 'localhost.localdomain' || h === '0.0.0.0') return true;
+  return (
+    h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal') ||
+    h.endsWith('.home.arpa') || h.endsWith('.localdomain')
+  );
+}
+
+/** 解析 URL 的 hostname（剥离端口），非法 URL 返回 null */
+export function extractHostname(url: string): string | null {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+/** 判定 URL 目标是否命中 SSRF 保留地址（纯静态判定，不解析 DNS）。安全返回 null，危险返回原因。 */
+export function checkUrlTarget(url: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return '无效的 URL';
+  }
+  if (!/^https?:$/i.test(u.protocol)) return '仅支持 http(s) 链接';
+  const host = u.hostname;
+  if (isInternalHostname(host)) return `不允许访问内部主机：${host}`;
+  // IPv6 字面量带方括号，先去掉再判定
+  const bare = host.charAt(0) === '[' && host.endsWith(']') ? host.slice(1, -1) : host;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(bare) && isReservedIpv4(bare)) return `不允许访问内网/本地地址：${bare}`;
+  if (/^[0-9a-f:]+$/i.test(bare) && isReservedIpv6(bare)) return `不允许访问本地/链路本地地址：${bare}`;
+  return null;
+}
+
+/**
+ * 依据：docs eslint 不引第三方运行时解析，DNS 解析后的地址判定交由 route 层
+ * 用 node:dns/promises 判断（`checkResolvedTarget`）。此处仅提供纯函数供单测。
+ */
+
+// ---------------- 技能分类 ----------------
+
 /** 从 SKILL 名推导适用环节 */
 function classifyCategory(name: string, content: string): WritingSkill['category'] {
   const n = `${name}\n${content}`.toLowerCase();

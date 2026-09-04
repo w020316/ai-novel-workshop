@@ -25,6 +25,7 @@ export const RANK_SOURCES: { id: string; name: string; focus: string; reader: st
   { id: 'hongxiu', name: '红袖添香', focus: '女频情感向长篇，现代/古代言情均衡', reader: '人设细腻、情感浓度高、古风/现言均衡' },
   { id: 'zongheng', name: '纵横中文网', focus: '男频热血爽文，玄幻/都市黄金三章导向', reader: '开头抓人、阵容升级流畅' },
   { id: 'xiaoxiang', name: '潇湘书院', focus: '女频长篇言情，穿越/重生/宫斗权重高', reader: '情感浓度、虐爽转折' },
+  { id: 'huaben', name: '话本小说', focus: '衍生/同人/快穿，脑洞与爽点直接、追读轻松', reader: '点子取胜、追读轻松' },
 ];
 
 /** 各题材的「爆款风向」通用画像（内置参考，非实时榜单） */

@@ -55,6 +55,10 @@ const ADAPTERS: Record<string, SourceAdapter> = {
     id: 'hongxiu', name: '红袖添香', url: 'https://www.hongxiu.com/rank', kind: 'ssr',
     hint: '女频实时榜单（服务端直出，可解析）',
   },
+  huaben: {
+    id: 'huaben', name: '话本小说', url: 'https://www.ihuaben.com/', kind: 'ssr',
+    hint: '衍生/同人/快穿实时热门（服务端直出，可解析）',
+  },
   zongheng: {
     id: 'zongheng', name: '纵横中文网', url: 'https://www.zongheng.com/rank', kind: 'ssr',
     hint: '男频实时榜单（服务端直出，可解析）',
@@ -254,6 +258,30 @@ export function parseXiaoxiangHtml(html: string): RankedBook[] {
   return books;
 }
 
+/** 话本 SSR：/book/<id>.html 锚点 + 书名文本（衍生/同人/快穿） */
+export function parseHuabenHtml(html: string): RankedBook[] {
+  const seen = new Set<string>();
+  const books: RankedBook[] = [];
+  const re = /<a[^>]+href="(?:(?:https?:)?\/\/)?www\.ihuaben\.com\/book\/(\d{5,})\.html"[^>]*>([^<>]{2,40})<\/a>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const id = m[1];
+    const title = cleanTitle(m[2]);
+    const low = (title ?? '').toLowerCase();
+    if (!title || seen.has(title)) continue;
+    if ([...NAV_WORDS].some((w) => low.includes(w.toLowerCase()))) continue;
+    seen.add(title);
+    books.push({
+      sourceId: 'huaben',
+      title,
+      rank: books.length + 1,
+      url: `https://www.ihuaben.com/book/${id}.html`,
+    });
+    if (books.length >= 50) break;
+  }
+  return books;
+}
+
 /** 取平台展示名（回退到适配器名） */
 function sourceName(id: string): string {
   const p = PLATFORMS.find((x) => x.id === id);
@@ -345,6 +373,8 @@ export async function scrapePlatform(sourceId: string): Promise<RankFetchResult>
         ? parseZonghengHtml(html)
         : sourceId === 'xiaoxiang'
         ? parseXiaoxiangHtml(html)
+        : sourceId === 'huaben'
+        ? parseHuabenHtml(html)
         : [];
     const ok = books.length > 0;
     const result = {

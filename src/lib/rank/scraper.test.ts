@@ -8,6 +8,7 @@ import {
   parseHongxiuHtml,
   parseZonghengHtml,
   parseXiaoxiangHtml,
+  parseHuabenHtml,
   scrapePlatform,
   scrapableSourceIds,
   clearRankCache,
@@ -65,7 +66,7 @@ describe('scraper / parseHongxiuHtml', () => {
 
 describe('scraper / scrapePlatform (offline 分支)', () => {
   it('支持实时抓取的平台为番茄与飞卢', () => {
-    expect(new Set(scrapableSourceIds())).toEqual(new Set(['fanqie', 'feilu', 'hongxiu', 'zongheng', 'xiaoxiang']));
+    expect(new Set(scrapableSourceIds())).toEqual(new Set(['fanqie', 'feilu', 'hongxiu', 'zongheng', 'xiaoxiang', 'huaben']));
   });
 
   it('反爬/JS 渲染平台返回 blocked + 浏览器建议', async () => {
@@ -117,5 +118,18 @@ describe('scraper / 内存 TTL 缓存（clearRankCache 隔离）', () => {
     const second = await scrapePlatform('qidian');
     expect(second.message).toContain('从缓存读取');
     clearRankCache();
+  });
+});
+
+describe('scraper / parseHuabenHtml', () => {
+  it('解析话本 /book/<id>.html 锚点书名（排除章级与导航）', () => {
+    const html =
+      '<a href="//www.ihuaben.com/book/11914907.html">女主畅游各个世界随心撩</a>' +
+      '<a href="//www.ihuaben.com/book/1383450/14134250.html">签约标准</a>' +
+      '<a href="//www.ihuaben.com/book/10375275.html">人人都爱清冷美人</a>';
+    const books = parseHuabenHtml(html);
+    const titles = books.map((b) => b.title);
+    expect(titles).toEqual(['女主畅游各个世界随心撩', '人人都爱清冷美人']);
+    expect(books[0].url).toContain('/book/11914907.html');
   });
 });

@@ -75,6 +75,13 @@ export const PLATFORMS: Platform[] = [
     representative: ['何以笙箫默', '三生三世十里桃花', '琅琊榜'],
   },
   {
+    id: 'huaben',
+    name: '话本小说',
+    note: '衍生/同人/快穿，脑洞与爽点直接、追读轻松',
+    tags: ['衍生', '同人', '快穿', '穿书', '系统流'],
+    representative: ['女主畅游各个世界随心撩', '人人都爱清冷美人', '扮猪吃虎，速通生存游戏'],
+  },
+  {
     id: 'zongheng',
     name: '纵横中文网',
     note: '男频热血爽文，玄幻/都市黄金三章导向',

@@ -35,37 +35,58 @@ import {
 } from '@/lib/skills/store';
 import type { WritingSkill } from '@/types';
 
-/** 技能发现目录：可导入技能的平台 / 站点 / 领域来源（供"复制链接导入"参考） */
+/** 技能发现目录：真实来源（含可直接「链接导入」的仓库/SKILL.md），按类别组织 */
 const DISCOVERY_SOURCES: { name: string; desc: string; example: string; hint: string }[] = [
+  // —— 网文专项技能库 ——
   {
-    name: 'ant-design / 各开源写作 Agent 仓库',
-    desc: '开源项目自带的 SKILL.md / 写作规范',
-    example: 'https://github.com/<owner>/<repo>',
-    hint: '粘贴 GitHub 仓库链接即可自动检索 SKILL.md 或 README',
+    name: 'Distilled-Novel-Toolbox（网文全流程技能库）',
+    desc: '模块化：人设/世界观/节奏/爽点/情感/去AI检测/润色/商用',
+    example: 'https://github.com/dama-cyber/Distilled-Novel-Toolbox',
+    hint: '仓库首页自动检索 README；子模块如 novel-pacing 需粘贴具体路径',
   },
   {
-    name: 'HuggingFace 写作 Space',
-    desc: '社区写作 / 长文 Agent space 中的提示词',
-    example: 'https://huggingface.co/spaces/<user>/<space>/blob/main/README.md',
-    hint: '支持 .md / .markdown 直链',
+    name: 'webnovel-plan（爽点工程 + 断章钩子）',
+    desc: '六种爽点模式/30·40·30 三段式/压扬比例/每章断章钩子标准',
+    example: 'https://www.skillmd.ai/skills/webnovel-plan/',
+    hint: '含 SKILL.md 与 cool-points-guide 参考，切中文网文节奏',
   },
   {
-    name: 'Antropic / OpenAI Agent Skills 库',
-    desc: '各家公开的 Skill 定义仓库',
+    name: '黄金三章 · 网文节奏方法论',
+    desc: '第一章300字钩子 / 每章一个核心任务 / 压扬交替情绪曲线',
+    example: 'https://skillmd.ai/skills/fiction/',
+    hint: '可搭配「节奏公式」网页正文用剪贴板导入',
+  },
+  // —— 英文小说系统性技能 ——
+  {
+    name: 'Story Skills（故事圣经 / 角色 / 连续性）',
+    desc: 'Story Bible + 角色文件 + 伏笔承诺 + 时间线与章节草稿，纯 Markdown',
+    example: 'https://github.com/danjdewhurst/story-skills',
+    hint: '标准 Agent Skills，JS 侧可直接引用 SKILL.md',
+  },
+  {
+    name: 'Claude-Writing-Skills（场景架构 / 张力曲线）',
+    desc: 'Story Grid 五诫 / 场景Blueprint / 张力曲线分析 / AI腔规避',
+    example: 'https://github.com/Deland78/Claude-Writing-Skills',
+    hint: '覆盖架构到润色的成品写作系统',
+  },
+  {
+    name: 'Creative Writing Skills（个人文风克隆 + 审稿）',
+    desc: '从你的作品提取文风向导 / 对白 / 一致性 / 修改建议',
+    example: 'https://github.com/haowjy/creative-writing-skills',
+    hint: '适合内置进「文风仿写 + 审校」环节',
+  },
+  // —— 官方/聚合 ——
+  {
+    name: 'Anthropic / OpenAI 官方 Agent Skills',
+    desc: 'SKILL.md 标准与官方示例（含 webapp-testing 等通用能力）',
     example: 'https://github.com/anthropics/skills',
-    hint: '多为 SKILL.md 结构，可直接导入',
+    hint: '写法规范参考；带 scripts 的技能先审再启',
   },
   {
-    name: '文学写作课程 / 教程页',
-    desc: '任意网站上的写作技法正文',
-    example: 'https://example.com/写作教程',
-    hint: '粘贴网页链接，自动提取标题与正文为技能指令',
-  },
-  {
-    name: 'X / 博客 / 公众号长文',
-    desc: '分享的文风与叙事方法论',
-    example: 'https://…',
-    hint: '复制原文文本后，可在下方"从剪贴板导入"',
+    name: 'Techpresso 20 Claude 写作提示词',
+    desc: '开局生成器 / What-if / 对白差异化 / 世界观系统化',
+    example: 'https://academy.techpresso.co/prompts/claude-prompts-creative-writing',
+    hint: '网页正文剪贴板导入即可转成技能',
   },
 ];
 

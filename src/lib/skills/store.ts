@@ -55,26 +55,60 @@ const BUILTIN_SKILLS: Omit<WritingSkill, 'id' | 'enabled' | 'createdAt' | 'updat
     instruction:
       '【节奏要求】\n每个"憋屈=铺垫"之后，尽快给出可见的扬眉吐气或反转反馈，避免连续多章压抑无回报。爽点要具体可感（当众打脸、识破阴谋、实力进境、名声大噪），并让主角的行动而非旁白带来爽感。',
   },
+  {
+    name: '网文爽点工程 · 30/40/30 三段式',
+    category: 'plot',
+    source: 'builtin',
+    sourceName: '提取自 webnovel-plan 爽点方法论',
+    description: '把每处爽点按"铺垫30%→兑付40%→微反转30%"结构化编排，读着不憋屈不注水。',
+    instruction:
+      '【爽点工程】\n每处爽点按下述结构编排：\n一、铺垫(约30%篇幅)：建立读者预期、制造反差（当前VS即将展现）、设置信息差（读者知道主角底牌而反派不知道）。\n二、兑付(约40%)：给出触发时机，用动作/对话/结果而非旁白展现，把情绪推到高点。\n三、微反转(约30%)：搞一个"假结束——其实还有更厉害的"，如"你以为这就是我的全力？""说是普通玉佩其实是上古神器还认主了"。\n密度标准：每章≥1个小爽点，每5章≥1个组合爽点，每10-15章≥1个改变主角地位的里程碑爽点。',
+  },
+  {
+    name: '断章钩子 · 章末200字强悬念',
+    category: 'hook',
+    source: 'builtin',
+    sourceName: '番茄爆款 + webnovel-plan',
+    description: '章末200字停在强悬念/反转/危机，逼读者追更下一章。',
+    instruction:
+      '【断章钩子】\n本章结尾必须写进最强的钩子：\n一、话只说一半——关键信息说出一半，另一半留给下一章开头。\n二、突发变故——在读者以为尘埃落定时砸下意外转折。\n三、危机迫近——致命危险的临界点。\n严禁用"睡去/吃饭/总结"平淡收尾（无效断章）。\n焦虑感留在页外：读者合上页面时必须带着明确的"然后呢"的冲动。',
+  },
+  {
+    name: '黄金三章 · 开篇留人',
+    category: 'hook',
+    source: 'builtin',
+    sourceName: '网文黄金三章惯例',
+    description: '前三章各完成一个核心任务，让算法与读者都留得住。',
+    instruction:
+      '【黄金三章】\n第一章：开头300字内必须出现核心冲突/困境 + 金手指首次露面或暗示；钩子出现在最后20-30行内。\n第二章：紧接上章钩子，主角应对，给出一个"小赢或小输"的结果。\n第三章：确立短期目标，明确下一步行动，章末抛新钩子。\n每章有且仅有一个核心任务，避免塞满世界观与身世背景交代（读者不知道主角要干什么=流失）。',
+  },
 ];
 
 function now(): number {
   return Date.now();
 }
 
-/** 首次初始化：向空库写入内置技能（幂等） */
+/** 首次初始化：向空库写入内置技能（幂等）；并增量补齐新增/缺失的内置技能（不覆盖既有的用户启停状态） */
 export async function ensureSeedSkills(): Promise<void> {
-  const count = await db.skills.count();
-  if (count > 0) return;
+  const existing = await db.skills.toArray();
+  const existingById = new Map(existing.map((s) => [s.id, s]));
   const t = now();
-  const rows: WritingSkill[] = BUILTIN_SKILLS.map((b, i) => ({
-    ...b,
-    id: `builtin-skill-${i + 1}`,
-    builtin: true,
-    enabled: false,
-    createdAt: t,
-    updatedAt: t,
-  }));
-  await db.skills.bulkAdd(rows);
+  const rows: WritingSkill[] = BUILTIN_SKILLS.map((b, i) => {
+    const id = `builtin-skill-${i + 1}`;
+    return {
+      ...b,
+      id,
+      builtin: true,
+      enabled: false,
+      createdAt: t,
+      updatedAt: t,
+    } satisfies WritingSkill;
+  });
+  // 只写入「库中缺失的内置技能」（按确定性 id 匹配），补齐升级增量
+  const missing = rows.filter((r) => !existingById.has(r.id));
+  if (missing.length > 0) {
+    await db.skills.bulkAdd(missing);
+  }
 }
 
 /** 列出全部技能 */

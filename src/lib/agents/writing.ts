@@ -10,6 +10,7 @@ import type { SceneDesign, AssembledMemory, GenerationContext, StylePreset } fro
 import { memoryToPrompt } from '@/lib/memory/assembler';
 import { streamChapter } from '@/lib/llm/client-stream';
 import { styleGuideToPrompt } from '@/lib/style/clone';
+import { personaToPrompt } from '@/lib/style/persona';
 import { buildAvoidance } from '@/lib/originality/check';
 import { buildSkillsPromptForStage } from '@/lib/skills/store';
 
@@ -77,6 +78,12 @@ function buildWritingPrompt(
   // 文风指南（LLM 定性，优先于样本展示，直接给出可执行规则）
   if (stylePreset?.styleGuide) {
     parts.push(styleGuideToPrompt(stylePreset.styleGuide));
+    parts.push('');
+  }
+
+  // 叙述者人格（P1-4 人设化文风）：约束「谁在叙述」，与笔法指南互补
+  if (stylePreset?.persona) {
+    parts.push(personaToPrompt(stylePreset.persona));
     parts.push('');
   }
 

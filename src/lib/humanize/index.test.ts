@@ -85,4 +85,47 @@ describe('humanizeChapter（定点修复 spot-fix）', () => {
     // 抽样命中的句子被定点替换
     expect(res.content).toContain('他嘴角一勾。');
   });
+
+  it('传入叙述者人格时，spot 与 full 降级的 system prompt 均注入人格约束', async () => {
+    const dirty = '他笑了笑，缓缓说道：“这事就这样吧。”刀光闪过，李默侧身避开。';
+    // spot 成功
+    chatMock.mockResolvedValueOnce({
+      content: JSON.stringify({ '1': '他抬了下下巴：“这事就定了。”' }),
+    });
+
+    const persona = {
+      id: 'persona-poison',
+      name: '毒舌编辑',
+      summary: '犀利叙述者',
+      narration: '叙述带刺但精准',
+      dialogue: '台词短、快、带钩子',
+      emotion: '情绪靠反差演',
+      avoid: '抒情排比、书面腔',
+    };
+
+    const res = await humanizeChapter({ content: dirty, persona });
+    expect(res.changed).toBe(true);
+    const spotSystem = chatMock.mock.calls[0][0][0].content as string;
+    expect(spotSystem).toContain('叙述者人格');
+    expect(spotSystem).toContain('毒舌编辑');
+    expect(spotSystem).toContain('叙述带刺但精准');
+
+    // spot 失败降级 full：system prompt 同样带人格
+    chatMock.mockReset();
+    chatMock
+      .mockResolvedValueOnce({ content: '非法 JSON' })
+      .mockResolvedValueOnce({ content: '他抬了下下巴：“这事就定了。”' });
+    await humanizeChapter({ content: dirty, persona });
+    const fullSystem = chatMock.mock.calls[1][0][0].content as string;
+    expect(fullSystem).toContain('叙述者人格');
+    expect(fullSystem).toContain('毒舌编辑');
+  });
+
+  it('未传人格时 system prompt 保持原样（不含人格块）', async () => {
+    const dirty = '他笑了笑，缓缓说道：“这事就这样吧。”';
+    chatMock.mockResolvedValue({ content: JSON.stringify({ '1': '他抬了下下巴：“定了。”' }) });
+    await humanizeChapter({ content: dirty });
+    const system = chatMock.mock.calls[0][0][0].content as string;
+    expect(system).not.toContain('叙述者人格');
+  });
 });

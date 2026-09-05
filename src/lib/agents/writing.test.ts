@@ -169,6 +169,67 @@ describe('writeChapter', () => {
     expect(userPrompt).toContain('冷峻克制的都市悬疑笔法');
   });
 
+  it('带叙述者人格时注入人格块到写作提示词', async () => {
+    const encoder = new TextEncoder();
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('event: token\ndata: {"token":"人格正文"}\n\n'));
+        controller.enqueue(encoder.encode('event: done\ndata: {"totalTokens":5}\n\n'));
+        controller.close();
+      },
+    });
+    mockFetch.mockResolvedValue({ ok: true, body: mockStream });
+
+    const sceneDesign: SceneDesign = {
+      setting: '场景',
+      conflict: '冲突',
+      highlight: '爽点',
+      foreshadowingToPlant: [],
+      foreshadowingToRecover: [],
+      characterAppearances: [],
+    };
+    const memory: AssembledMemory = {
+      longTerm: { worldview: null, characters: [], outline: null, pendingForeshadowings: [], stylePreset: null },
+      midTerm: { relevantSummaries: [], activePlotThreads: [], foreshadowingsToRecover: [], characterStates: {} },
+      shortTerm: { prevChapters: [], currentPlotPoints: [] },
+      tokenEstimate: 0,
+    };
+    const context: GenerationContext = {
+      projectId: 'proj-1',
+      chapterNo: 5,
+      plotPoints: [],
+      onStream: vi.fn(),
+      onProgress: vi.fn(),
+    };
+    const stylePreset: StylePreset = {
+      id: 'sp3',
+      name: '毒舌风',
+      narrativePerspective: 'third-limited',
+      pacing: 'fast',
+      descriptionDensity: 'sparse',
+      dialogueRatio: 0.4,
+      persona: {
+        id: 'persona-poison',
+        name: '毒舌编辑',
+        summary: '犀利叙述者',
+        narration: '叙述带刺但精准',
+        dialogue: '台词短、快、带钩子',
+        emotion: '情绪靠反差演',
+        avoid: '抒情排比',
+      },
+    };
+
+    const result = await writeChapter(sceneDesign, memory, context, stylePreset);
+    expect(result).toContain('人格正文');
+
+    const body = mockFetch.mock.calls[0][1]?.body as string | undefined;
+    const parsed = body ? JSON.parse(body) : null;
+    const userPrompt = parsed?.messages?.find((m: { role: string }) => m.role === 'user')?.content ?? '';
+    expect(userPrompt).toContain('叙述者人格（全书统一，必须扮演）');
+    expect(userPrompt).toContain('毒舌编辑');
+    expect(userPrompt).toContain('叙述带刺但精准');
+  });
+
   it('用户主动中断 signal 时应返回已生成的部分内容', async () => {
     const ctrl = new AbortController();
     ctrl.abort();

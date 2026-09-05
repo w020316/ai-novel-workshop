@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { listStylePresets, updateProject } from '@/lib/db/queries';
+import { listStylePresets, updateProject, saveStylePreset, getProject } from '@/lib/db/queries';
+import { BUILTIN_PERSONAS, getBuiltinPersona, recommendPersonaForGenre } from '@/lib/style/persona';
 import { cn, countChineseWords } from '@/lib/utils';
-import type { StylePreset, NarrativePerspective, Pacing, DescriptionDensity } from '@/types';
+import type { StylePreset, NarrativePerspective, Pacing, DescriptionDensity, Genre } from '@/types';
 import {
   Palette,
   Check,
@@ -14,6 +15,7 @@ import {
   MessageCircle,
   Gauge,
   Sparkles,
+  UserRound,
 } from 'lucide-react';
 
 interface StyleSelectorProps {
@@ -48,12 +50,15 @@ export function StyleSelector({
   const [presets, setPresets] = useState<StylePreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [selecting, setSelecting] = useState<string | null>(null);
+  const [bindingPersona, setBindingPersona] = useState<string | null>(null);
+  const [genre, setGenre] = useState<Genre | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const list = await listStylePresets();
+      const [list, project] = await Promise.all([listStylePresets(), getProject(projectId)]);
       setPresets(list);
+      setGenre(project?.genre ?? null);
     } catch (e) {
       toast.error('加载文风预设失败', {
         description: e instanceof Error ? e.message : String(e),
@@ -78,6 +83,23 @@ export function StyleSelector({
       toast.error('选择失败', { description: e instanceof Error ? e.message : String(e) });
     } finally {
       setSelecting(null);
+    }
+  };
+
+  /** 绑定/解绑叙述者人格（仅项目专属预设可改；内置预设只读） */
+  const handleBindPersona = async (preset: StylePreset, personaId: string | null) => {
+    setBindingPersona(preset.id);
+    try {
+      const persona = personaId ? getBuiltinPersona(personaId) : undefined;
+      await saveStylePreset({ ...preset, persona });
+      setPresets((prev) => prev.map((p) => (p.id === preset.id ? { ...p, persona } : p)));
+      toast.success(
+        persona ? `已将叙述者人格「${persona.name}」绑定到「${preset.name}」` : '已解绑叙述者人格'
+      );
+    } catch (e) {
+      toast.error('人格绑定失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBindingPersona(null);
     }
   };
 
@@ -110,9 +132,10 @@ export function StyleSelector({
             {presets.map((p) => {
               const isActive = p.id === currentStylePresetId;
               const isCustom = p.id.startsWith('style-proj-');
+              const recommended = genre ? recommendPersonaForGenre(genre) : null;
               return (
+              <div key={p.id} className="flex flex-col gap-1.5">
                 <button
-                  key={p.id}
                   type="button"
                   onClick={() => handleSelect(p)}
                   disabled={selecting !== null}
@@ -187,6 +210,67 @@ export function StyleSelector({
                       </div>
                     )}
                 </button>
+
+                {/* 叙述者人格绑定（仅项目专属预设） */}
+                {isCustom && (
+                  <div className="rounded-md border border-stone-200 bg-stone-50/70 p-2">
+                    <div className="mb-1.5 flex items-center gap-1 text-[11px] text-stone-500">
+                      <UserRound className="h-3 w-3" />
+                      叙述者人格
+                      {p.persona ? (
+                        <span className="rounded bg-brand-100 px-1.5 py-0.5 font-medium text-brand-700">
+                          {p.persona.name}
+                        </span>
+                      ) : (
+                        <span className="text-stone-400">未绑定（可多选一）</span>
+                      )}
+                      {bindingPersona === p.id && (
+                        <Loader2 className="h-3 w-3 animate-spin text-stone-400" />
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        disabled={bindingPersona !== null}
+                        onClick={() => handleBindPersona(p, null)}
+                        className={cn(
+                          'rounded border px-1.5 py-0.5 text-[10px] transition-colors',
+                          !p.persona
+                            ? 'border-brand-400 bg-brand-50 text-brand-700'
+                            : 'border-stone-200 bg-white text-stone-500 hover:border-stone-300'
+                        )}
+                      >
+                        不绑定
+                      </button>
+                      {BUILTIN_PERSONAS.map((persona) => (
+                        <button
+                          key={persona.id}
+                          type="button"
+                          disabled={bindingPersona !== null}
+                          title={persona.summary}
+                          onClick={() => handleBindPersona(p, persona.id)}
+                          className={cn(
+                            'rounded border px-1.5 py-0.5 text-[10px] transition-colors',
+                            p.persona?.id === persona.id
+                              ? 'border-brand-400 bg-brand-50 text-brand-700'
+                              : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300'
+                          )}
+                        >
+                          {persona.name}
+                          {recommended?.id === persona.id && (
+                            <span className="ml-0.5 text-[9px] text-amber-600">★</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {p.persona && (
+                      <p className="mt-1.5 text-[10px] leading-relaxed text-stone-500">
+                        {p.persona.summary}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
               );
             })}
           </div>

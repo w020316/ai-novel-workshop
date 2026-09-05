@@ -255,6 +255,28 @@ export interface StyleGuide {
   taboos: string;
 }
 
+/**
+ * 叙述者人格（P1-4 人设化文风）：绑定到文风预设，让正文「像一个具体的人在说话」。
+ * 与统计指纹（VocabularyProfile）/定性指南（StyleGuide）互补——
+ * 指纹管量化、指南管笔法、人格管「谁在叙述」。
+ */
+export interface NarratorPersona {
+  /** 人格标识（内置库 id 或 custom-<uuid>） */
+  id: string;
+  /** 人格名（如「毒舌编辑」「冷峻观察者」「烟火气说书人」） */
+  name: string;
+  /** 一句话人格画像 */
+  summary: string;
+  /** 叙述习惯（可执行规则：句式、视角距离、修辞偏好） */
+  narration: string;
+  /** 台词与对白习惯 */
+  dialogue: string;
+  /** 情绪表达方式（如何演情绪而不是说情绪） */
+  emotion: string;
+  /** 禁忌：该人格绝不会有的腔调 */
+  avoid: string;
+}
+
 export interface StylePreset {
   id: string;
   name: string; // 如"细腻言情"、"硬核爽文"
@@ -266,6 +288,8 @@ export interface StylePreset {
   vocabularyProfile?: VocabularyProfile;
   /** P3：LLM 定性文风仿写指南（缺省时回落纯统计指纹） */
   styleGuide?: StyleGuide;
+  /** P1-4：叙述者人格（缺省时不注入人格约束） */
+  persona?: NarratorPersona;
 }
 
 export interface GenreTemplate {

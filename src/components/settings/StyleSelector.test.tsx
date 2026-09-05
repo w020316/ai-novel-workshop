@@ -3,20 +3,25 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { StyleSelector } from './StyleSelector';
 import type { StylePreset } from '@/types';
 
-const { listStylePresetsMock, updateProjectMock, toastMock } = vi.hoisted(() => ({
-  listStylePresetsMock: vi.fn(),
-  updateProjectMock: vi.fn(),
-  toastMock: {
-    success: vi.fn(),
-    error: vi.fn(),
-    warning: vi.fn(),
-    info: vi.fn(),
-  },
-}));
+const { listStylePresetsMock, updateProjectMock, getProjectMock, saveStylePresetMock, toastMock } =
+  vi.hoisted(() => ({
+    listStylePresetsMock: vi.fn(),
+    updateProjectMock: vi.fn(),
+    getProjectMock: vi.fn(),
+    saveStylePresetMock: vi.fn(),
+    toastMock: {
+      success: vi.fn(),
+      error: vi.fn(),
+      warning: vi.fn(),
+      info: vi.fn(),
+    },
+  }));
 
 vi.mock('@/lib/db/queries', () => ({
   listStylePresets: () => listStylePresetsMock(),
   updateProject: (id: string, patch: unknown) => updateProjectMock(id, patch),
+  getProject: (id: string) => getProjectMock(id),
+  saveStylePreset: (preset: unknown) => saveStylePresetMock(preset),
 }));
 
 vi.mock('sonner', () => ({ toast: toastMock }));
@@ -47,6 +52,8 @@ describe('StyleSelector', () => {
     vi.clearAllMocks();
     listStylePresetsMock.mockResolvedValue([builtinPreset, customPreset]);
     updateProjectMock.mockResolvedValue(undefined);
+    getProjectMock.mockResolvedValue({ id: 'p1', genre: '玄幻' });
+    saveStylePresetMock.mockResolvedValue(undefined);
   });
 
   it('加载中显示加载状态', () => {
@@ -117,5 +124,55 @@ describe('StyleSelector', () => {
       expect(toastMock.error).toHaveBeenCalledWith('选择失败', expect.any(Object))
     );
     expect(onSelected).not.toHaveBeenCalled();
+  });
+
+  it('仅项目专属预设显示叙述者人格选择器，并按题材标注推荐', async () => {
+    render(<StyleSelector projectId="p1" currentStylePresetId="style-proj-p1" onSelected={() => {}} />);
+    // 选择器标题仅出现一次（项目专属卡）
+    expect(await screen.findByText('叙述者人格')).toBeInTheDocument();
+    // 玄幻 → 推荐「硬朗凌厉者」（★ 标注）
+    const recommendedChip = screen.getByRole('button', { name: /硬朗凌厉者/ });
+    expect(recommendedChip.textContent).toContain('★');
+    // 非推荐人格不带 ★
+    expect(screen.getByRole('button', { name: /温柔细腻者/ }).textContent).not.toContain('★');
+  });
+
+  it('点击人格芯片绑定人格并保存预设', async () => {
+    render(<StyleSelector projectId="p1" currentStylePresetId="style-proj-p1" onSelected={() => {}} />);
+    await screen.findByText('叙述者人格');
+
+    fireEvent.click(screen.getByRole('button', { name: /冷峻观察者/ }));
+
+    await waitFor(() => expect(saveStylePresetMock).toHaveBeenCalledTimes(1));
+    const saved = saveStylePresetMock.mock.calls[0][0] as StylePreset;
+    expect(saved.id).toBe('style-proj-p1');
+    expect(saved.persona?.id).toBe('persona-cold');
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith('已将叙述者人格「冷峻观察者」绑定到「基于样本的自定义文风」')
+    );
+  });
+
+  it('点击「不绑定」保存预设时清除人格', async () => {
+    const withPersona: StylePreset = {
+      ...customPreset,
+      persona: {
+        id: 'persona-cold',
+        name: '冷峻观察者',
+        summary: '白描克制',
+        narration: '白描为主',
+        dialogue: '台词克制',
+        emotion: '只写生理信号',
+        avoid: '感叹号堆砌',
+      },
+    };
+    listStylePresetsMock.mockResolvedValue([builtinPreset, withPersona]);
+    render(<StyleSelector projectId="p1" currentStylePresetId="style-proj-p1" onSelected={() => {}} />);
+    await screen.findByText('叙述者人格');
+
+    fireEvent.click(screen.getByRole('button', { name: '不绑定' }));
+
+    await waitFor(() => expect(saveStylePresetMock).toHaveBeenCalledTimes(1));
+    const saved = saveStylePresetMock.mock.calls[0][0] as StylePreset;
+    expect(saved.persona).toBeUndefined();
   });
 });

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getChapter, saveChapter, saveChapterVersion, listChapterVersions } from '@/lib/db/queries';
+import { getChapter, saveChapter, saveChapterVersion, listChapterVersions, getProjectStylePreset } from '@/lib/db/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GenerationProgress } from '@/components/workbench/GenerationProgress';
@@ -256,6 +256,8 @@ export default function ChapterPage() {
         content: streamingContent,
         title,
         chapterNo,
+        // 叙述者人格：约束改写腔调「像一个具体的人」（未绑定时为 undefined，行为不变）
+        persona: (await getProjectStylePreset(projectId))?.persona,
       });
       setStreamingContent(result.content);
       setSpotFixes(result.spots);
@@ -272,7 +274,7 @@ export default function ChapterPage() {
     } finally {
       setHumanizing(false);
     }
-  }, [humanizing, streamingContent, title, chapterNo]);
+  }, [humanizing, streamingContent, title, chapterNo, projectId]);
 
   // 读者视角「冷读复核」：切到读者视角评估本章是否抓人
   const handleReview = useCallback(async () => {

@@ -16,6 +16,8 @@ import {
   expandToSentence,
 } from '@/lib/humanize/detect';
 import type { AiTraceReport } from '@/lib/humanize/detect';
+import type { NarratorPersona } from '@/types';
+import { personaToPrompt } from '@/lib/style/persona';
 import { safeParseJSON } from '@/lib/utils';
 
 export { detectAITraces, summarizeTraces };
@@ -30,6 +32,8 @@ export interface HumanizeInput {
   chapterNo?: number;
   /** 文风样本（可空），用于约束改后风格 */
   styleSample?: string;
+  /** 叙述者人格（可空），约束改写腔调「像一个具体的人」（P1-4） */
+  persona?: NarratorPersona;
   /** 修复模式：spot=定点修复命中句（默认）；full=整章重写（兜底/可选手动指定） */
   mode?: 'spot' | 'full';
 }
@@ -81,7 +85,7 @@ const SPOT_SYSTEM_PROMPT = `你是一位深谙网文市场的资深编辑，正�
  * 绝不破坏正文。
  */
 export async function humanizeChapter(input: HumanizeInput): Promise<HumanizeResult> {
-  const { content, title, chapterNo, styleSample, mode = 'spot' } = input;
+  const { content, title, chapterNo, styleSample, persona, mode = 'spot' } = input;
   const trimmed = content.trim();
   const report = detectAITraces(trimmed);
 
@@ -93,7 +97,7 @@ export async function humanizeChapter(input: HumanizeInput): Promise<HumanizeRes
 
   // 1) 定点修复（spot）：只改命中句
   if (mode === 'spot') {
-    const spotResult = await spotFix(trimmed, report, { title, chapterNo, styleSample });
+    const spotResult = await spotFix(trimmed, report, { title, chapterNo, styleSample, persona });
     if (spotResult) {
       return {
         content: spotResult.content,
@@ -110,7 +114,7 @@ export async function humanizeChapter(input: HumanizeInput): Promise<HumanizeRes
   try {
     const result = await chat(
       [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: persona ? `${SYSTEM_PROMPT}\n\n${personaToPrompt(persona)}` : SYSTEM_PROMPT },
         { role: 'user', content: buildFullPrompt(trimmed, report, { title, chapterNo, styleSample }) },
       ],
       { responseFormat: 'text', temperature: 0.7, maxTokens: 4096, task: 'humanize' }
@@ -132,7 +136,7 @@ export async function humanizeChapter(input: HumanizeInput): Promise<HumanizeRes
 async function spotFix(
   content: string,
   report: AiTraceReport,
-  opts: { title?: string; chapterNo?: number; styleSample?: string }
+  opts: { title?: string; chapterNo?: number; styleSample?: string; persona?: NarratorPersona }
 ): Promise<{ content: string; spots: HumanizeSpotFix[] } | null> {
   // 收集命中句：把每处命中扩展为完整句子，按位置去重合并
   const targets = collectSpotTargets(content, report);
@@ -140,6 +144,9 @@ async function spotFix(
 
   const numbered = targets.map((t, i) => `${i + 1}. ${t.text}`).join('\n');
   const header = buildSpotHeader(opts);
+  const systemPrompt = opts.persona
+    ? `${SPOT_SYSTEM_PROMPT}\n\n6. 改写后的句子必须符合以下叙述者人格的腔调：\n${personaToPrompt(opts.persona)}`
+    : SPOT_SYSTEM_PROMPT;
   const userPrompt = [
     header,
     '【检测说明】以下句子被确定性规则命中 AI 味痕迹，请逐句定点改写。',
@@ -156,7 +163,7 @@ async function spotFix(
   try {
     const result = await chat(
       [
-        { role: 'system', content: SPOT_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       { responseFormat: 'json', temperature: 0.6, maxTokens: 4096 }

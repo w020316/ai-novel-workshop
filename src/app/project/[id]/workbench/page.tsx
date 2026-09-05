@@ -6,9 +6,11 @@ import { listChapters } from '@/lib/db/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChapterList } from '@/components/workbench/ChapterList';
+import { PipelineBoard } from '@/components/workbench/PipelineBoard';
 import { generateChaptersBatch, computeResumeCount, computeDoneCount, computeBatchQueue, BatchChapterError } from '@/lib/agents/batch';
 import { startBatchJob, pauseBatchJob, clearBatchJob, getBatchJob, hasActiveBatchJob, touchBatchJob, clearBatchJobFailure } from '@/lib/batch/job-store';
-import type { Chapter, GenerationStage, BatchJob, WritingSkill } from '@/types';
+import { getOutline } from '@/lib/db/queries';
+import type { Chapter, GenerationStage, BatchJob, WritingSkill, Outline } from '@/types';
 import { getEnabledSkills } from '@/lib/skills/store';
 import { loadLiveRankedTitles } from '@/lib/rank/store';
 import { scanChaptersOriginality, type ChapterScanResult } from '@/lib/originality/scan';
@@ -22,6 +24,8 @@ export default function WorkbenchPage() {
   const projectId = params.id;
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
+  // 流水线面板：大纲卷规划（planned 占位来源）
+  const [outline, setOutline] = useState<Outline | null>(null);
 
   // 批量续写状态
   const [showBatch, setShowBatch] = useState(false);
@@ -71,6 +75,9 @@ export default function WorkbenchPage() {
   const load = useCallback(async () => {
     const list = await listChapters(projectId).catch(() => []);
     setChapters(list);
+    getOutline(projectId)
+      .then((o) => setOutline(o ?? null))
+      .catch(() => {});
   }, [projectId]);
 
   useEffect(() => {
@@ -485,6 +492,9 @@ export default function WorkbenchPage() {
           </CardContent>
         )}
       </Card>
+
+      {/* 全书生产流水线（按卷分组节点网格，失败章红格定位） */}
+      <PipelineBoard projectId={projectId} chapters={chapters} volumes={outline?.volumes ?? []} batchJob={batchJob} />
 
       {/* 章节列表 */}
       <ChapterList chapters={chapters} projectId={projectId} />

@@ -9,6 +9,7 @@ import { Loader2 } from 'lucide-react';
 import { useProjectStore, DEFAULT_LLM_CONFIG } from '@/lib/store/project-store';
 import { db } from '@/lib/db/schema';
 import { summarizePlan, PLATFORM_CHAPTER_STANDARDS } from '@/lib/outline/volume-plan';
+import { generateInspirationStarts, type InspirationStart } from '@/lib/inspiration/starts';
 import {
   projectFormSchema,
   type ProjectFormValues,
@@ -36,7 +37,7 @@ const STYLE_HINT: Record<string, string> = {
   治愈日常: '温情慢节奏、生活流，例：阳光落在窗台，日子慢慢亮起来',
 };
 
-/** 灵感起点：给小白的快速选题（点击即填标题与题材） */
+/** 灵感起点：给小白的快速选题（AI 可整批换新；首屏用内置精选，点击「换一批」由 AI 重出） */
 const DRAFT_KEY = 'ai-novel-project-draft-v1';
 const INSPIRATION_STARTS: { title: string; genre: string }[] = [
   { title: '星河黎明', genre: '科幻' },
@@ -104,7 +105,27 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
   const [submitting, setSubmitting] = useState(false);
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
   const [loadedPresets, setLoadedPresets] = useState(false);
+  const [inspirationStarts, setInspirationStarts] = useState<{ title: string; genre: string }[]>(INSPIRATION_STARTS);
+  const [refreshingStarts, setRefreshingStarts] = useState(false);
   const draftTimer = useRef<number | undefined>(undefined);
+
+  /** 换一批选题起点：AI 优先按题材多样性重出 5 个（LLM 不可用时内置池随机兜底） */
+  const handleRefreshStarts = async () => {
+    setRefreshingStarts(true);
+    try {
+      const { starts, usedFallback } = await generateInspirationStarts(
+        inspirationStarts.map((s) => s.title)
+      );
+      setInspirationStarts(starts);
+      if (usedFallback) {
+        toast.info('AI 暂不可用，已从精选池换一批');
+      }
+    } catch {
+      toast.error('换一批失败，请重试');
+    } finally {
+      setRefreshingStarts(false);
+    }
+  };
 
   // 懒加载文风预设
   if (!loadedPresets) {
@@ -316,13 +337,31 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
       {/* ===== 第 1 步 · 故事想法 ===== */}
       {step === 0 && (
         <>
-          {/* 灵感起点：给小白快速选题 */}
+          {/* 灵感起点：给小白快速选题，支持 AI「换一批」 */}
           <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-            <p className="mb-2 text-xs font-medium text-stone-600">
-              不知道写什么？点一个起点，会自动帮你填好标题和题材，也可以自己起名
-            </p>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-stone-600">
+                不知道写什么？点一个起点，会自动帮你填好标题和题材，也可以自己起名
+              </p>
+              <button
+                type="button"
+                onClick={handleRefreshStarts}
+                disabled={refreshingStarts}
+                className="flex shrink-0 items-center gap-1 rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs text-stone-500 transition-colors hover:border-brand-400 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                title="由 AI 重新出 5 个选题（AI 不可用时从精选池换一批）"
+              >
+                {refreshingStarts ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                    AI 想新书名中…
+                  </>
+                ) : (
+                  '↻ 换一批'
+                )}
+              </button>
+            </div>
             <div className="flex flex-wrap gap-1.5">
-              {INSPIRATION_STARTS.map((s) => (
+              {inspirationStarts.map((s) => (
                 <button
                   key={s.title}
                   type="button"

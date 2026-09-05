@@ -19,7 +19,7 @@ vi.mock('@/lib/llm/client', () => ({
   LLMClientError: ErrorClass,
 }));
 
-import { generateCharacterWithLLM } from './character';
+import { generateCharacterWithLLM, sanitizeCharacterName } from './character';
 
 const input = {
   projectId: 'p1',
@@ -104,5 +104,33 @@ describe('generateCharacterWithLLM', () => {
     expect(combined).toContain('主角');
     expect(combined).toContain('冷酷剑修');
     expect(combined).toContain('玄幻');
+  });
+});
+
+describe('sanitizeCharacterName', () => {
+  it('去掉括号附注（原名等说明）', () => {
+    expect(sanitizeCharacterName('寂灭者（原名：虚空行者·赫尔墨斯）')).toBe('寂灭者');
+    expect(sanitizeCharacterName('沈凌霄(别名:剑魔)')).toBe('沈凌霄');
+    expect(sanitizeCharacterName('叶红绫【药谷传人】')).toBe('叶红绫');
+  });
+
+  it('去掉引号包裹与破折号补充说明', () => {
+    expect(sanitizeCharacterName('"沈凌霄"')).toBe('沈凌霄');
+    expect(sanitizeCharacterName('沈凌霄——化身暗影的少年')).toBe('沈凌霄');
+  });
+
+  it('超过 12 字截断；空名返回空串交由模板兜底', () => {
+    expect(sanitizeCharacterName('一个特别长的名字超过十二个字了')).toBe(
+      '一个特别长的名字超过十二个字'.slice(0, 12)
+    );
+    expect(sanitizeCharacterName('   ')).toBe('');
+  });
+
+  it('LLM 返回带附注的姓名时档案使用清洗后的名字', async () => {
+    chatMock.mockResolvedValue(
+      chatResult(JSON.stringify({ name: '寂灭者（原名：虚空行者）', personality: '疯狂偏执' }))
+    );
+    const c = await generateCharacterWithLLM(input);
+    expect(c.name).toBe('寂灭者');
   });
 });

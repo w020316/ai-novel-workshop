@@ -49,12 +49,13 @@ export function estimateVolumeCount(targetWords: number, wordsPerChapter = WORDS
 const STAGE_TITLES = ['开局', '推进', '角力', '转折', '高潮', '变局', '深化'];
 
 function volumeTitle(genre: string, index: number, count: number): string {
+  // 注意：仅返回纯卷名主题，不带「第 N 卷」前缀——展示层与记忆层会各自拼接卷号
   if (index === 0) return `${genre}开局 · 身份与危机的引入`;
   if (index === 1) return '中期推进 · 升级与四方角力';
   if (count >= 5 && index === 2) return '转折爆发 · 真相 / 巨大危机';
   if (index === count - 1) return '终局清算 · 走向结局';
-  if (index < STAGE_TITLES.length) return `第${index + 1}卷 · ${STAGE_TITLES[index]}期局势`;
-  return `第${index + 1}卷 · 长线推进（新势力 / 新冲突）`;
+  if (index < STAGE_TITLES.length) return `${STAGE_TITLES[index]}期局势`;
+  return '长线推进（新势力 / 新冲突）';
 }
 
 function volumeSummary(index: number, count: number): string {

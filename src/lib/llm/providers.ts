@@ -48,7 +48,9 @@ export const PROVIDER_CONFIGS: Record<LLMProvider, ProviderConfig> = {
     defaultEmbeddingModel: 'text-embedding-004',
     supportsJSON: true,
     supportsStream: true,
-    maxOutputTokens: 8192,
+    // Gemini 3.x 为思考模型：思考 token 计入输出上限，4096 会被思考挤占导致正文截断，
+    // 需要给足输出空间（gemini-3.x-flash 单次输出上限 65536）
+    maxOutputTokens: 65536,
     rateLimitRPM: 15,
   },
   deepseek: {

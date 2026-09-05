@@ -64,9 +64,11 @@ export async function POST(request: NextRequest) {
   }
 
   // 数值消毒（防 NaN/越界值破坏适配器调用）
+  // 默认 16384：思考型模型（如 Gemini 3.x）的思考 token 计入输出上限，
+  // 4096 会被思考挤占导致正文开头几百字即被硬截断（finishReason=MAX_TOKENS）
   const temperature = clampNumber(body.temperature, 0, 2, 0.7);
   const topP = clampNumber(body.topP, 0, 1, 0.9);
-  const maxTokens = Math.round(clampNumber(body.maxTokens, 256, 8192, 4096));
+  const maxTokens = Math.round(clampNumber(body.maxTokens, 256, 32768, 16384));
 
   // 2. 构建 Provider 故障转移链（请求的 provider 未配置则自动回退到已配置 provider 及默认模型）
   const chain = buildProviderChain(safeParseProvider(body.provider), body.model);

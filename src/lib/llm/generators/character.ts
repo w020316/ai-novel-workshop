@@ -57,6 +57,21 @@ const SYSTEM_PROMPT = `你是一位资深网络小说人物设定师。请根据
 要求：性格必须与关键词强相关；要有明显缺点而非完美；动机要有张力；成长弧线要在长篇中可持续。不要输出 JSON 以外的解释。`;
 
 /**
+ * 清洗 LLM 返回的人物名：
+ * - 去掉括号附注（如「寂灭者（原名：虚空行者·赫尔墨斯）」→「寂灭者」）
+ * - 去掉包裹引号与「——」后的补充说明
+ * - 截断到 12 字（网文名一般 2-4 字，留足余量）
+ */
+export function sanitizeCharacterName(raw: string): string {
+  return raw
+    .replace(/[（(【\[][^）)】\]]*[）)】\]]/g, '')
+    .replace(/[——-].*$/, '')
+    .replace(/["'“”‘’「」]/g, '')
+    .trim()
+    .slice(0, 12);
+}
+
+/**
  * 基于关键词 / 姓名 / 角色定位，调用真实 LLM 生成人物档案。
  * @throws LLMClientError - LLM 不可用或未返回有效核心内容（personality 为空）时抛出，供上层回退。
  */
@@ -88,7 +103,7 @@ ${input.genre ? `题材：${input.genre}` : ''}
   return {
     id: generateId('char'),
     projectId: input.projectId,
-    name: raw.name?.trim() || base.name,
+    name: sanitizeCharacterName(raw.name ?? '') || base.name,
     role: input.role,
     appearance: raw.appearance?.trim() || base.appearance,
     personality: raw.personality.trim(),

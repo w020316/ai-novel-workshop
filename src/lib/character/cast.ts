@@ -6,6 +6,7 @@
 // ============================================================================
 import type { CharacterRole, Genre } from '@/types';
 import { chat } from '@/lib/llm/client';
+import { sanitizeCharacterName } from '@/lib/llm/generators/character';
 import { safeParseJSON } from '@/lib/utils';
 
 /** 单个提案人物：姓名 / 角色定位 / 关键词均由 AI 产出，用户可改 */
@@ -61,14 +62,15 @@ export function normalizeCastProposal(raw: unknown, count: number): CastMemberPr
   const result: CastMemberProposal[] = [];
   for (const item of list) {
     if (!item || typeof item !== 'object') continue;
-    const name = String((item as { name?: unknown }).name ?? '').trim();
+    // 清洗姓名：LLM 可能返回「名（原名：xx）」等附注，统一去掉
+    const name = sanitizeCharacterName(String((item as { name?: unknown }).name ?? ''));
     const keywords = String((item as { keywords?: unknown }).keywords ?? '').trim();
     const roleRaw = String((item as { role?: unknown }).role ?? '').trim() as CharacterRole;
     if (!name || !keywords) continue;
     if (!ROLES.includes(roleRaw)) continue;
     if (seen.has(name)) continue;
     seen.add(name);
-    result.push({ name: name.slice(0, 20), role: roleRaw, keywords: keywords.slice(0, 60) });
+    result.push({ name, role: roleRaw, keywords: keywords.slice(0, 60) });
     if (result.length >= count) break;
   }
   return result.length > 0 ? result : null;

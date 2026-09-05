@@ -14,6 +14,7 @@ import { exportEpub, downloadEpub, buildCoverSvg } from '@/lib/export/epub';
 import { createBackup, downloadBackup, type ProjectBackup } from '@/lib/export/backup';
 import { compileExportPackManifest, buildExportPackZip } from '@/lib/export/export-pack';
 import { readBackupFile, restoreBackup } from '@/lib/import/restore';
+import { applyMarkdownImport, readMarkdownFile } from '@/lib/import/markdown-import';
 import {
   loadWebdavConfig, saveWebdavConfig, clearWebdavConfig,
   uploadBackup, listBackups, fetchBackupJson, deleteRemoteBackup, parseRemoteBackup,
@@ -37,6 +38,7 @@ export default function ExportPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importingMd, setImportingMd] = useState(false);
   // 封面/元数据配置
   const [coverTitle, setCoverTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -295,6 +297,32 @@ export default function ExportPage() {
         toast.error(msg);
       }
       setImporting(false);
+    };
+    input.click();
+  };
+
+  // Markdown 导入回流：外部编辑（可 git）后的 .md 章节回流进当前项目
+  const handleImportMarkdown = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.md,.markdown,.txt';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      setImportingMd(true);
+      try {
+        const md = await readMarkdownFile(file);
+        const result = await applyMarkdownImport(projectId, md);
+        toast.success(
+          `回流完成：新建 ${result.created} 章，更新 ${result.updated} 章，无变化 ${result.unchanged} 章`
+        );
+        const fresh = await listChapters(projectId);
+        setChapters(fresh);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '导入失败';
+        toast.error(msg);
+      }
+      setImportingMd(false);
     };
     input.click();
   };
@@ -571,6 +599,36 @@ export default function ExportPage() {
               <>
                 <Upload className="mr-2 h-4 w-4" />
                 选择备份文件恢复
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Markdown 导入回流 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Upload className="h-4 w-4 text-brand-500" />
+            Markdown 导入回流
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-sm text-stone-600">
+            把导出的 Markdown 文件（或自行整理的「## 第N章 章名」格式文档）导回当前项目：
+            章号一致则更新正文（旧版自动存入历史版本），新章号则新增章节。
+            正文因此可以在外部编辑器 / Git 仓库中修改后回流。
+          </p>
+          <Button variant="outline" onClick={handleImportMarkdown} disabled={importingMd}>
+            {importingMd ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                回流中...
+              </>
+            ) : (
+              <>
+                <Upload className="mr-2 h-4 w-4" />
+                选择 Markdown 文件回流
               </>
             )}
           </Button>

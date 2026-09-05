@@ -28,6 +28,7 @@
     "react-hook-form": "^7.84.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
+    "undici": "^8.10.2",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

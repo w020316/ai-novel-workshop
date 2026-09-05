@@ -51,10 +51,10 @@
 - **#15** humanize 无改动时返回原文（不再静默 trim 导致 UI 覆盖编辑区）
 - **#17** dashboard 用 reduce 求最大值（防万章 spread 栈溢出）
 
-### P3 — 记录待办（3 项，低风险）
-- **#11** TXT/MD 导出 header 字数口径与正文不一致（应统一按 completed 过滤）
-- **#12** Markdown TOC 锚点未 encodeURIComponent（含空格/标点标题跳转失效）
-- **#16** project-store 个别 action 缺 try/catch（loading 悬挂）
+### P3 — 记录待办（3 项，低风险）→ 均已修复（2026-09-05 核实收口）
+- **#11** ~~TXT/MD 导出 header 字数口径与正文不一致~~ → 已修复：`exportTxt` / `exportMarkdown` 均按 `status === 'completed'` 过滤后统计（见 `src/lib/export/txt.ts` / `markdown.ts` 注释）
+- **#12** ~~Markdown TOC 锚点未 encodeURIComponent~~ → 已修复：`anchorFor` 生成 GitHub 风格 slug（去标点、空格→连字符、保留 CJK），与正文标题锚点一致
+- **#16** ~~project-store 个别 action 缺 try/catch~~ → 已修复：全部 7 个 async action 均有 try/catch + loading 重置 + error 落库
 
 ***
 

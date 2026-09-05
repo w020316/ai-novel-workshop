@@ -7,6 +7,7 @@
 // 3. createAdapterFromConfig(config) - 从项目 LLMConfig 创建（最常用）
 // ============================================================================
 import type { LLMAdapter, LLMConfig, LLMProvider } from '@/types';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { OpenAICompatibleAdapter, isConnectionError } from './openai-compatible';
 import { getProviderConfig, getAPIKey, isProviderConfigured } from './providers';
 
@@ -16,6 +17,26 @@ export interface CreateAdapterOptions {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   headers?: Record<string, string>;
+}
+
+// ============ 按 Provider 代理（{PROVIDER}_PROXY） ============
+// Node 的 fetch 不走系统代理：本地网络无法直连 Gemini 时，
+// 配置 GEMINI_PROXY=http://127.0.0.1:7890 即可让该 Provider 单独走本地代理，
+// 其余 Provider（智谱等国内直连）不受影响。代理挂掉时连接错误会触发
+// provider 故障转移，自动降级到下一家。
+const proxyAgents = new Map<string, ProxyAgent>();
+
+export function getProxyFetch(proxyUrl: string): typeof fetch {
+  let agent = proxyAgents.get(proxyUrl);
+  if (!agent) {
+    agent = new ProxyAgent(proxyUrl);
+    proxyAgents.set(proxyUrl, agent);
+  }
+  return ((input: unknown, init?: unknown) =>
+    undiciFetch(input as Parameters<typeof undiciFetch>[0], {
+      ...(init as object),
+      dispatcher: agent,
+    } as Parameters<typeof undiciFetch>[1])) as unknown as typeof fetch;
 }
 
 /**
@@ -43,11 +64,16 @@ export function createAdapter(
     );
   }
 
+  // 代理优先级：显式 fetchImpl > {PROVIDER}_PROXY 环境变量 > 全局 fetch
+  const envProxy = process.env[`${provider.toUpperCase()}_PROXY`];
+  const fetchImpl =
+    options.fetchImpl ?? (envProxy ? getProxyFetch(envProxy) : undefined);
+
   return new OpenAICompatibleAdapter({
     config,
     apiKey,
     model: options.model,
-    fetchImpl: options.fetchImpl,
+    fetchImpl,
     timeoutMs: options.timeoutMs,
     headers: options.headers,
   });

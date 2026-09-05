@@ -348,3 +348,37 @@ export function isRetryableError(err: unknown): boolean {
   }
   return false;
 }
+
+/** 典型网络连接故障的系统错误码（Node.js errno / undici） */
+const CONNECTION_ERROR_CODES = new Set([
+  'ECONNREFUSED', // 连接被拒绝
+  'ECONNRESET', // 连接被重置
+  'ENOTFOUND', // DNS 解析失败
+  'ETIMEDOUT', // 连接超时
+  'EAI_AGAIN', // DNS 暂时失败
+  'EHOSTUNREACH', // 主机不可达
+  'ENETUNREACH', // 网络不可达
+  'UND_ERR_CONNECT_TIMEOUT', // undici 连接超时
+  'UND_ERR_SOCKET', // undici socket 故障
+]);
+
+/**
+ * 判断是否为网络连接级错误（用于 Provider 级故障转移）。
+ * 仅覆盖「根本没连上 / 连接中途断开」的情形：
+ * fetch 网络失败（TypeError）、超时中止（AbortError）、
+ * DNS/连接类 errno（ECONNREFUSED 等）与 undici 连接超时。
+ * HTTP 状态错误（LLMApiError，如 429/5xx）不算连接错误，不做 provider 切换。
+ */
+export function isConnectionError(err: unknown): boolean {
+  if (!(err instanceof Error) || err instanceof LLMApiError) return false;
+  const code = (err as NodeJS.ErrnoException).code;
+  if (typeof code === 'string' && CONNECTION_ERROR_CODES.has(code)) return true;
+  const name = err.name;
+  return (
+    name === 'TypeError' || // fetch 网络失败
+    name === 'AbortError' || // 请求超时
+    name === 'ConnectTimeoutError' || // undici 连接超时
+    name === 'SocketError' || // undici socket 错误
+    name === 'FetchError'
+  );
+}

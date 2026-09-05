@@ -7,7 +7,7 @@
 // 3. createAdapterFromConfig(config) - 从项目 LLMConfig 创建（最常用）
 // ============================================================================
 import type { LLMAdapter, LLMConfig, LLMProvider } from '@/types';
-import { OpenAICompatibleAdapter } from './openai-compatible';
+import { OpenAICompatibleAdapter, isConnectionError } from './openai-compatible';
 import { getProviderConfig, getAPIKey, isProviderConfigured } from './providers';
 
 export interface CreateAdapterOptions {
@@ -105,4 +105,67 @@ export async function callWithModelFallback<T>(
     }
   }
   throw lastError;
+}
+
+// ============ Provider 级故障转移（连接错误级） ============
+export interface ProviderChainEntry {
+  provider: LLMProvider;
+  model?: string;
+}
+
+export interface ProviderFallbackResult<T> {
+  result: T;
+  /** 实际服务的 Provider */
+  provider: LLMProvider;
+  fallback: boolean;
+  /** 成功前的失败记录（仅连接级错误） */
+  fallbackHistory: Array<{ provider: LLMProvider; error: unknown }>;
+}
+
+/**
+ * 沿 Provider 链依次调用，命中连接级错误（DNS/超时/拒连等）时自动切换下一个 Provider。
+ * - 非连接错误（如 401 / 400 / 429）不切换，原样抛出
+ * - 全部 Provider 连接失败 → 抛出 ProviderFallbackExhaustedError（携带失败记录）
+ * 不做单 Provider 内重试：连接不上时尽快换下一家，避免叠加退避等待。
+ */
+export async function callWithProviderFallback<T>(
+  chain: ProviderChainEntry[],
+  call: (entry: ProviderChainEntry) => Promise<T>
+): Promise<ProviderFallbackResult<T>> {
+  const fallbackHistory: Array<{ provider: LLMProvider; error: unknown }> = [];
+
+  for (let i = 0; i < chain.length; i++) {
+    const entry = chain[i];
+    try {
+      const result = await call(entry);
+      return { result, provider: entry.provider, fallback: i > 0, fallbackHistory };
+    } catch (err) {
+      if (!isConnectionError(err)) throw err;
+      fallbackHistory.push({ provider: entry.provider, error: err });
+      console.warn(
+        `[llm] Provider ${entry.provider} 连接失败（${err instanceof Error ? err.message : String(err)}），切换下一个`
+      );
+    }
+  }
+
+  throw new ProviderFallbackExhaustedError(chain.map((e) => e.provider), fallbackHistory);
+}
+
+/** Provider 故障转移耗尽错误：链上所有 Provider 均连接失败 */
+export class ProviderFallbackExhaustedError extends Error {
+  readonly attempted: LLMProvider[];
+  readonly fallbackHistory: Array<{ provider: LLMProvider; error: unknown }>;
+
+  constructor(
+    attempted: LLMProvider[],
+    fallbackHistory: Array<{ provider: LLMProvider; error: unknown }>
+  ) {
+    const detail = fallbackHistory
+      .map((h) => `${h.provider}: ${h.error instanceof Error ? h.error.message : String(h.error)}`)
+      .join('；');
+    super(`所有 Provider 连接失败（${attempted.join(' → ')}）${detail ? `：${detail}` : ''}`);
+    this.name = 'ProviderFallbackExhaustedError';
+    this.attempted = attempted;
+    this.fallbackHistory = fallbackHistory;
+  }
 }

@@ -9,8 +9,13 @@
 // 路径：POST /api/llm/chat
 // ============================================================================
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdapter, createFirstAvailableAdapter, callWithModelFallback } from '@/lib/llm/adapter';
-import { resolveProvider, geminiModelChain, geminiPrimaryForTask } from '@/lib/llm/providers';
+import {
+  createAdapter,
+  callWithModelFallback,
+  callWithProviderFallback,
+  ProviderFallbackExhaustedError,
+} from '@/lib/llm/adapter';
+import { buildProviderChain, geminiModelChain, geminiPrimaryForTask } from '@/lib/llm/providers';
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import { validateMessages } from '@/lib/llm/message-validation';
@@ -54,33 +59,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: messageError }, { status: 400 });
   }
 
-  // 3. 选择 Provider：请求显式指定（已配置才采用）→ 默认 Provider；模型随之回退
-  const resolved = resolveProvider(safeParseProvider(body.provider), body.model);
+  // 3. 构建 Provider 故障转移链：请求显式指定（已配置才采用）→ 其余按优先级追加
+  const chain = buildProviderChain(safeParseProvider(body.provider), body.model);
+  if (chain.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          '服务端未配置任何 LLM Provider，请在 .env.local 中设置 GEMINI_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY / QWEN_API_KEY，或启用本地 Ollama（OLLAMA_ENABLED=true）',
+      },
+      { status: 503 }
+    );
+  }
 
   try {
-    const adapter = resolved
-      ? createAdapter(resolved.provider, { model: resolved.model })
-      : createFirstAvailableAdapter();
-
-    if (!adapter) {
-      return NextResponse.json(
-        {
-          error:
-            '服务端未配置任何 LLM Provider，请在 .env.local 中设置 GEMINI_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY / QWEN_API_KEY，或启用本地 Ollama（OLLAMA_ENABLED=true）',
-        },
-        { status: 503 }
-      );
-    }
-
-    // 4. 调用 chat
-    // Gemini 组合策略（B+C）：未显式指定 model 时按任务分级选主模型，并做模型级降级链
-    const gemini = resolved?.provider === 'gemini' && !body.model;
-    let usedGeminiModel = '';
-    const result = gemini
-      ? await callWithModelFallback(
+    // 4. 沿链调用，连接级错误（DNS/超时/拒连）自动切换下一个 Provider
+    const { result, provider } = await callWithProviderFallback(chain, async (entry) => {
+      // Gemini 组合策略（B+C）：未显式指定 model 时按任务分级选主模型，并做模型级降级链
+      if (entry.provider === 'gemini' && !body.model) {
+        let usedModel = '';
+        const chat = await callWithModelFallback(
           geminiModelChain(geminiPrimaryForTask(body.task)),
           (m) => {
-            usedGeminiModel = m;
+            usedModel = m;
             return createAdapter('gemini', { model: m }).chat({
               messages,
               temperature: body.temperature,
@@ -90,23 +90,37 @@ export async function POST(request: NextRequest) {
             });
           },
           isRetryableError
-        )
-      : await adapter.chat({
-          messages,
-          temperature: body.temperature,
-          topP: body.topP,
-          maxTokens: body.maxTokens,
-          responseFormat: body.responseFormat,
-        });
+        );
+        return { chat, model: usedModel };
+      }
+      const adapter = createAdapter(entry.provider, { model: entry.model });
+      const chat = await adapter.chat({
+        messages,
+        temperature: body.temperature,
+        topP: body.topP,
+        maxTokens: body.maxTokens,
+        responseFormat: body.responseFormat,
+      });
+      return { chat, model: adapter.model };
+    });
 
     return NextResponse.json({
-      content: result.content,
-      usage: result.usage,
-      provider: resolved?.provider ?? 'auto',
-      model: gemini ? usedGeminiModel : (resolved?.model ?? adapter.model),
+      content: result.chat.content,
+      usage: result.chat.usage,
+      provider,
+      model: result.model,
     });
   } catch (err) {
     // 5. 错误处理
+    // 所有 Provider 均连接失败：聚合各失败原因返回，标记可重试
+    if (err instanceof ProviderFallbackExhaustedError) {
+      console.error('[llm/chat] 全部 Provider 连接失败:', err.message);
+      return NextResponse.json(
+        { error: err.message, retryable: true },
+        { status: 502 }
+      );
+    }
+
     if (err instanceof LLMApiError) {
       console.error('[llm/chat] LLMApiError:', {
         provider: err.provider,

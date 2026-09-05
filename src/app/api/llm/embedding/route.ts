@@ -10,8 +10,8 @@
 // 说明：transformers.js 本地计算失败或需特定 Provider 模型时降级使用
 // ============================================================================
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
-import { resolveProvider } from '@/lib/llm/providers';
+import { createAdapter, callWithProviderFallback, ProviderFallbackExhaustedError } from '@/lib/llm/adapter';
+import { buildProviderChain, getProviderConfig } from '@/lib/llm/providers';
 import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import { estimateTokens } from '@/lib/utils';
@@ -73,42 +73,52 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3. 选择 Provider（请求的 provider 未配置则自动回退到已配置 provider）
-  const resolved = resolveProvider(safeParseProvider(body.provider), body.model);
+  // 3. 构建 Provider 故障转移链（请求的 provider 未配置则自动回退到已配置 provider）
+  const chain = buildProviderChain(safeParseProvider(body.provider), undefined);
+  if (chain.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          '服务端未配置任何 LLM Provider，请在 .env.local 中设置 GEMINI_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY / QWEN_API_KEY，或启用本地 Ollama（OLLAMA_ENABLED=true）',
+      },
+      { status: 503 }
+    );
+  }
 
   try {
-    const adapter = resolved
-      ? createAdapter(resolved.provider, { model: resolved.model })
-      : createFirstAvailableAdapter();
+    // 4. 沿链调用，连接级错误自动切换下一个 Provider
+    // Embedding 模型：显式指定 body.model 时全局使用；否则用各 Provider 自己的 defaultEmbeddingModel
+    const { result, provider } = await callWithProviderFallback(chain, async (entry) => {
+      const adapter = createAdapter(entry.provider, { model: entry.model });
+      const embeddingModel = body.model || getProviderConfig(entry.provider).defaultEmbeddingModel;
 
-    if (!adapter) {
+      const vectors: number[][] = [];
+      let totalPromptTokens = 0;
+      for (const t of texts) {
+        const vec = await adapter.embedding(t, embeddingModel);
+        vectors.push(Array.from(vec));
+        totalPromptTokens += estimateTokens(t); // 统一 token 估算口径
+      }
+      return { vectors, totalPromptTokens, embeddingModel };
+    });
+
+    return NextResponse.json({
+      vectors: result.vectors,
+      count: result.vectors.length,
+      dim: result.vectors[0]?.length ?? 0,
+      provider,
+      model: result.embeddingModel,
+      usage: { promptTokens: result.totalPromptTokens },
+    });
+  } catch (err) {
+    if (err instanceof ProviderFallbackExhaustedError) {
+      console.error('[llm/embedding] 全部 Provider 连接失败:', err.message);
       return NextResponse.json(
-        {
-          error:
-            '服务端未配置任何 LLM Provider，请在 .env.local 中设置 GEMINI_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY / QWEN_API_KEY，或启用本地 Ollama（OLLAMA_ENABLED=true）',
-        },
-        { status: 503 }
+        { error: err.message, retryable: true },
+        { status: 502 }
       );
     }
 
-    // 4. 调用 embedding（适配器目前单条调用，这里顺序执行批量）
-    const vectors: number[][] = [];
-    let totalPromptTokens = 0;
-    for (const t of texts) {
-      const vec = await adapter.embedding(t, resolved?.model ?? body.model);
-      vectors.push(Array.from(vec));
-      totalPromptTokens += estimateTokens(t); // 统一 token 估算口径
-    }
-
-    return NextResponse.json({
-      vectors,
-      count: vectors.length,
-      dim: vectors[0]?.length ?? 0,
-      provider: resolved?.provider ?? 'auto',
-      model: (resolved?.model ?? body.model) || adapter.model,
-      usage: { promptTokens: totalPromptTokens },
-    });
-  } catch (err) {
     if (err instanceof LLMApiError) {
       console.error('[llm/embedding] LLMApiError:', {
         provider: err.provider,

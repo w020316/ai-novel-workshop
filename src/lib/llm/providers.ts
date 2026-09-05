@@ -217,3 +217,26 @@ export function resolveProvider(
   if (!fallback) return null;
   return { provider: fallback, model: getProviderConfig(fallback).defaultModel };
 }
+
+/**
+ * 构建 Provider 故障转移链（连接错误级 failover 用）：
+ * - 请求的 provider 已配置 → 排在链首并携带请求模型
+ * - 其余已配置 provider 按优先级追加，各自套用默认模型
+ * 无任何已配置 provider 时返回空数组。
+ */
+export function buildProviderChain(
+  requested?: LLMProvider,
+  requestedModel?: string
+): Array<{ provider: LLMProvider; model?: string }> {
+  const configured = listConfiguredProviders();
+  const head =
+    requested && configured.includes(requested)
+      ? [{ provider: requested, model: requestedModel }]
+      : [];
+  return [
+    ...head,
+    ...configured
+      .filter((p) => p !== head[0]?.provider)
+      .map((p) => ({ provider: p, model: getProviderConfig(p).defaultModel })),
+  ];
+}

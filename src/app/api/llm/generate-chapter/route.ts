@@ -9,9 +9,9 @@
 // 响应格式：SSE (text/event-stream)
 // ============================================================================
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdapter, createFirstAvailableAdapter } from '@/lib/llm/adapter';
-import { resolveProvider } from '@/lib/llm/providers';
-import { LLMApiError } from '@/lib/llm/openai-compatible';
+import { createAdapter } from '@/lib/llm/adapter';
+import { buildProviderChain } from '@/lib/llm/providers';
+import { LLMApiError, isConnectionError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import { validateMessages } from '@/lib/llm/message-validation';
 import { safeParseProvider, corsPreflightResponse } from '@/lib/api/llm-shared';
@@ -68,23 +68,10 @@ export async function POST(request: NextRequest) {
   const topP = clampNumber(body.topP, 0, 1, 0.9);
   const maxTokens = Math.round(clampNumber(body.maxTokens, 256, 8192, 4096));
 
-  // 2. 创建 adapter（请求的 provider 未配置则自动回退到已配置 provider 及默认模型）
-  const resolved = resolveProvider(safeParseProvider(body.provider), body.model);
-  let adapter;
-  try {
-    adapter = resolved
-      ? createAdapter(resolved.provider, { model: resolved.model })
-      : createFirstAvailableAdapter();
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '无法创建 LLM 适配器';
-    return NextResponse.json({ error: msg }, { status: 503 });
-  }
-
-  if (!adapter) {
-    return NextResponse.json(
-      { error: '未配置任何 LLM Provider' },
-      { status: 503 }
-    );
+  // 2. 构建 Provider 故障转移链（请求的 provider 未配置则自动回退到已配置 provider 及默认模型）
+  const chain = buildProviderChain(safeParseProvider(body.provider), body.model);
+  if (chain.length === 0) {
+    return NextResponse.json({ error: '未配置任何 LLM Provider' }, { status: 503 });
   }
 
   // 3. 创建 SSE 流
@@ -93,77 +80,105 @@ export async function POST(request: NextRequest) {
     async start(controller) {
       let totalTokens = 0;
       let tokenSent = false;
+      let startSent = false;
+      let usedProvider: LLMProvider = chain[0].provider;
+      let usedModel = chain[0].model ?? '';
 
-      // 发送开始事件
-      controller.enqueue(
-        encoder.encode(
-          `event: start\ndata: ${JSON.stringify({ provider: resolved?.provider ?? 'auto', model: adapter.model })}\n\n`
-        )
-      );
-
-      try {
-        // 流式调用：一旦已经输出 token 就不允许整体重试（否则客户端会收到拼接的重复章节）
-        // 故不在此处使用 withRetry 包裹整个流；仅在连接建立阶段抛错时，交由上层 orchestrator 重试。
-        await adapter.streamChat({
-          messages,
-          temperature,
-          topP,
-          maxTokens,
-          signal: request.signal,
-          onToken: (token: string) => {
-            tokenSent = true;
-            totalTokens++;
-            controller.enqueue(
-              encoder.encode(
-                `event: token\ndata: ${JSON.stringify({ token })}\n\n`
-              )
-            );
-          },
-        });
-
-        // 空流防护：模型返回 0 token 且未被中断时，明确报错而非静默产出空章节（避免空白/疑似乱码观感）
-        if (totalTokens === 0 && !request.signal.aborted) {
-          controller.enqueue(
-            encoder.encode(
-              `event: error\ndata: ${JSON.stringify({
-                error: '模型返回为空，请稍后重试或切换模型/Provider',
-                tokenSent: false,
-              })}\n\n`
-            )
-          );
-        } else {
-          // 发送完成事件
-          controller.enqueue(
-            encoder.encode(
-              `event: done\ndata: ${JSON.stringify({
-                totalTokens,
-                provider: resolved?.provider ?? 'auto',
-                model: adapter.model,
-              })}\n\n`
-            )
-          );
-        }
-      } catch (err) {
-        // 用户主动中断：不做为错误上报，normal 关闭
-        if (request.signal.aborted) {
-          controller.close();
-          return;
-        }
-        // 发送错误事件
-        const errorMessage =
-          err instanceof LLMApiError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : '生成失败';
+      // start 事件延迟到首个 token（或结束）时发送，避免故障转移时重复发送
+      const sendStart = () => {
+        if (startSent) return;
+        startSent = true;
         controller.enqueue(
           encoder.encode(
-            `event: error\ndata: ${JSON.stringify({ error: errorMessage, tokenSent })}\n\n`
+            `event: start\ndata: ${JSON.stringify({ provider: usedProvider, model: usedModel })}\n\n`
           )
         );
-      } finally {
-        if (!request.signal.aborted) {
-          controller.close();
+      };
+
+      // 沿链尝试：仅在连接建立阶段（未输出 token）出现连接级错误时切换下一个 Provider；
+      // 一旦已输出 token 则不再整体重试（否则客户端会收到拼接的重复章节）。
+      for (let i = 0; i < chain.length; i++) {
+        const entry = chain[i];
+        try {
+          const adapter = createAdapter(entry.provider, { model: entry.model });
+          usedProvider = adapter.provider;
+          usedModel = adapter.model;
+
+          await adapter.streamChat({
+            messages,
+            temperature,
+            topP,
+            maxTokens,
+            signal: request.signal,
+            onToken: (token: string) => {
+              sendStart();
+              tokenSent = true;
+              totalTokens++;
+              controller.enqueue(
+                encoder.encode(
+                  `event: token\ndata: ${JSON.stringify({ token })}\n\n`
+                )
+              );
+            },
+          });
+
+          sendStart();
+          // 空流防护：模型返回 0 token 且未被中断时，明确报错而非静默产出空章节（避免空白/疑似乱码观感）
+          if (totalTokens === 0 && !request.signal.aborted) {
+            controller.enqueue(
+              encoder.encode(
+                `event: error\ndata: ${JSON.stringify({
+                  error: '模型返回为空，请稍后重试或切换模型/Provider',
+                  tokenSent: false,
+                })}\n\n`
+              )
+            );
+          } else {
+            // 发送完成事件
+            controller.enqueue(
+              encoder.encode(
+                `event: done\ndata: ${JSON.stringify({
+                  totalTokens,
+                  provider: usedProvider,
+                  model: usedModel,
+                })}\n\n`
+              )
+            );
+          }
+          if (!request.signal.aborted) {
+            controller.close();
+          }
+          return;
+        } catch (err) {
+          // 用户主动中断：不做为错误上报，normal 关闭
+          if (request.signal.aborted) {
+            controller.close();
+            return;
+          }
+          // 连接建立阶段（未输出 token）的连接级错误：切换下一个 Provider
+          if (!tokenSent && isConnectionError(err) && i < chain.length - 1) {
+            console.warn(
+              `[llm/generate-chapter] Provider ${entry.provider} 连接失败（${err instanceof Error ? err.message : String(err)}），切换下一个`
+            );
+            continue;
+          }
+          // 发送错误事件
+          sendStart();
+          const errorMessage =
+            err instanceof LLMApiError
+              ? err.message
+              : err instanceof Error
+                ? err.message
+                : '生成失败';
+          controller.enqueue(
+            encoder.encode(
+              `event: error\ndata: ${JSON.stringify({ error: errorMessage, tokenSent })}\n\n`
+            )
+          );
+          if (!request.signal.aborted) {
+            controller.close();
+          }
+          return;
         }
       }
     },

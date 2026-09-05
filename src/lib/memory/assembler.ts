@@ -85,16 +85,18 @@ export function estimateMemoryTokens(memory: AssembledMemory): number {
     total += estimateStringTokens((wv.rules ?? []).join('\n'));
   }
 
-  // 长期记忆 · 人物（含 memoryToPrompt 会输出的 name/role/motivation/weakness）
+  // 长期记忆 · 人物（含 memoryToPrompt 会输出的全部字段：
+  // name/role/appearance/personality/background/motivation/weakness/
+  // speechStyle/catchphrase/behaviorPattern）
   for (const c of memory.longTerm.characters) {
     total += estimateStringTokens(
       [c.name, c.role, c.appearance, c.personality, c.background, c.motivation, c.weakness]
         .map((s) => s ?? '')
         .join('')
     );
-    // growthArc/speechStyle/behaviorPattern 虽未进 memoryToPrompt，但会被人物卡等
-    // 下游消费，一并计入防止整体低估
-    total += estimateStringTokens([c.growthArc, c.speechStyle, c.behaviorPattern].map((s) => s ?? '').join(''));
+    total += estimateStringTokens(
+      [c.growthArc, c.speechStyle, c.behaviorPattern, c.catchphrase].map((s) => s ?? '').join('')
+    );
   }
 
   // 长期记忆 · 大纲（主线 + 高潮节点 + 结局 + 卷计划）
@@ -275,7 +277,7 @@ export function memoryToPrompt(
     parts.push('');
   }
 
-  // ===== 人物档案 =====
+  // ===== 人物档案（言行识别模板：对话/行为/口头禅一并注入，让 AI 用对话与行为立人设） =====
   if (memory.longTerm.characters.length > 0) {
     parts.push('【人物档案】');
     for (const c of memory.longTerm.characters) {
@@ -287,9 +289,12 @@ export function memoryToPrompt(
         c.background && `背景：${c.background}`,
         c.motivation && `执念：${c.motivation}`,
         c.weakness && `弱点：${c.weakness}`,
+        c.speechStyle && `说话风格：${c.speechStyle}`,
+        c.catchphrase && `口头禅：${c.catchphrase}`,
+        c.behaviorPattern && `行为模式：${c.behaviorPattern}`,
       ]
         .filter(Boolean)
-        .join('');
+        .join('；');
       parts.push(desc);
     }
     parts.push('');

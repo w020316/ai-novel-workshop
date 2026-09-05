@@ -9,6 +9,7 @@ import { Input, Label } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Archive, Trash2, Loader2 } from 'lucide-react';
 import { db } from '@/lib/db/schema';
+import { PLATFORM_CHAPTER_STANDARDS } from '@/lib/outline/volume-plan';
 
 export default function ProjectConfigPage() {
   const params = useParams<{ id: string }>();
@@ -104,7 +105,7 @@ export default function ProjectConfigPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="chapterWords">每章字数</Label>
+            <Label htmlFor="chapterWords">每章字数（按平台爆款标准）</Label>
             <div className="flex flex-wrap items-center gap-1.5">
               <Input
                 id="chapterWords"
@@ -116,23 +117,24 @@ export default function ProjectConfigPage() {
                 value={chapterWords}
                 onChange={(e) => setChapterWords(Number(e.target.value))}
               />
-              {[2000, 2500, 3000, 4000].map((n) => (
+              {PLATFORM_CHAPTER_STANDARDS.map((p) => (
                 <button
-                  key={n}
+                  key={p.value}
                   type="button"
-                  onClick={() => setChapterWords(n)}
+                  title={p.hint}
+                  onClick={() => setChapterWords(p.value)}
                   className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                    chapterWords === n
+                    chapterWords === p.value
                       ? 'border-brand-500 bg-brand-50 text-brand-700'
                       : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
                   }`}
                 >
-                  {n} 字
+                  {p.label}
                 </button>
               ))}
             </div>
             <p className="text-xs text-stone-400">
-              约 {Math.max(1, Math.round(targetWords / (chapterWords || 2500)))} 章 · AI 生成正文时按该字数控制每章篇幅
+              约 {Math.max(1, Math.round(targetWords / (chapterWords || 2500)))} 章 · 档位参考主流平台热门作品，AI 生成正文时按该字数控制每章篇幅
             </p>
           </div>
           <div className="flex justify-end">

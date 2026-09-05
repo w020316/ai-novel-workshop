@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { useProjectStore, DEFAULT_LLM_CONFIG } from '@/lib/store/project-store';
 import { db } from '@/lib/db/schema';
-import { summarizePlan } from '@/lib/outline/volume-plan';
+import { summarizePlan, PLATFORM_CHAPTER_STANDARDS } from '@/lib/outline/volume-plan';
 import {
   projectFormSchema,
   type ProjectFormValues,
@@ -57,14 +57,6 @@ const TARGET_WORD_PRESETS: { value: number; label: string }[] = [
 
 /** 章节数快捷档：按每章字数反推目标字数，与字数双向换算 */
 const CHAPTER_PRESETS: number[] = [100, 200, 400, 800, 1500];
-
-/** 每章字数快捷档：影响章节数换算与 AI 正文篇幅控制 */
-const CHAPTER_WORDS_PRESETS: { value: number; label: string }[] = [
-  { value: 2000, label: '2000 字/章（快节奏）' },
-  { value: 2500, label: '2500 字/章（标准）' },
-  { value: 3000, label: '3000 字/章（充分展开）' },
-  { value: 4000, label: '4000 字/章（大章）' },
-];
 
 const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
   gemini: [
@@ -486,9 +478,9 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
             </p>
           </div>
 
-          {/* 每章字数：影响章节数换算与 AI 生成正文的篇幅控制 */}
+          {/* 每章字数：按主流平台爆款标准预设，影响章节数换算与 AI 正文篇幅控制 */}
           <div className="space-y-1.5">
-            <Label htmlFor="chapterWords">每章字数（可调）</Label>
+            <Label htmlFor="chapterWords">每章字数（可调 · 按平台爆款标准）</Label>
             <div className="flex flex-wrap items-center gap-1.5">
               <Input
                 id="chapterWords"
@@ -499,10 +491,11 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
                 className="max-w-48"
                 {...register('chapterWords', { valueAsNumber: true })}
               />
-              {CHAPTER_WORDS_PRESETS.map((p) => (
+              {PLATFORM_CHAPTER_STANDARDS.map((p) => (
                 <button
                   key={p.value}
                   type="button"
+                  title={p.hint}
                   onClick={() => setValue('chapterWords', p.value)}
                   className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                     chapterWords === p.value
@@ -515,7 +508,7 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
               ))}
             </div>
             <p className="text-xs text-stone-400">
-              调整后会重新换算章节数与分卷；AI 生成正文时也会按该字数控制每章篇幅
+              档位参考主流平台热门作品：{PLATFORM_CHAPTER_STANDARDS.find((p) => p.value === chapterWords)?.hint ?? '自定义字数'}；调整后自动重算章节数与分卷，AI 正文也按该字数控制每章篇幅
             </p>
             {errors.chapterWords && (
               <p className="text-xs text-accent-600">{errors.chapterWords.message}</p>

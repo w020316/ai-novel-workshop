@@ -5,21 +5,46 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useProjectStore } from '@/lib/store/project-store';
 import { getProjectStats } from '@/lib/db/queries';
+import { generateBookPackage, bookPackageToSummary } from '@/lib/llm/generators/book-package';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PenLine, Settings, Download, BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { PenLine, Settings, Download, BarChart3, RefreshCw, Loader2 } from 'lucide-react';
 import { formatTime } from '@/lib/utils';
 
 export default function ProjectOverviewPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
-  const { currentProject } = useProjectStore();
+  const { currentProject, updateProject } = useProjectStore();
   const [stats, setStats] = useState({ totalWords: 0, totalChapters: 0, completedChapters: 0 });
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     getProjectStats(projectId).then(setStats);
   }, [projectId]);
 
   if (!currentProject) return null;
+
+  /** 不满意当前设定：以书名+题材+现有简介为灵感，AI 重出一版（LLM 不可用时自动启发式兜底） */
+  const handleRegenerateSetting = async () => {
+    if (!window.confirm('将根据书名与题材重新生成一版设定（替换现有简介），确定？')) return;
+    setRegenerating(true);
+    try {
+      const idea = [currentProject.title, currentProject.genre, currentProject.summary.slice(0, 120)]
+        .filter(Boolean)
+        .join('，');
+      const bp = await generateBookPackage(idea);
+      const summary = bookPackageToSummary(bp);
+      await updateProject(projectId, { summary });
+      toast.success('已换一版设定', {
+        description: summary.slice(0, 80) + (summary.length > 80 ? '…' : ''),
+      });
+    } catch (e) {
+      toast.error('重新生成失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   const progress =
     currentProject.targetWords > 0
@@ -58,9 +83,39 @@ export default function ProjectOverviewPage() {
 
   return (
     <div className="space-y-6">
-      {/* 简介卡 */}
+      {/* 简介卡（设定） */}
       <Card>
         <CardContent className="pt-6">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-medium text-stone-700">故事设定</h2>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={handleRegenerateSetting}
+                disabled={regenerating}
+              >
+                {regenerating ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    AI 重出设定中…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-3 w-3" />
+                    不满意？换一版设定
+                  </>
+                )}
+              </Button>
+              <Link href={`/project/${projectId}/config`}>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                  <PenLine className="h-3 w-3" />
+                  手动编辑
+                </Button>
+              </Link>
+            </div>
+          </div>
           <p className="mb-4 text-sm text-stone-600">
             {currentProject.summary || '暂无简介，前往设定工坊补充世界观与人物档案'}
           </p>

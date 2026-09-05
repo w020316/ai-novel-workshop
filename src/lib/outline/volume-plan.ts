@@ -19,6 +19,18 @@ export const MIN_VOLUMES = 4;
 /** 卷数上限（避免卷太多管理成本过高） */
 export const MAX_VOLUMES = 12;
 
+/**
+ * 主流平台爆款作品的常见章节字数标准（快捷档位）。
+ * 依据 2025-2026 公开口径：番茄/七猫免费端 2000-2500 字完读率最优（1800 为隐形底线），
+ * 起点/纵横付费男频 3000-4500 字，晋江女频 2500-4000 字。
+ */
+export const PLATFORM_CHAPTER_STANDARDS: { value: number; label: string; hint: string }[] = [
+  { value: 2000, label: '番茄/七猫 · 2000 字', hint: '免费端黄金字数：完读率优先、快节奏强钩子' },
+  { value: 2500, label: '通用稳妥 · 2500 字', hint: '多数平台通吃，节奏与信息量平衡' },
+  { value: 3000, label: '晋江/纵横 · 3000 字', hint: '女频情感铺陈 / 传统男频常规节奏' },
+  { value: 4000, label: '起点大章 · 4000 字', hint: '起点付费追更主流，情节充分展开' },
+];
+
 /** 估算总章数：向上取整并钳制到 [12, 999]；wordsPerChapter 缺省按 2500 */
 export function estimateTotalChapters(targetWords: number, wordsPerChapter = WORDS_PER_CHAPTER): number {
   const per = Number.isFinite(wordsPerChapter) && wordsPerChapter >= 500 ? wordsPerChapter : WORDS_PER_CHAPTER;

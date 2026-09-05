@@ -16,7 +16,7 @@ import {
   ProviderFallbackExhaustedError,
 } from '@/lib/llm/adapter';
 import { buildProviderChain, geminiModelChain, geminiPrimaryForTask } from '@/lib/llm/providers';
-import { LLMApiError, isRetryableError } from '@/lib/llm/openai-compatible';
+import { LLMApiError, isRetryableError, isModelFallbackError } from '@/lib/llm/openai-compatible';
 import { enforceRateLimit } from '@/lib/api/rate-limit';
 import { validateMessages } from '@/lib/llm/message-validation';
 import { safeParseProvider, corsPreflightResponse } from '@/lib/api/llm-shared';
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
               responseFormat: body.responseFormat,
             });
           },
-          isRetryableError
+          isModelFallbackError
         );
         return { chat, model: usedModel };
       }

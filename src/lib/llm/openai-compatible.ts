@@ -382,3 +382,14 @@ export function isConnectionError(err: unknown): boolean {
     name === 'FetchError'
   );
 }
+
+/**
+ * 判断错误是否应触发「模型级」降级（切换到链上下一个模型）：
+ * - 一切可重试错误（429/5xx/超时/网络）
+ * - 404：模型不存在/已下线（换模型才有意义，换 provider 无必要）
+ * 非此类错误（如 401 认证失败、400 参数错误）不切换，直接抛出。
+ */
+export function isModelFallbackError(err: unknown): boolean {
+  if (isRetryableError(err)) return true;
+  return err instanceof LLMApiError && err.statusCode === 404;
+}

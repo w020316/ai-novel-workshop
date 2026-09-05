@@ -45,6 +45,7 @@ export interface SearchResult {
 /**
  * Top-K 向量检索
  * 在给定索引中查找与查询向量最相似的 K 个条目
+ * 维度不匹配的条目（如本地 384 维与服务端 2048 维混存）自动跳过，不中断检索
  *
  * @param query - 查询向量
  * @param index - 向量索引
@@ -58,11 +59,16 @@ export function topKSearch(
 ): SearchResult[] {
   if (index.length === 0) return [];
 
-  const scored = index.map((item) => ({
-    id: item.id,
-    score: cosineSimilarity(query, item.vector),
-    metadata: item.metadata,
-  }));
+  const scored: Array<{ id: string; score: number; metadata?: Record<string, unknown> }> = [];
+  for (const item of index) {
+    // 维度不匹配无法计算余弦相似度：跳过该条目，保证其余条目可正常检索
+    if (item.vector.length !== query.length) continue;
+    scored.push({
+      id: item.id,
+      score: cosineSimilarity(query, item.vector),
+      metadata: item.metadata,
+    });
+  }
 
   // 按相似度降序排列
   scored.sort((a, b) => b.score - a.score);

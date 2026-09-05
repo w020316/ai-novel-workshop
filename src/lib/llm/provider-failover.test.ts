@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildProviderChain } from './providers';
 import { callWithProviderFallback, ProviderFallbackExhaustedError } from './adapter';
-import { LLMApiError, isConnectionError } from './openai-compatible';
+import { LLMApiError, isConnectionError, isModelFallbackError } from './openai-compatible';
 
 describe('llm/provider-failover', () => {
   const originalEnv = { ...process.env };
@@ -46,6 +46,26 @@ describe('llm/provider-failover', () => {
       expect(isConnectionError(new Error('something broke'))).toBe(false);
       expect(isConnectionError(null)).toBe(false);
       expect(isConnectionError('timeout')).toBe(false);
+    });
+  });
+
+  // ============ isModelFallbackError（模型级降级判定） ============
+  describe('isModelFallbackError', () => {
+    it('404 模型不存在/已下线应触发模型切换', () => {
+      expect(isModelFallbackError(new LLMApiError('model not found', 404, '', 'gemini'))).toBe(true);
+    });
+
+    it('可重试错误（429/5xx/超时/网络）应触发模型切换', () => {
+      expect(isModelFallbackError(new LLMApiError('rate limit', 429, '', 'gemini'))).toBe(true);
+      expect(isModelFallbackError(new LLMApiError('server error', 500, '', 'gemini'))).toBe(true);
+      expect(isModelFallbackError(Object.assign(new Error('t'), { name: 'AbortError' }))).toBe(true);
+      expect(isModelFallbackError(new TypeError('fetch failed'))).toBe(true);
+    });
+
+    it('401/400 等非模型错误不应触发模型切换', () => {
+      expect(isModelFallbackError(new LLMApiError('auth', 401, '', 'gemini'))).toBe(false);
+      expect(isModelFallbackError(new LLMApiError('bad request', 400, '', 'gemini'))).toBe(false);
+      expect(isModelFallbackError(new Error('boom'))).toBe(false);
     });
   });
 

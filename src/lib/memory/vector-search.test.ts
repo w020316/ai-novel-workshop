@@ -67,4 +67,24 @@ describe('topKSearch', () => {
     const result = topKSearch(query, items, 10);
     expect(result).toHaveLength(1);
   });
+
+  it('维度不匹配的条目应跳过而非抛错（混维度索引容错）', () => {
+    const query = new Float32Array(384);
+    query[0] = 1;
+    const ok = new Float32Array(384);
+    ok[0] = 0.5;
+    const items: IndexedItem[] = [
+      { id: 'ok', vector: ok },
+      { id: 'server-2048', vector: new Float32Array(2048) }, // 服务端降级产生的异维向量
+      { id: 'empty-fallback', vector: new Float32Array(384) }, // 同维零向量正常参与
+    ];
+    const result = topKSearch(query, items, 5);
+    expect(result.map((r) => r.id)).toEqual(['ok', 'empty-fallback']);
+  });
+
+  it('全部条目维度不匹配时应返回空数组', () => {
+    const query = new Float32Array(384);
+    const items: IndexedItem[] = [{ id: 'server-2048', vector: new Float32Array(2048) }];
+    expect(topKSearch(query, items, 5)).toEqual([]);
+  });
 });

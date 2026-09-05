@@ -75,7 +75,15 @@ const STEP_META: { title: string; hint: string; fields: (keyof ProjectFormValues
   { title: 'AI 配置', hint: '新手保持默认即可', fields: [] },
 ];
 
-export function ProjectForm() {
+/** 向导预填（来自「一句话灵感 → 自动开书」）：version 变化即重新填入 */
+export interface ProjectFormPrefill {
+  title: string;
+  genre: string;
+  summary: string;
+  version: number;
+}
+
+export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
   const router = useRouter();
   const { createProject } = useProjectStore();
   const [submitting, setSubmitting] = useState(false);
@@ -137,6 +145,18 @@ export function ProjectForm() {
     setStep((s) => Math.max(s - 1, 0));
     scrollTop();
   };
+
+  // 从「一句话灵感 → 自动开书」带入：prefill.version 变化即填入
+  useEffect(() => {
+    if (!prefill || !prefill.title) return;
+    setValue('title', prefill.title.slice(0, 60));
+    if (GENRE_OPTIONS.some((o) => o.value === prefill.genre)) {
+      setValue('genre', prefill.genre as ProjectFormValues['genre']);
+    }
+    setValue('summary', prefill.summary.slice(0, 300));
+    toast.info('已按开书包填入向导，可再调整');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.version]);
 
   // 从「趋势灵感」带入：读 URL query 预填标题/题材/简介
   useEffect(() => {

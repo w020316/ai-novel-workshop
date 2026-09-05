@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { MemoryBrowser } from '@/components/memory/MemoryBrowser';
 import { WorldStateCard } from '@/components/memory/WorldStateCard';
+import { WorldTimeline } from '@/components/memory/WorldTimeline';
 import { ChapterSearch } from '@/components/search/ChapterSearch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Info, AlertTriangle, ShieldAlert } from 'lucide-react';
@@ -59,6 +60,9 @@ export default function MemoryPage() {
 
       {/* 世界状态机 */}
       <WorldStateCard projectId={projectId} />
+
+      {/* 世界时间线 */}
+      <WorldTimeline projectId={projectId} />
 
       {/* 跨章全文检索 */}
       <ChapterSearch />

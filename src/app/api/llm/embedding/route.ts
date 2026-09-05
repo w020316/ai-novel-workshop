@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            '服务端未配置任何 LLM Provider，请在 .env.local 中设置 GEMINI_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY / QWEN_API_KEY',
+            '服务端未配置任何 LLM Provider，请在 .env.local 中设置 GEMINI_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY / QWEN_API_KEY，或启用本地 Ollama（OLLAMA_ENABLED=true）',
         },
         { status: 503 }
       );

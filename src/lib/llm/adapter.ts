@@ -8,7 +8,7 @@
 // ============================================================================
 import type { LLMAdapter, LLMConfig, LLMProvider } from '@/types';
 import { OpenAICompatibleAdapter } from './openai-compatible';
-import { getProviderConfig, getAPIKey } from './providers';
+import { getProviderConfig, getAPIKey, isProviderConfigured } from './providers';
 
 export interface CreateAdapterOptions {
   apiKey?: string;
@@ -26,7 +26,16 @@ export function createAdapter(
   options: CreateAdapterOptions = {}
 ): LLMAdapter {
   const config = getProviderConfig(provider);
-  const apiKey = options.apiKey ?? getAPIKey(provider);
+
+  // Ollama 本地部署无需 API Key：仅要求显式启用，Bearer 头用占位值
+  if (provider === 'ollama' && !isProviderConfigured('ollama')) {
+    throw new Error(
+      '未启用本地 Ollama（设置环境变量 OLLAMA_ENABLED=true 或 OLLAMA_BASE_URL，且本地需已运行 ollama serve）'
+    );
+  }
+
+  const apiKey =
+    options.apiKey ?? getAPIKey(provider) ?? (provider === 'ollama' ? 'ollama' : undefined);
 
   if (!apiKey) {
     throw new Error(
@@ -64,7 +73,7 @@ export function createAdapterFromConfig(config: LLMConfig): LLMAdapter {
  * 用于多 Provider 降级场景
  */
 export function createFirstAvailableAdapter(
-  providers: LLMProvider[] = ['gemini', 'zhipu', 'deepseek', 'qwen']
+  providers: LLMProvider[] = ['gemini', 'zhipu', 'deepseek', 'qwen', 'ollama']
 ): LLMAdapter | null {
   for (const p of providers) {
     try {

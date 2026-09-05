@@ -66,6 +66,11 @@ const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
     { value: 'qwen-turbo', label: 'Qwen Turbo (8K)' },
     { value: 'qwen-plus', label: 'Qwen Plus (32K)' },
   ],
+  ollama: [
+    { value: 'qwen3:8b', label: 'Qwen3 8B（本地推荐）' },
+    { value: 'llama3.1:8b', label: 'Llama 3.1 8B' },
+    { value: 'glm4:9b', label: 'GLM-4 9B' },
+  ],
 };
 
 /** 三步向导：每步对应的必校验字段（选填字段不拦） */
@@ -480,6 +485,11 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
               <p className="text-xs text-stone-400">
                 首选：{MODEL_OPTIONS[selectedProvider]?.[0]?.label}
               </p>
+              {selectedProvider === 'ollama' && (
+                <p className="text-xs text-amber-600">
+                  本地模型零成本、离线可用：需本机已安装并运行 Ollama（ollama serve），且服务端设置 OLLAMA_ENABLED=true；云端部署（如 Vercel）无法访问本机模型，请改用云端供应商
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server';
 import type { LLMProvider } from '@/types';
 
-const PROVIDER_WHITELIST: readonly LLMProvider[] = ['gemini', 'zhipu', 'deepseek', 'qwen'] as const;
+const PROVIDER_WHITELIST: readonly LLMProvider[] = ['gemini', 'zhipu', 'deepseek', 'qwen', 'ollama'] as const;
 
 /** 请求体 provider 字段白名单解析：非法/缺省返回 undefined（走默认 provider 链） */
 export function safeParseProvider(value: unknown): LLMProvider | undefined {

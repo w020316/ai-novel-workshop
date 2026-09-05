@@ -93,6 +93,20 @@ export const PROVIDER_CONFIGS: Record<LLMProvider, ProviderConfig> = {
     maxOutputTokens: 8192,
     rateLimitRPM: 60,
   },
+  ollama: {
+    provider: 'ollama',
+    label: 'Ollama（本地模型）',
+    baseURL: 'http://localhost:11434/v1',
+    chatPath: '/chat/completions',
+    embeddingPath: '/embeddings',
+    envKey: 'OLLAMA_API_KEY',
+    defaultModel: 'qwen3:8b',
+    defaultEmbeddingModel: 'nomic-embed-text',
+    supportsJSON: true,
+    supportsStream: true,
+    maxOutputTokens: 8192,
+    rateLimitRPM: 0, // 本地部署，无云端限流
+  },
 };
 
 /**
@@ -122,22 +136,28 @@ export function getAPIKey(provider: LLMProvider): string | undefined {
 
 /**
  * 检查 Provider 是否已配置（API Key 可用）
+ * Ollama 特殊：本地部署无需 API Key，显式启用（OLLAMA_ENABLED=true）
+ * 或自定义端点（OLLAMA_BASE_URL）即视为已配置，避免云端部署误连 localhost
  */
 export function isProviderConfigured(provider: LLMProvider): boolean {
+  if (provider === 'ollama') {
+    return process.env.OLLAMA_ENABLED === 'true' || Boolean(process.env.OLLAMA_BASE_URL);
+  }
   return Boolean(getAPIKey(provider));
 }
 
 /**
  * 列出所有已配置的 Provider（按优先级排序）
- * 可通过环境变量 LLM_PROVIDER_ORDER 自定义顺序（逗号分隔），默认为 gemini > zhipu > deepseek > qwen
+ * 可通过环境变量 LLM_PROVIDER_ORDER 自定义顺序（逗号分隔），
+ * 默认为 gemini > zhipu > deepseek > qwen > ollama（ollama 仅在显式启用时参与）
  */
 export function listConfiguredProviders(): LLMProvider[] {
   const envOrder = process.env['LLM_PROVIDER_ORDER'];
   const order: LLMProvider[] = envOrder
     ? (envOrder.split(',').map((s) => s.trim()) as LLMProvider[]).filter((p) =>
-        p === 'gemini' || p === 'deepseek' || p === 'zhipu' || p === 'qwen'
+        p === 'gemini' || p === 'deepseek' || p === 'zhipu' || p === 'qwen' || p === 'ollama'
       )
-    : ['gemini', 'zhipu', 'deepseek', 'qwen'];
+    : ['gemini', 'zhipu', 'deepseek', 'qwen', 'ollama'];
   return order.filter((p) => isProviderConfigured(p));
 }
 

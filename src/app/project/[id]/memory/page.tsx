@@ -6,6 +6,7 @@ import { MemoryBrowser } from '@/components/memory/MemoryBrowser';
 import { WorldStateCard } from '@/components/memory/WorldStateCard';
 import { WorldTimeline } from '@/components/memory/WorldTimeline';
 import { ArcCanonCard } from '@/components/memory/ArcCanonCard';
+import { StyleDriftCard } from '@/components/memory/StyleDriftCard';
 import { ChapterSearch } from '@/components/search/ChapterSearch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Info, AlertTriangle, ShieldAlert } from 'lucide-react';
@@ -61,6 +62,9 @@ export default function MemoryPage() {
 
       {/* 世界状态机 */}
       <WorldStateCard projectId={projectId} />
+
+      {/* 文风漂移监测 */}
+      <StyleDriftCard projectId={projectId} />
 
       {/* 剧情纲要（全书真值锚点） */}
       <ArcCanonCard projectId={projectId} />

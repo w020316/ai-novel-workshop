@@ -27,8 +27,12 @@ export function splitSentences(text: string): string[] {
 }
 
 // ============ 对话提取 ============
+// 成对引号匹配（修复：原单一正则的开/闭类只含直引号 U+0022，
+// 中文小说通用的弯引号 “ ” 与直角引号 「」『』全部漏检，对话比恒为 0）
 const DIALOGUE_PATTERNS: RegExp[] = [
-  /["""''「『（(]([^"""''」』）)]+)["""''」』）)]/g,
+  /["“”]([^"“”]+)["“”]/g, // 直引号与中文弯引号
+  /[「『]([^」』]+)[」』]/g, // 直角引号
+  /[（(]([^（）()]+)[）)]/g, // 括号补语（保留原有行为）
 ];
 
 export function extractDialogues(text: string): string[] {

@@ -12,12 +12,17 @@ import { Button } from '@/components/ui/button';
 import { Textarea, Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { TrendingUp, Loader2, Sparkles, Lightbulb, ScanText, Radio } from 'lucide-react';
+import { TrendingUp, Loader2, Sparkles, Lightbulb, ScanText, Radio, Compass } from 'lucide-react';
 import type { InspirationCard } from '@/types';
 import { scrapableSourceIds } from '@/lib/rank/scraper';
 import type { RankFetchResult } from '@/lib/rank/scraper';
 import { saveLiveRankedWorks, countLiveRankedWorks, clearLiveRankedWorks } from '@/lib/rank/store';
 import { fetchAllRankSources, type SourceOutcome } from '@/lib/rank/all';
+import {
+  generateViralBreakdowns,
+  viralBreakdownsToCards,
+  type ViralBreakdown,
+} from '@/lib/rank/viral';
 
 const GENRES = ['玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他'];
 const RHYTHM_LABEL: Record<string, string> = { fast: '快节奏', medium: '中等', slow: '慢节奏' };
@@ -50,6 +55,9 @@ export default function TrendPage() {
 
   const [fetchingAll, setFetchingAll] = useState(false);
   const [allOutcomes, setAllOutcomes] = useState<SourceOutcome[] | null>(null);
+
+  const [viralAnalyzing, setViralAnalyzing] = useState(false);
+  const [viralResults, setViralResults] = useState<ViralBreakdown[] | null>(null);
 
   const loadCards = useCallback(async () => {
     setSavedCards(await listInspirationCards(projectId));
@@ -139,6 +147,7 @@ export default function TrendPage() {
   const handleFetchRank = async () => {
     setFetchingRank(true);
     setRank(null);
+    setViralResults(null);
     try {
       const res = await fetch(`/api/rank/fetch?platform=${encodeURIComponent(sourceId)}`);
       const data: RankFetchResult = await res.json();
@@ -201,6 +210,31 @@ export default function TrendPage() {
       toast.error('拆解失败', { description: e instanceof Error ? e.message : String(e) });
     } finally {
       setPasting(false);
+    }
+  };
+
+  const handleViralBreakdown = async () => {
+    if (!rank || rank.books.length === 0) {
+      toast.warning('请先抓取到榜单作品再拆解');
+      return;
+    }
+    setViralAnalyzing(true);
+    try {
+      const breakdowns = await generateViralBreakdowns(rank.books, rank.sourceName, 5);
+      setViralResults(breakdowns);
+      const cards = viralBreakdownsToCards(projectId, breakdowns, rank.sourceName);
+      if (cards.length > 0) await saveInspirationCards(cards);
+      await loadCards();
+      const llmCount = breakdowns.filter((b) => b.fromLLM).length;
+      toast.success(
+        `已拆解 ${breakdowns.length} 部头部作品的出圈逻辑（LLM ${llmCount} / 启发式 ${breakdowns.length - llmCount}）${
+          cards.length ? `，并收藏 ${cards.length} 张灵感卡` : ''
+        }`
+      );
+    } catch (e) {
+      toast.error('出圈拆解失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setViralAnalyzing(false);
     }
   };
 
@@ -468,12 +502,38 @@ export default function TrendPage() {
                       </li>
                     ))}
                   </ol>
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Button variant="outline" size="sm" onClick={handleRankToCards} disabled={pasting}>
                       {pasting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                       拆解成灵感（并入下方收藏卡）
                     </Button>
+                    <Button size="sm" onClick={handleViralBreakdown} disabled={viralAnalyzing}>
+                      {viralAnalyzing && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                      <Compass className="mr-1.5 h-3.5 w-3.5" />
+                      拆解头部作品出圈逻辑
+                    </Button>
                   </div>
+
+                  {viralResults && viralResults.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="font-medium text-stone-600">头部作品出圈逻辑（前 {viralResults.length} 部）：</p>
+                      {viralResults.map((b) => (
+                        <div key={b.title} className="rounded-md border border-brand-200 bg-brand-50/40 p-2.5">
+                          <p className="font-medium text-stone-800">
+                            {b.title}
+                            <span className="ml-1.5 rounded bg-brand-100 px-1 text-[10px] text-brand-700">
+                              {b.fromLLM ? 'AI 拆解' : '启发式拆解'}
+                            </span>
+                          </p>
+                          <p className="mt-1 text-stone-600">题材定位：{b.genre}</p>
+                          <p className="text-stone-600">金手指：{b.goldenFinger}</p>
+                          <p className="text-stone-600">钩子：{b.hooks.join('；')}</p>
+                          <p className="text-stone-600">情绪爽点：{b.emotionalPayoffs.join('；')}</p>
+                          <p className="text-stone-500">可借鉴：{b.techniques.join('；')}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>

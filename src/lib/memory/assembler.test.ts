@@ -181,6 +181,26 @@ describe('estimateMemoryTokens', () => {
     expect(total).toBeGreaterThan(legacyOnly * 3);
   });
 
+  it('剧情纲要应计入 token 估算（口径与注入一致）', () => {
+    const canonText = 'C'.repeat(200);
+    const base = estimateMemoryTokens({
+      longTerm: emptyLongTerm,
+      midTerm: emptyMidTerm,
+      shortTerm: { prevChapters: [], currentPlotPoints: [] },
+      tokenEstimate: 0,
+    });
+    const withCanon = estimateMemoryTokens({
+      longTerm: {
+        ...emptyLongTerm,
+        arcCanon: { id: 'canon_p', projectId: 'p', canonText, upToDateChapterNo: 10, fromLLM: false, updatedAt: 0 },
+      },
+      midTerm: emptyMidTerm,
+      shortTerm: { prevChapters: [], currentPlotPoints: [] },
+      tokenEstimate: 0,
+    });
+    expect(withCanon - base).toBe(estimateTokens(canonText));
+  });
+
   it('人物与文风字段应计入估算', () => {
     const longTerm: LongTermMemory = {
       worldview: null,

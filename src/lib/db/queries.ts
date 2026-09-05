@@ -19,6 +19,7 @@ import type {
   Deconstruction,
   InspirationCard,
   ChapterVersion,
+  ArcCanon,
 } from '@/types';
 
 // ============ 项目 ============
@@ -210,6 +211,19 @@ export async function getPrevChapterSummaries(
 
 export async function saveChapterSummary(s: ChapterSummary): Promise<void> {
   await db.chapterSummaries.put(s);
+}
+
+// ============ 剧情纲要（ArcCanon） ============
+export async function getArcCanon(projectId: string): Promise<ArcCanon | undefined> {
+  return db.arcCanons.where('projectId').equals(projectId).first();
+}
+
+export async function saveArcCanon(canon: ArcCanon): Promise<void> {
+  await db.arcCanons.put(canon);
+}
+
+export async function deleteArcCanon(projectId: string): Promise<void> {
+  await db.arcCanons.where('projectId').equals(projectId).delete();
 }
 
 // ============ 一致性报告 ============

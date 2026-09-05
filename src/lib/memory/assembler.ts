@@ -123,6 +123,11 @@ export function estimateMemoryTokens(memory: AssembledMemory): number {
     total += estimateStringTokens(memory.longTerm.stylePreset.sampleText ?? '');
   }
 
+  // 长期记忆 · 剧情纲要（memoryToPrompt 会整段注入）
+  if (memory.longTerm.arcCanon?.canonText) {
+    total += estimateStringTokens(memory.longTerm.arcCanon.canonText);
+  }
+
   // 中期记忆
   for (const s of memory.midTerm.relevantSummaries) {
     total += estimateStringTokens(s.summary);
@@ -317,6 +322,15 @@ export function memoryToPrompt(
       if (activeVolume.coreConflict) parts.push(`本卷核心冲突：${activeVolume.coreConflict}`);
       if (activeVolume.summary) parts.push(`本卷剧情走向：${activeVolume.summary}`);
     }
+    parts.push('');
+  }
+
+  // ===== 剧情纲要（全书真值锚点） =====
+  if (memory.longTerm.arcCanon?.canonText) {
+    const canon = memory.longTerm.arcCanon;
+    parts.push('【剧情纲要（已发生剧情的真值摘要，必须与前情一致，禁止矛盾/重演）】');
+    parts.push(canon.canonText);
+    parts.push(`（以上覆盖至第 ${canon.upToDateChapterNo} 章）`);
     parts.push('');
   }
 

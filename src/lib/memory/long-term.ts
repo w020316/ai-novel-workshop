@@ -10,6 +10,7 @@ import {
   getOutline,
   listPendingForeshadowings,
   getProjectStylePreset,
+  getArcCanon,
 } from '@/lib/db/queries';
 
 /**
@@ -23,13 +24,14 @@ import {
 export async function loadLongTermMemory(
   projectId: string
 ): Promise<LongTermMemory> {
-  const [worldview, characters, outline, pendingForeshadowings, stylePreset] =
+  const [worldview, characters, outline, pendingForeshadowings, stylePreset, arcCanon] =
     await Promise.all([
       getWorldview(projectId),
       listCharacters(projectId),
       getOutline(projectId),
       listPendingForeshadowings(projectId),
       getProjectStylePreset(projectId),
+      getArcCanon(projectId).catch(() => undefined),
     ]);
 
   return {
@@ -38,6 +40,7 @@ export async function loadLongTermMemory(
     outline: outline ?? null,
     pendingForeshadowings,
     stylePreset: stylePreset ?? null,
+    arcCanon: arcCanon ?? null,
   };
 }
 
@@ -89,6 +92,11 @@ export function estimateLongTermTokens(memory: LongTermMemory): number {
   // 文风
   if (memory.stylePreset) {
     total += estimateStringTokens(memory.stylePreset.sampleText ?? '');
+  }
+
+  // 剧情纲要
+  if (memory.arcCanon?.canonText) {
+    total += estimateStringTokens(memory.arcCanon.canonText);
   }
 
   return total;

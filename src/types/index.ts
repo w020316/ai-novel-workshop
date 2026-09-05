@@ -440,6 +440,23 @@ export interface LongTermMemory {
   outline: Outline | null;
   pendingForeshadowings: Foreshadowing[];
   stylePreset: StylePreset | null;
+  /** 剧情纲要（全书已发生剧情的压缩真值锚点，随写随更） */
+  arcCanon?: ArcCanon | null;
+}
+
+/**
+ * 剧情纲要（ArcCanon）：每 N 章把「旧纲要 + 新章摘要」增量压缩为更新版纲要，
+ * 生成时作为全书真值注入，防止百万字中段剧情跑偏 / 前后矛盾。
+ */
+export interface ArcCanon {
+  id: string; // canon_<projectId>
+  projectId: string;
+  canonText: string;
+  /** 纲要已覆盖到的最新章号 */
+  upToDateChapterNo: number;
+  /** 最近一次更新是否来自 LLM 压缩（false = 确定性拼接降级） */
+  fromLLM: boolean;
+  updatedAt: number;
 }
 
 export interface MidTermMemory {

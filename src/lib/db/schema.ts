@@ -21,6 +21,7 @@ import type {
   LiveRankedWork,
   BatchJob,
   WritingSkill,
+  ArcCanon,
 } from '@/types';
 
 export class NovelDB extends Dexie {
@@ -41,6 +42,7 @@ export class NovelDB extends Dexie {
   liveRankedWorks!: Table<LiveRankedWork, string>;
   batchJobs!: Table<BatchJob, string>;
   skills!: Table<WritingSkill, string>;
+  arcCanons!: Table<ArcCanon, string>;
 
   constructor() {
     super('ai_novel_workshop');
@@ -77,6 +79,10 @@ export class NovelDB extends Dexie {
     // 写作技能库（Skills，跨项目全局）
     this.version(6).stores({
       skills: 'id, name, category, source, builtin, enabled',
+    });
+    // 剧情纲要（全书真值锚点，随写随更）
+    this.version(7).stores({
+      arcCanons: 'id, projectId, updatedAt',
     });
   }
 }

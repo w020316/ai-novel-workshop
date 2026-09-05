@@ -9,6 +9,7 @@ vi.mock('@/lib/db/queries', () => ({
   getOutline: vi.fn(),
   listPendingForeshadowings: vi.fn(),
   getProjectStylePreset: vi.fn(),
+  getArcCanon: vi.fn(),
 }));
 
 import {
@@ -17,6 +18,7 @@ import {
   getOutline,
   listPendingForeshadowings,
   getProjectStylePreset,
+  getArcCanon,
 } from '@/lib/db/queries';
 
 const mockWorldview: Worldview = {
@@ -90,6 +92,7 @@ const mockStylePreset: StylePreset = {
 describe('memory/long-term', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (getArcCanon as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
   });
 
   describe('loadLongTermMemory', () => {

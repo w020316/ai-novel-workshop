@@ -18,6 +18,14 @@ vi.mock('@/lib/db/queries', () => ({
   listForeshadowings: vi.fn(),
   listPlotThreads: vi.fn(),
   savePlotThread: vi.fn(),
+  getArcCanon: vi.fn(),
+  saveArcCanon: vi.fn(),
+  listChapterSummaries: vi.fn(),
+}));
+
+// 模拟剧情纲要更新（编排层单独测试，此处不干扰主流程断言）
+vi.mock('./arc-canon', () => ({
+  maybeUpdateArcCanon: vi.fn().mockResolvedValue(null),
 }));
 
 // 模拟 embedding 模块

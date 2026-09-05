@@ -18,6 +18,7 @@ import {
   savePlotThread,
 } from '@/lib/db/queries';
 import { getDefaultEmbedder } from './embedding';
+import { maybeUpdateArcCanon } from './arc-canon';
 import { truncateAtSentence } from '@/lib/utils';
 
 /** 章节摘要最大字符数（防止 AI 生成的超长摘要耗尽后续 token 预算） */

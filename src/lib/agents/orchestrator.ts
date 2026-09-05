@@ -271,6 +271,7 @@ async function assembleMemoryWithFallback(
       outline: null,
       pendingForeshadowings: [],
       stylePreset: null,
+      arcCanon: null,
     };
     const fallbackMemory: AssembledMemory = {
       longTerm: emptyMemory,

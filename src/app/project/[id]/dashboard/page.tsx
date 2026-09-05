@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
-import { listChapters, getProject } from '@/lib/db/queries';
+import { listChapters, getProject, listCharacters, listPlotThreads, listForeshadowings } from '@/lib/db/queries';
 import { buildDashboardData } from '@/lib/dashboard';
+import { EntityGraphCard } from '@/components/dashboard/EntityGraphCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import type { Chapter, NovelProject } from '@/types';
+import type { Chapter, Character, Foreshadowing, NovelProject, PlotThread } from '@/types';
 
 export default function DashboardPage() {
   const params = useParams<{ id: string }>();
@@ -15,14 +16,27 @@ export default function DashboardPage() {
   const projectId = params.id;
   const [project, setProject] = useState<NovelProject | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
+  // 实体图谱数据（人物 / 剧情线 / 伏笔）
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [plotThreads, setPlotThreads] = useState<PlotThread[]>([]);
+  const [foreshadowings, setForeshadowings] = useState<Foreshadowing[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, chs] = await Promise.all([getProject(projectId), listChapters(projectId)]);
+      const [p, chs, cs, ts, fs] = await Promise.all([
+        getProject(projectId),
+        listChapters(projectId),
+        listCharacters(projectId).catch(() => []),
+        listPlotThreads(projectId).catch(() => []),
+        listForeshadowings(projectId).catch(() => []),
+      ]);
       setProject(p ?? null);
       setChapters(chs);
+      setCharacters(cs);
+      setPlotThreads(ts);
+      setForeshadowings(fs);
     } finally {
       setLoading(false);
     }
@@ -126,6 +140,14 @@ export default function DashboardPage() {
           </svg>
         </CardContent>
       </Card>
+
+      {/* 实体图谱：人物关系网络 + 剧情线 + 情节债务 */}
+      <EntityGraphCard
+        characters={characters}
+        plotThreads={plotThreads}
+        foreshadowings={foreshadowings}
+        currentChapterNo={chapters.reduce((m, c) => Math.max(m, c.chapterNo), 0)}
+      />
     </main>
   );
 }

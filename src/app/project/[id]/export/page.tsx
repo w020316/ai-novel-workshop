@@ -5,15 +5,20 @@ import { useParams } from 'next/navigation';
 import { getProject, listChapters, getWorldview, listCharacters, getOutline, listForeshadowings, listChapterSummaries, getConsistencyReport, listPlotThreads, getProjectStylePreset } from '@/lib/db/queries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Download, FileText, BookMarked, Archive, Upload, ShieldCheck, CheckSquare, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Download, FileText, BookMarked, Archive, Upload, ShieldCheck, CheckSquare, Image as ImageIcon, Cloud, RefreshCw, Trash2, RotateCcw } from 'lucide-react';
 import { exportTxt, downloadTxt } from '@/lib/export/txt';
 import { buildCollisionAppendix } from '@/lib/export/collision-appendix';
 import { loadLiveRankedTitles } from '@/lib/rank/store';
 import { exportMarkdown, downloadMarkdown } from '@/lib/export/markdown';
 import { exportEpub, downloadEpub, buildCoverSvg } from '@/lib/export/epub';
-import { createBackup, downloadBackup } from '@/lib/export/backup';
+import { createBackup, downloadBackup, type ProjectBackup } from '@/lib/export/backup';
 import { compileExportPackManifest, buildExportPackZip } from '@/lib/export/export-pack';
 import { readBackupFile, restoreBackup } from '@/lib/import/restore';
+import {
+  loadWebdavConfig, saveWebdavConfig, clearWebdavConfig,
+  uploadBackup, listBackups, fetchBackupJson, deleteRemoteBackup, parseRemoteBackup,
+  type WebDAVConfig, type RemoteBackup,
+} from '@/lib/sync/webdav';
 import { toast } from 'sonner';
 import type { NovelProject, Chapter } from '@/types';
 
@@ -36,6 +41,17 @@ export default function ExportPage() {
   const [coverTitle, setCoverTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [description, setDescription] = useState('');
+  // WebDAV 云同步
+  const [showSync, setShowSync] = useState(false);
+  const [davCfg, setDavCfg] = useState<WebDAVConfig>({ serverUrl: '', username: '', password: '', remoteDir: 'ai-novel-workshop' });
+  const [davList, setDavList] = useState<RemoteBackup[]>([]);
+  const [syncBusy, setSyncBusy] = useState<string | null>(null);
+
+  // 恢复本机已保存的云同步配置
+  useEffect(() => {
+    const cfg = loadWebdavConfig();
+    if (cfg) setDavCfg(cfg);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,45 +131,117 @@ export default function ExportPage() {
     setExporting(null);
   };
 
+  /** 组装完整备份（本地下载与云端上传共用） */
+  const collectBackup = async (): Promise<ProjectBackup> => {
+    if (!project) throw new Error('项目不存在');
+    const [wv, chars, ol, fs, sums, threads, style] = await Promise.all([
+      getWorldview(projectId),
+      listCharacters(projectId),
+      getOutline(projectId),
+      listForeshadowings(projectId),
+      listChapterSummaries(projectId),
+      listPlotThreads(projectId),
+      getProjectStylePreset(projectId),
+    ]);
+
+    // 收集一致性报告
+    const reports = [];
+    for (const ch of chapters) {
+      const r = await getConsistencyReport(ch.id).catch(() => null);
+      if (r) reports.push(r);
+    }
+
+    return createBackup({
+      project,
+      worldview: wv ?? null,
+      characters: chars,
+      outline: ol ?? null,
+      foreshadowings: fs,
+      chapters,
+      chapterSummaries: sums,
+      consistencyReports: reports,
+      plotThreads: threads,
+      stylePreset: style ?? null,
+    });
+  };
+
   const handleExportBackup = async () => {
     if (!project) return;
     setExporting('backup');
     try {
-      const [wv, chars, ol, fs, sums, threads, style] = await Promise.all([
-        getWorldview(projectId),
-        listCharacters(projectId),
-        getOutline(projectId),
-        listForeshadowings(projectId),
-        listChapterSummaries(projectId),
-        listPlotThreads(projectId),
-        getProjectStylePreset(projectId),
-      ]);
-
-      // 收集一致性报告
-      const reports = [];
-      for (const ch of chapters) {
-        const r = await getConsistencyReport(ch.id).catch(() => null);
-        if (r) reports.push(r);
-      }
-
-      const backup = await createBackup({
-        project,
-        worldview: wv ?? null,
-        characters: chars,
-        outline: ol ?? null,
-        foreshadowings: fs,
-        chapters,
-        chapterSummaries: sums,
-        consistencyReports: reports,
-        plotThreads: threads,
-        stylePreset: style ?? null,
-      });
+      const backup = await collectBackup();
       downloadBackup(backup);
       toast.success('JSON 备份导出成功');
     } catch {
       toast.error('备份导出失败');
     }
     setExporting(null);
+  };
+
+  /** 上传备份到 WebDAV */
+  const handleSyncUpload = async () => {
+    if (!project) return;
+    setSyncBusy('upload');
+    try {
+      const backup = await collectBackup();
+      const path = await uploadBackup(davCfg, backup);
+      toast.success(`已上传备份到云端：${path.split('/').pop()}`);
+      await handleSyncList();
+    } catch (e) {
+      toast.error('云上传失败', { description: e instanceof Error ? e.message : String(e) });
+    }
+    setSyncBusy(null);
+  };
+
+  /** 刷新远端备份列表 */
+  const handleSyncList = async () => {
+    setSyncBusy('list');
+    try {
+      const list = await listBackups(davCfg);
+      setDavList(list);
+      if (list.length === 0) toast.info('远端目录暂无备份');
+    } catch (e) {
+      toast.error('获取云端列表失败', { description: e instanceof Error ? e.message : String(e) });
+    }
+    setSyncBusy(null);
+  };
+
+  /** 从云端备份恢复（同本地恢复：不覆盖现有数据） */
+  const handleSyncRestore = async (b: RemoteBackup) => {
+    setSyncBusy(`restore:${b.path}`);
+    try {
+      const json = await fetchBackupJson(davCfg, b.path);
+      const data = await parseRemoteBackup(json);
+      const restoredId = await restoreBackup(data);
+      toast.success(`项目 "${data.project.title}" 已从云端恢复`);
+      window.location.href = `/project/${restoredId}`;
+    } catch (e) {
+      toast.error('云端恢复失败', { description: e instanceof Error ? e.message : String(e) });
+      setSyncBusy(null);
+    }
+  };
+
+  /** 删除远端备份 */
+  const handleSyncDelete = async (b: RemoteBackup) => {
+    if (!window.confirm(`确认删除云端备份 ${b.filename}？`)) return;
+    setSyncBusy(`delete:${b.path}`);
+    try {
+      await deleteRemoteBackup(davCfg, b.path);
+      toast.success('已删除云端备份');
+      setDavList((prev) => prev.filter((x) => x.path !== b.path));
+    } catch (e) {
+      toast.error('删除失败', { description: e instanceof Error ? e.message : String(e) });
+    }
+    setSyncBusy(null);
+  };
+
+  const handleSaveDavConfig = () => {
+    if (!/^https:\/\//i.test(davCfg.serverUrl.trim())) {
+      toast.warning('服务器地址需以 https:// 开头（凭据安全）');
+      return;
+    }
+    saveWebdavConfig({ ...davCfg, serverUrl: davCfg.serverUrl.trim(), remoteDir: davCfg.remoteDir.trim() });
+    toast.success('云同步配置已保存到本机');
   };
 
   /** 一键打包全部格式（TXT + Markdown + EPUB + 无 JSON 备份）为单个 zip */
@@ -486,6 +574,158 @@ export default function ExportPage() {
               </>
             )}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* WebDAV 云同步 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between text-base">
+            <span className="flex items-center gap-2">
+              <Cloud className="h-4 w-4 text-brand-500" />
+              云同步（WebDAV）
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowSync((v) => !v)}
+              className="text-xs font-normal text-stone-500 hover:text-brand-600"
+            >
+              {showSync ? '收起' : '展开配置'}
+            </button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-stone-600">
+            将完整备份上传到你自己的 WebDAV 网盘（坚果云 / 群晖 / Nextcloud 等），实现多设备同步与异地容灾。
+            服务器地址需 https；坚果云请使用「应用密码」而非登录密码。配置仅保存在本机浏览器。
+          </p>
+
+          {showSync && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-stone-600">服务器地址</label>
+                <input
+                  value={davCfg.serverUrl}
+                  onChange={(e) => setDavCfg({ ...davCfg, serverUrl: e.target.value })}
+                  placeholder="https://dav.jianguoyun.com/dav/"
+                  className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-stone-600">账号</label>
+                <input
+                  value={davCfg.username}
+                  onChange={(e) => setDavCfg({ ...davCfg, username: e.target.value })}
+                  className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-stone-600">应用密码</label>
+                <input
+                  type="password"
+                  value={davCfg.password}
+                  onChange={(e) => setDavCfg({ ...davCfg, password: e.target.value })}
+                  className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-stone-600">远端目录（可选）</label>
+                <input
+                  value={davCfg.remoteDir}
+                  onChange={(e) => setDavCfg({ ...davCfg, remoteDir: e.target.value })}
+                  placeholder="ai-novel-workshop"
+                  className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <Button variant="outline" size="sm" onClick={handleSaveDavConfig}>
+                  保存配置
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    clearWebdavConfig();
+                    setDavCfg({ serverUrl: '', username: '', password: '', remoteDir: 'ai-novel-workshop' });
+                    setDavList([]);
+                    toast.success('已清除本机云同步配置');
+                  }}
+                >
+                  清除
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={handleSyncUpload}
+              disabled={syncBusy !== null || !davCfg.serverUrl.trim()}
+            >
+              {syncBusy === 'upload' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Cloud className="mr-2 h-4 w-4" />
+              )}
+              {syncBusy === 'upload' ? '上传中…' : '上传备份到云端'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleSyncList}
+              disabled={syncBusy !== null || !davCfg.serverUrl.trim()}
+            >
+              {syncBusy === 'list' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              刷新云端列表
+            </Button>
+          </div>
+
+          {davList.length > 0 && (
+            <div className="divide-y divide-stone-100 rounded-md border border-stone-200">
+              {davList.map((b) => (
+                <div key={b.path} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-stone-700">{b.filename}</p>
+                    <p className="text-xs text-stone-400">
+                      {b.modifiedAt ? new Date(b.modifiedAt).toLocaleString('zh-CN') : '时间未知'}
+                      {b.size != null ? ` · ${(b.size / 1024).toFixed(1)} KB` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleSyncRestore(b)}
+                      disabled={syncBusy !== null}
+                    >
+                      {syncBusy === `restore:${b.path}` ? (
+                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                      )}
+                      恢复
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => handleSyncDelete(b)}
+                      disabled={syncBusy !== null}
+                    >
+                      {syncBusy === `delete:${b.path}` ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

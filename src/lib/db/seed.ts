@@ -337,6 +337,83 @@ const STYLE_PRESETS: Omit<StylePreset, 'id'>[] = [
       commonPhrases: ['翻了个白眼', '嘴角抽搐', '欲哭无泪', '心中一万匹草泥马'],
     },
   },
+  {
+    name: '热血升级',
+    narrativePerspective: 'third-limited',
+    pacing: 'fast',
+    descriptionDensity: 'medium',
+    dialogueRatio: 0.35,
+    vocabularyProfile: {
+      avgSentenceLength: 13,
+      commonPhrases: ['血脉偾张', '气势暴涨', '一拳轰出', '突破'],
+    },
+  },
+  {
+    name: '古风雅韵',
+    narrativePerspective: 'third-limited',
+    pacing: 'slow',
+    descriptionDensity: 'detailed',
+    dialogueRatio: 0.3,
+    vocabularyProfile: {
+      avgSentenceLength: 20,
+      commonPhrases: ['锦瑟无端', '眉黛微蹙', '烛影摇红', '衣袂翩然'],
+    },
+  },
+  {
+    name: '诡秘惊悚',
+    narrativePerspective: 'third-limited',
+    pacing: 'medium',
+    descriptionDensity: 'detailed',
+    dialogueRatio: 0.25,
+    vocabularyProfile: {
+      avgSentenceLength: 16,
+      commonPhrases: ['黏稠的黑暗', '耳畔低语', '脊背发凉', '规则在低声运转'],
+    },
+  },
+  {
+    name: '都市轻喜',
+    narrativePerspective: 'first',
+    pacing: 'fast',
+    descriptionDensity: 'sparse',
+    dialogueRatio: 0.55,
+    vocabularyProfile: {
+      avgSentenceLength: 13,
+      commonPhrases: ['好家伙', '社死现场', '离谱又合理', '内心疯狂弹幕'],
+    },
+  },
+  {
+    name: '女频甜宠',
+    narrativePerspective: 'third-limited',
+    pacing: 'fast',
+    descriptionDensity: 'medium',
+    dialogueRatio: 0.45,
+    vocabularyProfile: {
+      avgSentenceLength: 15,
+      commonPhrases: ['耳尖发烫', '心跳漏了一拍', '眼波流转', '宠溺一笑'],
+    },
+  },
+  {
+    name: '快穿利落',
+    narrativePerspective: 'third-limited',
+    pacing: 'fast',
+    descriptionDensity: 'sparse',
+    dialogueRatio: 0.4,
+    vocabularyProfile: {
+      avgSentenceLength: 12,
+      commonPhrases: ['位面切换', '任务目标锁定', '剧情走偏', '好感度飙升'],
+    },
+  },
+  {
+    name: '治愈日常',
+    narrativePerspective: 'first',
+    pacing: 'slow',
+    descriptionDensity: 'detailed',
+    dialogueRatio: 0.4,
+    vocabularyProfile: {
+      avgSentenceLength: 17,
+      commonPhrases: ['阳光落在窗台', '温热的茶', '风穿过树梢', '日子慢慢亮起来'],
+    },
+  },
 ];
 
 // ============ 种子初始化 ============
@@ -374,14 +451,17 @@ export async function seedDatabase(): Promise<void> {
     await db.genreTemplates.bulkAdd(genreRecords);
   }
 
-  // 文风：仅当数量为 0 时初始化（文风预设一般不变更）
-  if (existingStyles === 0) {
-    await db.stylePresets.bulkAdd(styleRecords);
+  // 文风：补种缺失的全局预设（老库只有旧版 5 个时，追加新增预设；id 按序稳定，不覆盖用户已有数据）
+  if (existingStyles < styleRecords.length) {
+    const existingIds = new Set((await db.stylePresets.toArray()).map((s) => s.id));
+    const missing = styleRecords.filter((s) => !existingIds.has(s.id));
+    if (missing.length > 0) await db.stylePresets.bulkAdd(missing);
   }
 }
 
 // 暴露种子数据用于 UI 测试与类型推导（不写入数据库）
 export const GENRE_TEMPLATE_SEEDS: ReadonlyArray<Readonly<GenreTemplateSeed>> = GENRE_TEMPLATES;
+export const STYLE_PRESET_SEEDS: ReadonlyArray<Readonly<Omit<StylePreset, 'id'>>> = STYLE_PRESETS;
 
 // 兼容旧导出：按 genre 分组的流派列表
 export function getVariantsByGenre(genre: Genre): GenreTemplateSeed[] {

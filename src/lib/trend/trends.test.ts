@@ -10,6 +10,7 @@ vi.mock('@/lib/llm/client', () => ({
 import {
   RANK_SOURCES,
   GENRE_TRENDS,
+  listGenresByChannel,
   getTrend,
   deriveTrendHints,
   generateTrendInspiration,
@@ -33,11 +34,32 @@ describe('lib/trend/trends', () => {
   it('每个题材画像字段完整', () => {
     for (const t of GENRE_TRENDS) {
       expect(t.genre).toBeTruthy();
+      expect(['male', 'female', 'neutral']).toContain(t.channel);
       expect(t.hotspot.length).toBeGreaterThan(3);
       expect(t.tropes.length).toBeGreaterThanOrEqual(1);
       expect(t.contrast.length).toBeGreaterThanOrEqual(1);
       expect(t.words.length).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it('题材扩容：新增男频/女频题材均在画像内', () => {
+    const genres = GENRE_TRENDS.map((t) => t.genre);
+    expect(GENRE_TRENDS.length).toBeGreaterThanOrEqual(16);
+    for (const g of ['仙侠', '军事', '脑洞', '甜宠', '快穿', '种田']) {
+      expect(genres, `应包含新题材 ${g}`).toContain(g);
+    }
+  });
+
+  it('listGenresByChannel 男频不含女频专属，女频不含男频专属，不限返回全部', () => {
+    const male = listGenresByChannel('male');
+    const female = listGenresByChannel('female');
+    const all = listGenresByChannel('all');
+    expect(male).toContain('玄幻');
+    expect(male).not.toContain('甜宠');
+    expect(male).toContain('都市'); // 中性题材双频道可见
+    expect(female).toContain('甜宠');
+    expect(female).not.toContain('玄幻');
+    expect(all.length).toBe(GENRE_TRENDS.length);
   });
 
   it('getTrend 渠道×题材返回正确分析', () => {

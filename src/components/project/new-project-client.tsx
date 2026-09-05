@@ -16,6 +16,8 @@ import { ProjectForm, type ProjectFormPrefill } from '@/components/project/proje
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea, Label } from '@/components/ui/input';
+import { listInspirationCards, GLOBAL_PROJECT_ID } from '@/lib/db/queries';
+import type { InspirationCard } from '@/types';
 
 /** 新建项目页客户端组装：一句话灵感 → 自动开书 → 查重预检 → 预填三步向导 */
 export function NewProjectClient() {
@@ -24,6 +26,7 @@ export function NewProjectClient() {
   const [bookPackage, setBookPackage] = useState<BookPackage | null>(null);
   const [report, setReport] = useState<OriginalityReport | null>(null);
   const [prefill, setPrefill] = useState<ProjectFormPrefill | undefined>(undefined);
+  const [libraryCards, setLibraryCards] = useState<InspirationCard[]>([]);
   const autoRan = useRef(false);
 
   /** 生成开书包：注入规避块（题材方向 + 实时榜单热书黑名单），生成后查重预检 */
@@ -66,15 +69,33 @@ export function NewProjectClient() {
   const handleGenerate = () => void runGenerate(idea);
 
   // 灵感页「以此新建小说」跳入：?auto=1&idea=…&genre=… → 挂载后自动一键开书（仅跑一次）
+  // 兼容旧式链接 ?title=…&genre=…&summary=…：拼成灵感后同样自动开书
   useEffect(() => {
     if (autoRan.current) return;
     autoRan.current = true;
     const q = new URLSearchParams(window.location.search);
     const autoIdea = (q.get('idea') ?? '').trim();
-    if (!autoIdea) return;
-    setIdea(autoIdea);
-    if (q.get('auto') === '1') void runGenerate(autoIdea, q.get('genre') ?? undefined);
+    const legacyTitle = (q.get('title') ?? '').trim();
+    const legacySummary = (q.get('summary') ?? '').trim();
+    const genreHint = q.get('genre') ?? undefined;
+    if (autoIdea) {
+      setIdea(autoIdea);
+      if (q.get('auto') === '1') void runGenerate(autoIdea, genreHint);
+      return;
+    }
+    if (legacyTitle || legacySummary) {
+      const composed = [legacyTitle, legacySummary].filter(Boolean).join('：');
+      setIdea(composed);
+      void runGenerate(composed, genreHint);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 灵感库快选：加载全局灵感卡最新 8 条（无 URL 灵感时展示）
+  useEffect(() => {
+    listInspirationCards(GLOBAL_PROJECT_ID)
+      .then((cards) => setLibraryCards(cards.slice(0, 8)))
+      .catch(() => setLibraryCards([]));
   }, []);
 
   return (
@@ -122,6 +143,31 @@ export function NewProjectClient() {
               </Button>
             )}
           </div>
+
+          {/* 灵感库快选：没灵感时从全局灵感库挑一条直接开书 */}
+          {libraryCards.length > 0 && (
+            <div className="space-y-1">
+              <Label>没有灵感？从灵感库挑一条</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {libraryCards.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    disabled={generating}
+                    onClick={() => {
+                      const text = `${c.title}：${c.content}`;
+                      setIdea(text);
+                      void runGenerate(text);
+                    }}
+                    className="max-w-full truncate rounded-full border border-stone-300 bg-white px-3 py-1 text-xs text-stone-600 transition-colors hover:border-brand-400 hover:text-brand-700 disabled:opacity-50"
+                    title={`${c.title}：${c.content}`}
+                  >
+                    {c.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {bookPackage && (
             <div className="space-y-1 rounded-md border border-brand-200 bg-brand-50/40 p-3 text-xs">

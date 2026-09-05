@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { seedDatabase, GENRE_TEMPLATE_SEEDS, getVariantsByGenre } from './seed';
+import { seedDatabase, GENRE_TEMPLATE_SEEDS, STYLE_PRESET_SEEDS, getVariantsByGenre } from './seed';
 import { db } from './schema';
 import type { Genre } from '@/types';
 
@@ -76,7 +76,27 @@ describe('db/seed', () => {
       const genres = await db.genreTemplates.toArray();
       const styles = await db.stylePresets.toArray();
       expect(genres.length).toBe(GENRE_TEMPLATE_SEEDS.length);
-      expect(styles.length).toBe(5);
+      expect(styles.length).toBe(STYLE_PRESET_SEEDS.length);
+    });
+
+    it('老库只有 5 个旧文风时应补种新增预设且不动旧数据', async () => {
+      // 模拟旧版本库：仅写入 style-preset-1..5，且 1 号被用户改过名
+      const first5 = STYLE_PRESET_SEEDS.slice(0, 5).map((s, i) => ({
+        ...s,
+        name: i === 0 ? '我的自定义风' : s.name,
+        id: `style-preset-${i + 1}`,
+      }));
+      await db.stylePresets.bulkAdd(first5);
+      await seedDatabase();
+      const styles = await db.stylePresets.toArray();
+      expect(styles.length).toBe(STYLE_PRESET_SEEDS.length);
+      // 用户改过的旧预设不被覆盖
+      const old = await db.stylePresets.get('style-preset-1');
+      expect(old?.name).toBe('我的自定义风');
+      // 新预设已补上
+      const names = styles.map((s) => s.name);
+      expect(names).toContain('热血升级');
+      expect(names).toContain('治愈日常');
     });
 
     it('题材模板 id 应为 genre-template-N 格式', async () => {

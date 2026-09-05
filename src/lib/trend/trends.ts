@@ -31,6 +31,8 @@ export const RANK_SOURCES: { id: string; name: string; focus: string; reader: st
 /** 各题材的「爆款风向」通用画像（内置参考，非实时榜单） */
 export interface GenreTrend {
   genre: string;
+  /** 频道归属：male 男生频道 / female 女生频道 / neutral 中性（双频道都展示） */
+  channel: 'male' | 'female' | 'neutral';
   hotspot: string; // 当前常见高热方向（话题性措辞）
   tropes: string[]; // 高频爆款桥段/元素
   contrast: string[]; // 人设反差 / 阶层冲突入手点
@@ -39,17 +41,37 @@ export interface GenreTrend {
   words: string[]; // 自带热度关键词
 }
 
+/** 灵感频道（区分男女频选题口味） */
+export const INSPIRATION_CHANNELS: { id: 'male' | 'female' | 'all'; name: string }[] = [
+  { id: 'male', name: '男生频道' },
+  { id: 'female', name: '女生频道' },
+  { id: 'all', name: '不限' },
+];
+
+/** 按频道列出题材（male→男频+中性，female→女频+中性，all→全部，保持内置顺序） */
+export function listGenresByChannel(channel: 'male' | 'female' | 'all'): string[] {
+  return GENRE_TRENDS.filter((g) =>
+    channel === 'all' ? true : channel === 'male' ? g.channel !== 'female' : g.channel !== 'male'
+  ).map((g) => g.genre);
+}
+
 export const GENRE_TRENDS: GenreTrend[] = [
-  { genre: '玄幻', hotspot: '白月光/强反差开局 + 升级流爽点与身份伏笔', tropes: ['废柴逆袭', '天才陨落重生', '血脉觉醒', '异界降临'], contrast: ['表面废柴·实则万古才俊', '卑微仆役·暗中大佬'], rhythm: 'fast', hookPattern: '开局即抛身份反差或危机，章末升级/打脸卡点', words: ['跃迁', '觉醒', '圣境', '帝尊', '气运'] },
-  { genre: '言情', hotspot: '人设吸引力前置，糖刀交替 + 阶层/身份反差', tropes: ['双洁/强强', '破镜重圆', '替身/追妻火葬场', '先婚后爱'], contrast: ['高冷强者·内心温柔', '落魄千金·身边隐世大佬'], rhythm: 'medium', hookPattern: '开篇一次意外相遇或误会，章末情感倒钩', words: ['心动', '暗恋', '偏爱', '救赎', '一眼万年'] },
-  { genre: '悬疑', hotspot: '开篇即命案/谜题，走线密集 + 终局反转', tropes: ['连环案', '密室/孤岛', '记忆迷藏', '复仇真相'], contrast: ['无害负责人·每案真凶', '老实邻居·潜伏者的善良'], rhythm: 'medium', hookPattern: '开篇一个反常细节或命案，章末新证据/危险逼近', words: ['真相', '反转', '线索', '凶案', '面具'] },
-  { genre: '科幻', hotspot: 'AI/脑机/星际 + 认知颠覆与伦理冲突', tropes: ['AI觉醒', '星际远征', '时空悖论', '末世降临'], contrast: ['普通职员·隐藏身份首脑', '守旧者·革命旗手'], rhythm: 'medium', hookPattern: '开篇一个设定悖论，章末抛出更大的世界秘密', words: ['觉醒', '跃迁', '奇点', '矩阵', '维度'] },
-  { genre: '都市', hotspot: '身份反差 + 阶层冲突 + 打脸节奏', tropes: ['赘婿/神医', '重生暴富', '隐藏大佬', '卧底归来'], contrast: ['人前落魄·人后巨鳄', '草根出身·隐藏皇商'], rhythm: 'fast', hookPattern: '开篇被轻慢/侮辱，章末揭底打脸或身份反转', words: ['隐藏', '逆袭', '打脸', '夫人', '巨头'] },
-  { genre: '历史', hotspot: '权谋博弈 + 历史事件亲历 + 改史爽点', tropes: ['穿越改史', '明君改造', '权臣/将门', '乱世群雄'], contrast: ['低阶寒门·胸中韬略', '闲散纨绔·运筹帷幄'], rhythm: 'slow', hookPattern: '开篇一场朝堂危机或命运节点，章末计谋落子', words: ['权谋', '朝堂', '争霸', '变法', '社稷'] },
-  { genre: '末世', hotspot: '生存高压 + 人性抉择 + 金手指自救', tropes: ['丧尸围城', '天灾求生', '基地流', '重生末世前'], contrast: ['普通人·隐藏先知', '冷血首领·重情内核'], rhythm: 'fast', hookPattern: '开篇末世降临求生，章末新威胁或物资危机', words: ['幸存', '变异', '危机', '基地', '求生'] },
-  { genre: '游戏', hotspot: '职业/系统脑洞 + 副本与隐藏奖励', tropes: ['无限流', '全息沉浸', '生活玩家', '系统流'], contrast: ['低级职业·隐藏天命', '咸鱼玩家·公会支柱'], rhythm: 'fast', hookPattern: '开篇一个反常属性/隐藏任务，章末bug级收获', words: ['副本', '隐藏任务', '神装', '甩锅', '欧皇'] },
-  { genre: '宫斗', hotspot: '步步为营 + 阶级/位分反差 + 因果清算', tropes: ['庶女上位', '废后重生', '替身入宫', '前朝后宫联动'], contrast: ['低位忍辱·实则聪明人设', '无害妃嫔·背后执棋'], rhythm: 'medium', hookPattern: '开篇一次暗害或位分转折，章末新对手/圣宠卡点', words: ['圣宠', '扳倒', '布局', '司礼', '恩宠'] },
-  { genre: '其他', hotspot: '跨题材融合 / 轻日常，靠人设与梗取胜', tropes: ['轻小说日常', '同人衍生', '系统日常', '治愈'], contrast: ['废物人设·隐藏实力', '高冷设定·反差萌'], rhythm: 'medium', hookPattern: '开篇一个笑点或萌点，章末抛一个日常反转', words: ['萌', '沙雕', '隐藏', '反差', '治愈'] },
+  { genre: '玄幻', channel: 'male', hotspot: '白月光/强反差开局 + 升级流爽点与身份伏笔', tropes: ['废柴逆袭', '天才陨落重生', '血脉觉醒', '异界降临'], contrast: ['表面废柴·实则万古才俊', '卑微仆役·暗中大佬'], rhythm: 'fast', hookPattern: '开局即抛身份反差或危机，章末升级/打脸卡点', words: ['跃迁', '觉醒', '圣境', '帝尊', '气运'] },
+  { genre: '仙侠', channel: 'male', hotspot: '凡人流修行 + 门派博弈 + 长生觅道', tropes: ['凡人流苟道', '夺舍重生', '宗门大比', '丹器双修'], contrast: ['杂役弟子·实带前世记忆', '老实散修·身怀上古传承'], rhythm: 'medium', hookPattern: '开篇一场机缘或灭门之危，章末境界突破/强敌临门', words: ['筑基', '金丹', '飞升', '灵根', '道基'] },
+  { genre: '都市', channel: 'neutral', hotspot: '身份反差 + 阶层冲突 + 打脸节奏', tropes: ['赘婿/神医', '重生暴富', '隐藏大佬', '卧底归来'], contrast: ['人前落魄·人后巨鳄', '草根出身·隐藏皇商'], rhythm: 'fast', hookPattern: '开篇被轻慢/侮辱，章末揭底打脸或身份反转', words: ['隐藏', '逆袭', '打脸', '夫人', '巨头'] },
+  { genre: '言情', channel: 'female', hotspot: '人设吸引力前置，糖刀交替 + 阶层/身份反差', tropes: ['双洁/强强', '破镜重圆', '替身/追妻火葬场', '先婚后爱'], contrast: ['高冷强者·内心温柔', '落魄千金·身边隐世大佬'], rhythm: 'medium', hookPattern: '开篇一次意外相遇或误会，章末情感倒钩', words: ['心动', '暗恋', '偏爱', '救赎', '一眼万年'] },
+  { genre: '甜宠', channel: 'female', hotspot: '高糖低虐 + 双向奔赴 + 日常撒糖', tropes: ['先婚后爱', '青梅竹马', '契约恋爱', '奶团萌宝'], contrast: ['外冷内热大佬·只对她温柔', '元气小红花·实则团宠'], rhythm: 'fast', hookPattern: '开篇一次心动误伤，章末暧昧升温小甜钩', words: ['心动', '撒糖', '偏爱', '官宣', '双洁'] },
+  { genre: '快穿', channel: 'female', hotspot: '位面任务 + 反套路攻略 + 位面之心的真相', tropes: ['炮灰逆袭', '攻略反派', '系统任务', '位面穿梭'], contrast: ['任人拿捏炮灰·实则攻略大师', '高冷反派·每世沦陷'], rhythm: 'fast', hookPattern: '开篇空降新位面接手烂摊子，章末任务异变/男主察觉', words: ['位面', '攻略', '炮灰', '任务', '黑化'] },
+  { genre: '种田', channel: 'female', hotspot: '家长里短 + 空间灵泉 + 发家致富', tropes: ['穿越种田', '空间囤货', '继室当家', '科举兴家'], contrast: ['被欺负的继室·暗藏空间金手指', '老实农户·妻管严却旺妻'], rhythm: 'slow', hookPattern: '开篇家徒四壁/被分家，章末第一桶金或极品上门', words: ['灵泉', '发家', '极品', '分家', '丰收'] },
+  { genre: '悬疑', channel: 'neutral', hotspot: '开篇即命案/谜题，走线密集 + 终局反转', tropes: ['连环案', '密室/孤岛', '记忆迷藏', '复仇真相'], contrast: ['无害负责人·每案真凶', '老实邻居·潜伏者的善良'], rhythm: 'medium', hookPattern: '开篇一个反常细节或命案，章末新证据/危险逼近', words: ['真相', '反转', '线索', '凶案', '面具'] },
+  { genre: '科幻', channel: 'male', hotspot: 'AI/脑机/星际 + 认知颠覆与伦理冲突', tropes: ['AI觉醒', '星际远征', '时空悖论', '末世降临'], contrast: ['普通职员·隐藏身份首脑', '守旧者·革命旗手'], rhythm: 'medium', hookPattern: '开篇一个设定悖论，章末抛出更大的世界秘密', words: ['觉醒', '跃迁', '奇点', '矩阵', '维度'] },
+  { genre: '历史', channel: 'male', hotspot: '权谋博弈 + 历史事件亲历 + 改史爽点', tropes: ['穿越改史', '明君改造', '权臣/将门', '乱世群雄'], contrast: ['低阶寒门·胸中韬略', '闲散纨绔·运筹帷幄'], rhythm: 'slow', hookPattern: '开篇一场朝堂危机或命运节点，章末计谋落子', words: ['权谋', '朝堂', '争霸', '变法', '社稷'] },
+  { genre: '军事', channel: 'male', hotspot: '烽火硝烟 + 铁血军旅 + 谍战暗涌', tropes: ['抗战谍战', '特种兵王', '雇佣军团', '军工强国'], contrast: ['文书小兵·实战天才', '敌方潜伏者·双重身份博弈'], rhythm: 'medium', hookPattern: '开篇一场遭遇战或身份危机，章末战局反转/密电曝光', words: ['硝烟', '谍影', '番号', '突击', '密电'] },
+  { genre: '末世', channel: 'male', hotspot: '生存高压 + 人性抉择 + 金手指自救', tropes: ['丧尸围城', '天灾求生', '基地流', '重生末世前'], contrast: ['普通人·隐藏先知', '冷血首领·重情内核'], rhythm: 'fast', hookPattern: '开篇末世降临求生，章末新威胁或物资危机', words: ['幸存', '变异', '危机', '基地', '求生'] },
+  { genre: '游戏', channel: 'male', hotspot: '职业/系统脑洞 + 副本与隐藏奖励', tropes: ['无限流', '全息沉浸', '生活玩家', '系统流'], contrast: ['低级职业·隐藏天命', '咸鱼玩家·公会支柱'], rhythm: 'fast', hookPattern: '开篇一个反常属性/隐藏任务，章末bug级收获', words: ['副本', '隐藏任务', '神装', '甩锅', '欧皇'] },
+  { genre: '脑洞', channel: 'male', hotspot: '一句话怪设定 + 规则怪谈 + 脑洞清奇', tropes: ['规则怪谈', '万人迷', '全民转职', '直播脑洞'], contrast: ['垫底废柴·全场唯一隐藏S级', '疯批反派·被主角脑洞降伏'], rhythm: 'fast', hookPattern: '开篇一条反常规则/怪设定，章末规则漏洞变现', words: ['规则', '转职', '怪谈', '全网', '名场面'] },
+  { genre: '宫斗', channel: 'female', hotspot: '步步为营 + 阶级/位分反差 + 因果清算', tropes: ['庶女上位', '废后重生', '替身入宫', '前朝后宫联动'], contrast: ['低位忍辱·实则聪明人设', '无害妃嫔·背后执棋'], rhythm: 'medium', hookPattern: '开篇一次暗害或位分转折，章末新对手/圣宠卡点', words: ['圣宠', '扳倒', '布局', '司礼', '恩宠'] },
+  { genre: '其他', channel: 'neutral', hotspot: '跨题材融合 / 轻日常，靠人设与梗取胜', tropes: ['轻小说日常', '同人衍生', '系统日常', '治愈'], contrast: ['废物人设·隐藏实力', '高冷设定·反差萌'], rhythm: 'medium', hookPattern: '开篇一个笑点或萌点，章末抛一个日常反转', words: ['萌', '沙雕', '隐藏', '反差', '治愈'] },
 ];
 
 export interface TrendAnalysis {

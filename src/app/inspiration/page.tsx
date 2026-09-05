@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, TrendingUp, Loader2, Sparkles, Lightbulb, Copy, Check, Plus, Library as LibraryIcon } from 'lucide-react';
-import { RANK_SOURCES, getTrend, generateTrendInspiration } from '@/lib/trend/trends';
+import { RANK_SOURCES, getTrend, generateTrendInspiration, INSPIRATION_CHANNELS, listGenresByChannel } from '@/lib/trend/trends';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,23 +12,27 @@ import { saveInspirationCards, GLOBAL_PROJECT_ID } from '@/lib/db/queries';
 import { toast } from 'sonner';
 import type { InspirationCard } from '@/types';
 
-const GENRES = ['玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他'];
+type ChannelId = (typeof INSPIRATION_CHANNELS)[number]['id'];
 
 export default function InspirationPage() {
   const [sourceId, setSourceId] = useState('qidian');
+  const [channel, setChannel] = useState<ChannelId>('all');
   const [genre, setGenre] = useState('玄幻');
   const [generating, setGenerating] = useState(false);
   const [cards, setCards] = useState<InspirationCard[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const trend = getTrend(sourceId, genre);
+  // 按频道过滤题材；当前题材不在该频道时自动回落到频道首个题材
+  const genreOptions = listGenresByChannel(channel);
+  const effectiveGenre = genreOptions.includes(genre) ? genre : genreOptions[0];
+  const trend = getTrend(sourceId, effectiveGenre);
 
   const handleGenerate = async () => {
     if (!trend) return;
     setGenerating(true);
     try {
       // 生成后自动收藏到全局灵感库（projectId='global'），跨项目可复用
-      const { cards: generated } = await generateTrendInspiration('', sourceId, genre);
+      const { cards: generated } = await generateTrendInspiration('', sourceId, effectiveGenre);
       const withGlobal = generated.map((c) => ({ ...c, projectId: GLOBAL_PROJECT_ID }));
       setCards(withGlobal);
       if (withGlobal.length > 0) {
@@ -88,6 +92,31 @@ export default function InspirationPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1">
+              <Label>频道</Label>
+              <div className="flex flex-wrap gap-2">
+                {INSPIRATION_CHANNELS.map((ch) => (
+                  <label key={ch.id} className="cursor-pointer">
+                    <input
+                      type="radio"
+                      name="insp-channel"
+                      checked={channel === ch.id}
+                      onChange={() => setChannel(ch.id)}
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={cn(
+                        'inline-block rounded-md border px-3 py-1.5 text-sm transition-colors',
+                        'border-stone-300 text-stone-600',
+                        'peer-checked:border-brand-500 peer-checked:bg-brand-50 peer-checked:text-brand-700'
+                      )}
+                    >
+                      {ch.name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1">
               <Label>平台</Label>
               <div className="flex flex-wrap gap-2">
                 {RANK_SOURCES.map((s) => (
@@ -115,12 +144,12 @@ export default function InspirationPage() {
             <div className="space-y-1">
               <Label>题材</Label>
               <div className="flex flex-wrap gap-2">
-                {GENRES.map((g) => (
+                {genreOptions.map((g) => (
                   <label key={g} className="cursor-pointer">
                     <input
                       type="radio"
                       name="insp-genre"
-                      checked={genre === g}
+                      checked={effectiveGenre === g}
                       onChange={() => setGenre(g)}
                       className="peer sr-only"
                     />
@@ -198,9 +227,9 @@ export default function InspirationPage() {
                       {copiedId === c.id ? '已复制' : '复制灵感'}
                     </button>
                     <Link
-                      href={`/project/new?title=${encodeURIComponent(c.title)}&genre=${encodeURIComponent(
-                        genre
-                      )}&summary=${encodeURIComponent(c.content)}`}
+                      href={`/project/new?auto=1&genre=${encodeURIComponent(effectiveGenre)}&idea=${encodeURIComponent(
+                        `${c.title}：${c.content}`
+                      )}`}
                       className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"
                     >
                       <Plus className="h-3 w-3" />

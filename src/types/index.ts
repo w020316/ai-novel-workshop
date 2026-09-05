@@ -69,6 +69,8 @@ export interface NovelProject {
   genre: Genre;
   summary: string;
   targetWords: number;
+  /** 每章目标字数（可选；缺省按 2500 估算，用于章节数换算与正文篇幅控制） */
+  chapterWords?: number;
   stylePresetId: string;
   llmConfig: LLMConfig;
   status: ProjectStatus;

@@ -14,6 +14,7 @@ import { CharacterList } from '@/components/settings/CharacterList';
 import { CharacterForm } from '@/components/settings/CharacterForm';
 import { CharacterRelationGraph } from '@/components/settings/CharacterRelationGraph';
 import { CharacterGenerator } from '@/components/settings/CharacterGenerator';
+import { CastGenerator } from '@/components/settings/CastGenerator';
 import type { Character } from '@/types';
 import { Plus, Loader2 } from 'lucide-react';
 
@@ -103,7 +104,10 @@ export default function CharactersPage() {
         </Button>
       </div>
 
-      {/* AI 生成器 */}
+      {/* AI 全流程：一键生成全套人物（推荐） */}
+      <CastGenerator projectId={projectId} onGenerated={() => void load()} />
+
+      {/* 轻量人工入口：单个关键词生成 */}
       <CharacterGenerator projectId={projectId} onGenerated={() => void load()} />
 
       {/* 关系图（有数据时显示） */}

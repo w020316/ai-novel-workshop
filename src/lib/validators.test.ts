@@ -16,6 +16,7 @@ function makeValidProject() {
     genre: '玄幻',
     summary: '简介',
     targetWords: 50000,
+    chapterWords: 2500,
     stylePresetId: 'sp1',
     llmProvider: 'deepseek',
     temperature: 0.8,

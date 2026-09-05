@@ -19,6 +19,8 @@ export interface ProjectFormData {
   genre: Genre;
   summary: string;
   targetWords: number;
+  /** 每章目标字数；缺省按 2500 估算 */
+  chapterWords?: number;
   stylePresetId: string;
   llmConfig: LLMConfig;
 }

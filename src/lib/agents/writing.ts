@@ -24,7 +24,7 @@ const SYSTEM_PROMPT = `你是一位专业的网络小说作家。你的任务是
 2. 人物性格一致，对话符合人设
 3. 情节紧凑，有悬念和吸引力
 4. 文风要符合项目的风格预设
-5. 每章字数约 2000-3000 字
+5. 按用户提示中【字数要求】控制本章篇幅；未给出时约 2000-3000 字
 6. 合理分段，提升可读性
 7. 本章必须推进【主线锚点】中的主线与结局归宿，严禁偏离主线、填充注水
 8. 遵循【当前创作进度定位】的本卷核心冲突，做人设与力量体系的上限约束（禁止无限战力膨胀）
@@ -43,7 +43,8 @@ function buildWritingPrompt(
   chapterNo: number,
   title: string,
   stylePreset?: StylePreset | null,
-  genre?: string
+  genre?: string,
+  chapterWords?: number
 ): string {
   const parts: string[] = [];
 
@@ -51,6 +52,12 @@ function buildWritingPrompt(
   parts.push('【项目记忆】');
   parts.push(memoryToPrompt(memory, { chapterNo }));
   parts.push('');
+
+  // 字数要求（项目「每章字数」设置，控制本章篇幅）
+  if (chapterWords && chapterWords > 0) {
+    parts.push(`【字数要求】本章正文约 ${chapterWords} 字（允许 ±10%），不得明显注水或截断。`);
+    parts.push('');
+  }
 
   // 章节信息
   parts.push(`【第 ${chapterNo} 章 - ${title}】`);
@@ -122,7 +129,8 @@ export async function writeChapter(
   context: GenerationContext,
   stylePreset?: StylePreset | null,
   title?: string,
-  genre?: string
+  genre?: string,
+  chapterWords?: number
 ): Promise<string> {
   const userPrompt = buildWritingPrompt(
     sceneDesign,
@@ -130,7 +138,8 @@ export async function writeChapter(
     context.chapterNo,
     title ?? `第${context.chapterNo}章`,
     stylePreset,
-    genre
+    genre,
+    chapterWords
   );
 
   const messages = [

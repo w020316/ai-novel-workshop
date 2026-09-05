@@ -47,10 +47,11 @@ const ENDING: Record<string, string> = {
  */
 export function generateOutlineTemplate(
   genre: string,
-  targetWords?: number
+  targetWords?: number,
+  wordsPerChapter?: number
 ): OutlineTemplate {
   const mainPlotline = MAIN_PLOT[genre] ?? MAIN_PLOT['玄幻'];
   const ending = ENDING[genre] ?? ENDING['玄幻'];
-  const volumes = planVolumes(targetWords ?? 300000, genre);
+  const volumes = planVolumes(targetWords ?? 300000, genre, wordsPerChapter);
   return { mainPlotline, ending, volumes };
 }

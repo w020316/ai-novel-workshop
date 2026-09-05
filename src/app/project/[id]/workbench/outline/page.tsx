@@ -76,7 +76,7 @@ export default function OutlinePage() {
     if (
       !window.confirm(`确定用「${genre}」题材模板补充空白大纲？仅填充为空的内容，已有内容不受影响。`)
     ) return;
-    const tpl = generateOutlineTemplate(genre, currentProject?.targetWords);
+    const tpl = generateOutlineTemplate(genre, currentProject?.targetWords, currentProject?.chapterWords);
     let filled = 0;
     if (!mainPlotline.trim()) {
       setMainPlotline(tpl.mainPlotline);

@@ -378,7 +378,8 @@ function estimatePlannedChapters(
     if (end > 0) return end;
   }
   const target = project?.targetWords;
-  if (target && target > 0) return Math.ceil(target / WORDS_PER_CHAPTER);
+  const perChapter = project?.chapterWords ?? WORDS_PER_CHAPTER;
+  if (target && target > 0) return Math.ceil(target / perChapter);
   return null;
 }
 

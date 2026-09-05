@@ -20,13 +20,14 @@ export default function ProjectConfigPage() {
   const [title, setTitle] = useState(currentProject?.title ?? '');
   const [summary, setSummary] = useState(currentProject?.summary ?? '');
   const [targetWords, setTargetWords] = useState(currentProject?.targetWords ?? 300000);
+  const [chapterWords, setChapterWords] = useState(currentProject?.chapterWords ?? 2500);
 
   if (!currentProject) return null;
 
   const handleSave = async () => {
     setSubmitting(true);
     try {
-      await updateProject(projectId, { title, summary, targetWords });
+      await updateProject(projectId, { title, summary, targetWords, chapterWords });
       toast.success('项目信息已保存');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '保存失败');
@@ -101,6 +102,38 @@ export default function ProjectConfigPage() {
               value={targetWords}
               onChange={(e) => setTargetWords(Number(e.target.value))}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="chapterWords">每章字数</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Input
+                id="chapterWords"
+                type="number"
+                step={500}
+                min={1000}
+                max={10000}
+                className="max-w-40"
+                value={chapterWords}
+                onChange={(e) => setChapterWords(Number(e.target.value))}
+              />
+              {[2000, 2500, 3000, 4000].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setChapterWords(n)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    chapterWords === n
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
+                  }`}
+                >
+                  {n} 字
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-stone-400">
+              约 {Math.max(1, Math.round(targetWords / (chapterWords || 2500)))} 章 · AI 生成正文时按该字数控制每章篇幅
+            </p>
           </div>
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={submitting}>

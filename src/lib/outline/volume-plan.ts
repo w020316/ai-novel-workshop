@@ -19,15 +19,16 @@ export const MIN_VOLUMES = 4;
 /** 卷数上限（避免卷太多管理成本过高） */
 export const MAX_VOLUMES = 12;
 
-/** 估算总章数：向上取整并钳制到 [12, 999] */
-export function estimateTotalChapters(targetWords: number): number {
-  const n = Math.ceil(targetWords / WORDS_PER_CHAPTER);
+/** 估算总章数：向上取整并钳制到 [12, 999]；wordsPerChapter 缺省按 2500 */
+export function estimateTotalChapters(targetWords: number, wordsPerChapter = WORDS_PER_CHAPTER): number {
+  const per = Number.isFinite(wordsPerChapter) && wordsPerChapter >= 500 ? wordsPerChapter : WORDS_PER_CHAPTER;
+  const n = Math.ceil(targetWords / per);
   return Math.min(999, Math.max(12, n));
 }
 
 /** 计算目标卷数：clamp(ceil(总章数 / 每卷章数), 4, 12) */
-export function estimateVolumeCount(targetWords: number): number {
-  const total = estimateTotalChapters(targetWords);
+export function estimateVolumeCount(targetWords: number, wordsPerChapter = WORDS_PER_CHAPTER): number {
+  const total = estimateTotalChapters(targetWords, wordsPerChapter);
   const vol = Math.ceil(total / CHAPTERS_PER_VOLUME);
   return Math.min(MAX_VOLUMES, Math.max(MIN_VOLUMES, vol));
 }
@@ -66,12 +67,17 @@ function volumeConflict(index: number, count: number): string {
  * 按目标字数生成自适应分卷规划。
  * @param targetWords - 项目目标字数（>0 时参与计算；0/非法按 30 万兜底）
  * @param genre - 题材（用于卷标题风味，缺省「通用」）
+ * @param wordsPerChapter - 每章字数（可选，缺省 2500；影响总章数与分卷均分）
  * @returns Volume[]，章区间连续覆盖估算总章数，末卷覆盖至末章
  */
-export function planVolumes(targetWords: number, genre = '通用'): Volume[] {
+export function planVolumes(
+  targetWords: number,
+  genre = '通用',
+  wordsPerChapter = WORDS_PER_CHAPTER
+): Volume[] {
   const words = Number.isFinite(targetWords) && targetWords > 0 ? targetWords : 300000;
-  const total = estimateTotalChapters(words);
-  const count = estimateVolumeCount(words);
+  const total = estimateTotalChapters(words, wordsPerChapter);
+  const count = estimateVolumeCount(words, wordsPerChapter);
 
   const volumes: Volume[] = [];
   let start = 1;
@@ -96,9 +102,10 @@ export function planVolumes(targetWords: number, genre = '通用'): Volume[] {
 /** 便于展示的摘要信息 */
 export function summarizePlan(
   targetWords: number,
-  genre = '通用'
+  genre = '通用',
+  wordsPerChapter = WORDS_PER_CHAPTER
 ): { totalChapters: number; volumeCount: number; volumes: Volume[] } {
-  const volumes = planVolumes(targetWords, genre);
+  const volumes = planVolumes(targetWords, genre, wordsPerChapter);
   return {
     totalChapters: volumes[volumes.length - 1].chapterRange[1],
     volumeCount: volumes.length,

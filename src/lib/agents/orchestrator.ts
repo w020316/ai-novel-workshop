@@ -45,7 +45,7 @@ export async function generateChapter(
     const memory = await assembleMemoryWithFallback(context);
 
     // 加载文风预设（剧情设计/创作/修正共用一次）
-    const { stylePreset, genre } = await loadStylePreset(context.projectId);
+    const { stylePreset, genre, chapterWords } = await loadStylePreset(context.projectId);
 
     // ===== Stage 2: 剧情设计 =====
     context.onProgress('plot_designing');
@@ -66,9 +66,10 @@ export async function generateChapter(
             stylePreset,
             title,
             candidateCount,
-            genre
+            genre,
+            chapterWords
           )
-        : await writeChapterWithRetry(sceneDesign, memory, context, stylePreset, title, genre);
+        : await writeChapterWithRetry(sceneDesign, memory, context, stylePreset, title, genre, chapterWords);
 
     // ===== Stage 4: 一致性校验 + 修正闭环 =====
     context.onProgress('consistency_checking');
@@ -130,7 +131,7 @@ export async function generateChapter(
  */
 async function loadStylePreset(
   projectId: string
-): Promise<{ stylePreset: StylePreset | null; genre?: Genre }> {
+): Promise<{ stylePreset: StylePreset | null; genre?: Genre; chapterWords?: number }> {
   const project = await getProject(projectId);
   const stylePresetId = project?.stylePresetId;
   let stylePreset: StylePreset | null = null;
@@ -141,7 +142,7 @@ async function loadStylePreset(
       stylePreset = null;
     }
   }
-  return { stylePreset, genre: project?.genre };
+  return { stylePreset, genre: project?.genre, chapterWords: project?.chapterWords };
 }
 
 /**
@@ -320,10 +321,11 @@ async function writeChapterWithRetry(
   context: GenerationContext,
   stylePreset: StylePreset | null,
   title: string,
-  genre?: string
+  genre?: string,
+  chapterWords?: number
 ): Promise<string> {
   return withRetry(
-    () => writeChapter(sceneDesign, memory, context, stylePreset, title, genre),
+    () => writeChapter(sceneDesign, memory, context, stylePreset, title, genre, chapterWords),
     {
       maxRetries: 1,
       baseDelayMs: 2000,
@@ -346,7 +348,8 @@ async function writeChapterCandidates(
   stylePreset: StylePreset | null,
   title: string,
   candidateCount: number,
-  genre?: string
+  genre?: string,
+  chapterWords?: number
 ): Promise<string> {
   // 每个候选用独立的 onStream/onProgress 空实现，避免候选 token 串流到 UI
   const silentContext: GenerationContext = {
@@ -357,7 +360,7 @@ async function writeChapterCandidates(
 
   const settled = await Promise.allSettled(
     Array.from({ length: candidateCount }, () =>
-      writeChapter(sceneDesign, memory, silentContext, stylePreset, title, genre)
+      writeChapter(sceneDesign, memory, silentContext, stylePreset, title, genre, chapterWords)
     )
   );
 

@@ -40,6 +40,11 @@ export const projectFormSchema = z.object({
     .int('字数必须为整数')
     .min(10000, '目标字数不少于 1 万')
     .max(5000000, '目标字数不超过 500 万'),
+  chapterWords: z
+    .number()
+    .int('每章字数必须为整数')
+    .min(1000, '每章字数不少于 1000')
+    .max(10000, '每章字数不超过 1 万'),
   stylePresetId: z.string().min(1, '请选择文风预设'),
   llmProvider: z.enum(['gemini', 'zhipu', 'deepseek', 'qwen', 'ollama']),
   temperature: z.number().min(0).max(2),

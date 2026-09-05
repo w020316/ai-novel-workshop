@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { useProjectStore, DEFAULT_LLM_CONFIG } from '@/lib/store/project-store';
 import { db } from '@/lib/db/schema';
-import { summarizePlan, WORDS_PER_CHAPTER } from '@/lib/outline/volume-plan';
+import { summarizePlan } from '@/lib/outline/volume-plan';
 import {
   projectFormSchema,
   type ProjectFormValues,
@@ -55,8 +55,16 @@ const TARGET_WORD_PRESETS: { value: number; label: string }[] = [
   { value: 5_000_000, label: '500 万（巨著）' },
 ];
 
-/** 章节数快捷档：按每章约 2500 字反推目标字数，与字数双向换算 */
+/** 章节数快捷档：按每章字数反推目标字数，与字数双向换算 */
 const CHAPTER_PRESETS: number[] = [100, 200, 400, 800, 1500];
+
+/** 每章字数快捷档：影响章节数换算与 AI 正文篇幅控制 */
+const CHAPTER_WORDS_PRESETS: { value: number; label: string }[] = [
+  { value: 2000, label: '2000 字/章（快节奏）' },
+  { value: 2500, label: '2500 字/章（标准）' },
+  { value: 3000, label: '3000 字/章（充分展开）' },
+  { value: 4000, label: '4000 字/章（大章）' },
+];
 
 const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
   gemini: [
@@ -121,6 +129,7 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
       genre: '玄幻',
       summary: '',
       targetWords: 300000,
+      chapterWords: 2500,
       stylePresetId: 'style-preset-1',
       llmProvider: DEFAULT_LLM_CONFIG.provider,
       temperature: DEFAULT_LLM_CONFIG.temperature,
@@ -133,19 +142,22 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
   const selectedPresetId = watch('stylePresetId');
   const selectedPreset = stylePresets.find((p) => p.id === selectedPresetId);
   const targetWords = Number.isFinite(Number(watch('targetWords'))) ? Number(watch('targetWords')) : 300000;
-  // 章节数与字数双向换算（按每章约 2500 字）
-  const chapterCount = Math.max(1, Math.round(targetWords / WORDS_PER_CHAPTER));
+  const chapterWords = Number.isFinite(Number(watch('chapterWords'))) && Number(watch('chapterWords')) >= 500
+    ? Number(watch('chapterWords'))
+    : 2500;
+  // 章节数与字数双向换算（按所选的每章字数）
+  const chapterCount = Math.max(1, Math.round(targetWords / chapterWords));
   const setChapters = (n: number) => {
     if (!Number.isFinite(n) || n <= 0) return;
-    const words = Math.round((n * WORDS_PER_CHAPTER) / 10000) * 10000;
+    const words = Math.round((n * chapterWords) / 10000) * 10000;
     setValue('targetWords', Math.min(5_000_000, Math.max(10_000, words)));
   };
   const selectedGenre = watch('genre');
-  // 动态预估：按目标字数实时展示预计卷数与章节数（百万字也能看到规划）
+  // 动态预估：按目标字数与每章字数实时展示预计卷数与章节数（百万字也能看到规划）
   const plan =
     Number.isFinite(targetWords) && targetWords > 0
-      ? summarizePlan(targetWords, selectedGenre)
-      : summarizePlan(300000, selectedGenre);
+      ? summarizePlan(targetWords, selectedGenre, chapterWords)
+      : summarizePlan(300000, selectedGenre, chapterWords);
 
   // ===== 三步向导 =====
   const [step, setStep] = useState(0);
@@ -246,6 +258,7 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
         genre: values.genre,
         summary: values.summary,
         targetWords: values.targetWords,
+        chapterWords: values.chapterWords,
         stylePresetId: values.stylePresetId,
         llmConfig: {
           provider: values.llmProvider,
@@ -433,7 +446,7 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
               支持 1 万-500 万字（百万字长篇友好）· 约每 2000-3000 字一章，将自动规划分卷与章节
             </p>
             <p className="text-xs text-stone-500">
-              预估：{plan.volumeCount} 卷 / {plan.totalChapters.toLocaleString()} 章（按每章约 2500 字估算）
+              预估：{plan.volumeCount} 卷 / {plan.totalChapters.toLocaleString()} 章（按每章约 {chapterWords} 字估算）
             </p>
             {errors.targetWords && (
               <p className="text-xs text-accent-600">{errors.targetWords.message}</p>
@@ -469,8 +482,44 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
               ))}
             </div>
             <p className="text-xs text-stone-400">
-              按每章约 {WORDS_PER_CHAPTER} 字与目标字数互相换算：改章节数会同步更新字数，改字数也会同步更新章节数
+              按每章约 {chapterWords} 字与目标字数互相换算：改章节数会同步更新字数，改字数也会同步更新章节数
             </p>
+          </div>
+
+          {/* 每章字数：影响章节数换算与 AI 生成正文的篇幅控制 */}
+          <div className="space-y-1.5">
+            <Label htmlFor="chapterWords">每章字数（可调）</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Input
+                id="chapterWords"
+                type="number"
+                step={500}
+                min={1000}
+                max={10000}
+                className="max-w-48"
+                {...register('chapterWords', { valueAsNumber: true })}
+              />
+              {CHAPTER_WORDS_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setValue('chapterWords', p.value)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    chapterWords === p.value
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-stone-400">
+              调整后会重新换算章节数与分卷；AI 生成正文时也会按该字数控制每章篇幅
+            </p>
+            {errors.chapterWords && (
+              <p className="text-xs text-accent-600">{errors.chapterWords.message}</p>
+            )}
           </div>
 
           {/* 文风预设 */}

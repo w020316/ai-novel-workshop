@@ -55,7 +55,7 @@ export function CharacterList({
             </div>
             <h3 className="text-sm font-medium text-stone-700">还没有人物档案</h3>
             <p className="max-w-sm text-xs text-stone-500">
-              {emptyHint ?? '点击右上角"新增人物"或使用 AI 关键词生成首个人物。'}
+              {emptyHint ?? '点击上方"AI 一键生成全套人物"批量创建，或新增单个人物。'}
             </p>
             <Button size="sm" variant="outline" onClick={onAdd}>
               <Plus className="h-3.5 w-3.5" />

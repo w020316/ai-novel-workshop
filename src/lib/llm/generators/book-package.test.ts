@@ -9,8 +9,11 @@ import {
   heuristicBookPackage,
   generateBookPackage,
   bookPackageToSummary,
+  bookPackageOriginalityText,
+  checkBookPackageOriginality,
   type BookPackage,
 } from './book-package';
+import { WORKS_DB } from '@/lib/originality/works-db';
 
 const mockChat = vi.mocked(chat);
 
@@ -106,6 +109,22 @@ describe('generateBookPackage', () => {
     expect(bp.fromLLM).toBe(false);
     expect(mockChat).not.toHaveBeenCalled();
   });
+
+  it('注入 avoidancePrompt：写入用户消息用于原创性规避', async () => {
+    mockChat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        title: '差异新书',
+        genre: '都市',
+        summary: '简介',
+        goldenFinger: '金指',
+        mainConflict: '冲突',
+      }),
+    } as never);
+    await generateBookPackage('都市逆袭故事', { avoidancePrompt: '【原创性要求·请务必遵守】不要复刻《某书》' });
+    const userMsg = mockChat.mock.calls[0][0].find((m) => m.role === 'user');
+    expect(userMsg?.content).toContain('【原创性要求·请务必遵守】');
+    expect(userMsg?.content).toContain('差异化创新');
+  });
 });
 
 describe('bookPackageToSummary', () => {
@@ -127,5 +146,50 @@ describe('bookPackageToSummary', () => {
     expect(s).toContain('主线冲突：冲突。');
     expect(s).toContain('长线钩子：钩子。');
     expect(s.length).toBeLessThanOrEqual(300);
+  });
+});
+
+describe('bookPackageOriginalityText / checkBookPackageOriginality', () => {
+  const bp: BookPackage = {
+    title: '甲',
+    titleAlternatives: [],
+    genre: '玄幻',
+    summary: '简介。',
+    goldenFinger: '金指。',
+    mainConflict: '冲突。',
+    longHook: '钩子。',
+    worldviewSeed: '种子。',
+    fromLLM: true,
+  };
+
+  it('查重文本覆盖开书包六个要素', () => {
+    const t = bookPackageOriginalityText(bp);
+    for (const part of [bp.title, bp.summary, bp.goldenFinger, bp.mainConflict, bp.longHook, bp.worldviewSeed]) {
+      expect(t).toContain(part);
+    }
+  });
+
+  it('未撞梗：passed=true 且原创度 100', () => {
+    const r = checkBookPackageOriginality(bp);
+    expect(r.passed).toBe(true);
+    expect(r.score).toBe(100);
+    expect(r.hits).toHaveLength(0);
+  });
+
+  it('书名命中内置代表作：passed=false 且给出规避提示', () => {
+    const hitWork = WORKS_DB[0];
+    const r = checkBookPackageOriginality(
+      { ...bp, title: hitWork.title, genre: hitWork.genre as BookPackage['genre'] },
+      { liveTitles: [] }
+    );
+    expect(r.passed).toBe(false);
+    expect(r.hits.some((h) => h.workTitle === hitWork.title)).toBe(true);
+    expect(r.hints.some((h) => h.includes(hitWork.title))).toBe(true);
+  });
+
+  it('liveTitles 命中实时榜单热书名：撞梗被叠加检出', () => {
+    const r = checkBookPackageOriginality({ ...bp, title: '雾镇银鱼' }, { liveTitles: ['雾镇银鱼'] });
+    expect(r.passed).toBe(false);
+    expect(r.hits.some((h) => h.workTitle === '雾镇银鱼')).toBe(true);
   });
 });

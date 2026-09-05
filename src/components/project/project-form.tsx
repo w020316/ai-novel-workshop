@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { useProjectStore, DEFAULT_LLM_CONFIG } from '@/lib/store/project-store';
 import { db } from '@/lib/db/schema';
-import { summarizePlan } from '@/lib/outline/volume-plan';
+import { summarizePlan, WORDS_PER_CHAPTER } from '@/lib/outline/volume-plan';
 import {
   projectFormSchema,
   type ProjectFormValues,
@@ -47,6 +47,9 @@ const TARGET_WORD_PRESETS: { value: number; label: string }[] = [
   { value: 2_000_000, label: '200 万（超长篇）' },
   { value: 5_000_000, label: '500 万（巨著）' },
 ];
+
+/** 章节数快捷档：按每章约 2500 字反推目标字数，与字数双向换算 */
+const CHAPTER_PRESETS: number[] = [100, 200, 400, 800, 1500];
 
 const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
   gemini: [
@@ -122,7 +125,14 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
   const selectedProvider = watch('llmProvider');
   const selectedPresetId = watch('stylePresetId');
   const selectedPreset = stylePresets.find((p) => p.id === selectedPresetId);
-  const targetWords = Number(watch('targetWords'));
+  const targetWords = Number.isFinite(Number(watch('targetWords'))) ? Number(watch('targetWords')) : 300000;
+  // 章节数与字数双向换算（按每章约 2500 字）
+  const chapterCount = Math.max(1, Math.round(targetWords / WORDS_PER_CHAPTER));
+  const setChapters = (n: number) => {
+    if (!Number.isFinite(n) || n <= 0) return;
+    const words = Math.round((n * WORDS_PER_CHAPTER) / 10000) * 10000;
+    setValue('targetWords', Math.min(5_000_000, Math.max(10_000, words)));
+  };
   const selectedGenre = watch('genre');
   // 动态预估：按目标字数实时展示预计卷数与章节数（百万字也能看到规划）
   const plan =
@@ -421,6 +431,39 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
             {errors.targetWords && (
               <p className="text-xs text-accent-600">{errors.targetWords.message}</p>
             )}
+          </div>
+
+          {/* 章节数：与目标字数双向换算，直接按章数规划 */}
+          <div className="space-y-1.5">
+            <Label htmlFor="chapterCount">目标章节数（可调）</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Input
+                id="chapterCount"
+                type="number"
+                min={1}
+                max={2000}
+                className="max-w-48"
+                value={chapterCount}
+                onChange={(e) => setChapters(Number(e.target.value))}
+              />
+              {CHAPTER_PRESETS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setChapters(n)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    chapterCount === n
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
+                  }`}
+                >
+                  {n} 章
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-stone-400">
+              按每章约 {WORDS_PER_CHAPTER} 字与目标字数互相换算：改章节数会同步更新字数，改字数也会同步更新章节数
+            </p>
           </div>
 
           {/* 文风预设 */}

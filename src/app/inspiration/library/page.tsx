@@ -227,7 +227,7 @@ export default function GlobalLibraryPage() {
                     </Button>
                   )}
                   <Link
-                    href={`/project/new?title=${encodeURIComponent(c.title)}&summary=${encodeURIComponent(c.content)}`}
+                    href={`/project/new?auto=1&idea=${encodeURIComponent(`${c.title}：${c.content}`)}`}
                     className="inline-flex items-center gap-1 px-2 py-1 text-xs text-brand-600 hover:text-brand-700"
                   >
                     <Plus className="h-3 w-3" />

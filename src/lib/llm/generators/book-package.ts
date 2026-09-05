@@ -8,6 +8,11 @@
 import { chat } from '@/lib/llm/client';
 import { safeParseJSON } from '@/lib/utils';
 import { GENRE_OPTIONS } from '@/lib/validators';
+import {
+  checkOriginality,
+  type OriginalityOptions,
+  type OriginalityReport,
+} from '@/lib/originality/check';
 import type { Genre } from '@/types';
 
 const GENRES = GENRE_OPTIONS.map((g) => g.value) as Genre[];
@@ -102,21 +107,36 @@ function sanitizeStrArray(v: unknown, max: number): string[] {
     .slice(0, max);
 }
 
+/** generateBookPackage 可选项：注入原创性规避块，防止开书包撞热门作品 */
+export interface GenerateBookPackageOptions {
+  /** 规避 Prompt 块（来自 buildAvoidance），追加到用户消息尾部 */
+  avoidancePrompt?: string;
+}
+
 /**
  * 一句话灵感 → 开书包。LLM 优先，失败/不合规回落启发式，绝不阻塞。
+ * 传入 options.avoidancePrompt 时把「勿复刻代表作」要求写进提示词，开书包从源头避撞。
  */
-export async function generateBookPackage(idea: string): Promise<BookPackage> {
+export async function generateBookPackage(
+  idea: string,
+  options: GenerateBookPackageOptions = {}
+): Promise<BookPackage> {
   const fallback = heuristicBookPackage(idea);
   if (idea.trim().length < 4) return fallback;
 
   try {
+    const userContent = [
+      `【灵感】${idea.trim().slice(0, 500)}`,
+      options.avoidancePrompt ? `\n${options.avoidancePrompt}` : '',
+      '\n请扩写成开书包（严格 JSON）。书名必须与规避名单中的作品不同名，核心设定与金手指须差异化创新。',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
     const result = await chat(
       [
         { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `【灵感】${idea.trim().slice(0, 500)}\n\n请扩写成开书包（严格 JSON）。`,
-        },
+        { role: 'user', content: userContent },
       ],
       { responseFormat: 'json', temperature: 0.8, maxTokens: 700 }
     );
@@ -149,4 +169,20 @@ export function bookPackageToSummary(bp: BookPackage): string {
   return [bp.summary, `金手指：${bp.goldenFinger}`, `主线冲突：${bp.mainConflict}`, `长线钩子：${bp.longHook}`]
     .join(' ')
     .slice(0, 300);
+}
+
+/** 开书包 → 查重文本（书名 + 简介 + 金手指 + 冲突 + 钩子 + 世界观种子） */
+export function bookPackageOriginalityText(bp: BookPackage): string {
+  return [bp.title, bp.summary, bp.goldenFinger, bp.mainConflict, bp.longHook, bp.worldviewSeed].join('\n');
+}
+
+/**
+ * 开书包原创性预检：与内置代表作 + 实时榜单热书名比对，撞梗即提示（不强制拦截）。
+ * 默认按开书包自身题材过滤比对池，可经 options 叠加 liveTitles / maxHits。
+ */
+export function checkBookPackageOriginality(
+  bp: BookPackage,
+  options: Omit<OriginalityOptions, 'genre'> = {}
+): OriginalityReport {
+  return checkOriginality(bookPackageOriginalityText(bp), { genre: bp.genre, ...options });
 }

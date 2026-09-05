@@ -138,7 +138,7 @@ export default function InspirationPage() {
               </div>
             </div>
             <p className="text-xs text-stone-400">
-              内置趋势参考（非实时榜单）。生成的灵感可复制，到「新建小说」用它当题材/简介。
+              内置趋势参考（非实时榜单）。点「以此新建小说」一键开书：自动备齐书名、简介、金手指等开书包并查重避撞，微调即可开写。
             </p>
           </CardContent>
         </Card>

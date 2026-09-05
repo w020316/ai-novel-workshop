@@ -63,9 +63,9 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
           </div>
         ) : project ? (
           <>
-            <ProjectNav projectId={projectId} />
+            <ProjectNav projectId={projectId} title={project.title} />
             <main className="flex-1 overflow-x-hidden bg-paper-50">
-              <div className="border-b border-paper-200 bg-paper-50 px-6 py-3">
+              <div className="hidden border-b border-paper-200 bg-paper-50 px-6 py-3 md:block">
                 <h2 className="font-serif text-lg text-ink-600">{project.title}</h2>
               </div>
               <div className="p-6">{children}</div>

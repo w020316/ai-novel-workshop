@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea, Label } from '@/components/ui/input';
 import { listInspirationCards, GLOBAL_PROJECT_ID } from '@/lib/db/queries';
+import { GENRE_VALUES } from '@/lib/validators';
 import type { InspirationCard } from '@/types';
 
 /** 新建项目页客户端组装：一句话灵感 → 自动开书 → 查重预检 → 预填三步向导 */
@@ -40,7 +41,12 @@ export function NewProjectClient() {
       // 实时榜单黑名单（7 天保活，未抓取过则为空，仅用内置代表作负例）
       const liveTitles = await loadLiveRankedTitles().catch(() => [] as string[]);
       const avoidance = buildAvoidance({ genre: genreHint, liveTitles });
-      const bp = await generateBookPackage(ideaText, { avoidancePrompt: avoidance.prompt });
+      let bp = await generateBookPackage(ideaText, { avoidancePrompt: avoidance.prompt });
+      // 题材强绑定：灵感卡跳入携带的 genre 参数（已锁定所选题材）优先于开书包推断，
+      // 避免启发式关键词推断把「仙侠」误判成「都市」导致题材联动断裂；仅接受合法白名单值
+      if (genreHint && (GENRE_VALUES as readonly string[]).includes(genreHint)) {
+        bp = { ...bp, genre: genreHint as BookPackage['genre'] };
+      }
       const check = checkBookPackageOriginality(bp, { liveTitles });
       setBookPackage(bp);
       setReport(check);

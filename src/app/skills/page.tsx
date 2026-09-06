@@ -106,6 +106,17 @@ const CATEGORIES: (WritingSkill['category'] | 'all')[] = [
   'all', 'style', 'plot', 'hook', 'review', 'rewrite', 'outline', 'other',
 ];
 
+/** 分类徽章配色（柔和的底色+同系文字，区分适用环节） */
+const CATEGORY_PILL: Record<WritingSkill['category'], string> = {
+  style: 'bg-violet-50 text-violet-600',
+  plot: 'bg-amber-50 text-amber-600',
+  hook: 'bg-rose-50 text-rose-600',
+  outline: 'bg-sky-50 text-sky-600',
+  review: 'bg-emerald-50 text-emerald-600',
+  rewrite: 'bg-teal-50 text-teal-600',
+  other: 'bg-stone-100 text-stone-500',
+};
+
 function sourceChip(s: WritingSkill) {
   if (s.source === 'builtin') return { icon: <Sparkles className="h-3 w-3" />, text: '内置' };
   if (s.source === 'github') return { icon: <GitBranch className="h-3 w-3" />, text: s.sourceName || 'GitHub' };
@@ -119,6 +130,7 @@ export default function SkillsPage() {
   const [category, setCategory] = useState<WritingSkill['category'] | 'all'>('all');
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   // 链接导入
   const [importUrl, setImportUrl] = useState('');
@@ -532,8 +544,10 @@ export default function SkillsPage() {
             type="button"
             onClick={() => setCategory(c)}
             className={cn(
-              'rounded-md border px-2.5 py-1 text-xs transition-colors',
-              category === c ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-stone-200 bg-white text-stone-500 hover:border-brand-300'
+              'rounded-full border px-3.5 py-1 text-xs transition-all',
+              category === c
+                ? 'border-brand-600 bg-brand-600 text-white shadow-sm'
+                : 'border-stone-200 bg-white text-stone-500 hover:border-brand-300 hover:text-brand-600'
             )}
           >
             {c === 'all' ? '全部' : CATEGORY_LABEL[c]}
@@ -550,41 +564,56 @@ export default function SkillsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           {visible.map((s) => {
             const chip = sourceChip(s);
+            const expanded = expandedIds.has(s.id);
+            const toggleExpand = () =>
+              setExpandedIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(s.id)) next.delete(s.id);
+                else next.add(s.id);
+                return next;
+              });
             return (
-              <Card key={s.id} className={cn('transition-colors', s.enabled && 'border-emerald-300')}>
-                <CardContent className="py-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-stone-800">{s.name}</span>
-                        <span className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-500">
+              <Card
+                key={s.id}
+                className={cn(
+                  'overflow-hidden transition-all',
+                  s.enabled ? 'border-emerald-300 shadow-[inset_3px_0_0_0_theme(colors.emerald.400)]' : 'hover:border-brand-200'
+                )}
+              >
+                <CardContent className="flex h-full flex-col py-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={cn('font-serif text-[15px] font-semibold', s.enabled ? 'text-emerald-800' : 'text-stone-800')}>
+                          {s.name}
+                        </span>
+                        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', CATEGORY_PILL[s.category])}>
                           {CATEGORY_LABEL[s.category]}
                         </span>
-                        <span className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]',
+                        <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]',
                           s.source === 'builtin' ? 'bg-brand-50 text-brand-600' : 'bg-stone-100 text-stone-500')}>
                           {chip.icon} {chip.text}
                         </span>
                         {s.enabled && (
-                          <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-medium text-white">
+                            <span className="h-1.5 w-1.5 rounded-full bg-white" />
                             注入中
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-xs text-stone-500">{s.description}</p>
-                      <p className="mt-1.5 line-clamp-2 rounded-md bg-stone-50 p-2 font-mono text-[11px] text-stone-500">
-                        {s.instruction}
-                      </p>
+                      {s.description && <p className="mt-1.5 text-xs leading-relaxed text-stone-500">{s.description}</p>}
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1">
                       <Button
                         size="sm"
                         variant={s.enabled ? 'outline' : 'default'}
                         onClick={() => handleToggle(s)}
+                        className={cn(s.enabled && 'border-emerald-300 text-emerald-700 hover:bg-emerald-50')}
                       >
-                        <Power className="mr-1.5 h-3.5 w-3.5" />
+                        <Power className="mr-1 h-3.5 w-3.5" />
                         {s.enabled ? '停用' : '启用'}
                       </Button>
                       {!s.builtin && (
@@ -593,6 +622,31 @@ export default function SkillsPage() {
                         </Button>
                       )}
                     </div>
+                  </div>
+
+                  {/* 指令：默认收起为两行渐隐摘要，点击展开全文 */}
+                  <div className="relative mt-2.5 flex-1">
+                    <button
+                      type="button"
+                      onClick={toggleExpand}
+                      className="block w-full rounded-md bg-stone-50/80 p-2.5 text-left transition-colors hover:bg-stone-100/80"
+                    >
+                      <p
+                        className={cn(
+                          'whitespace-pre-wrap text-[11px] leading-relaxed text-stone-500',
+                          !expanded && 'line-clamp-2'
+                        )}
+                      >
+                        {s.instruction}
+                      </p>
+                      {!expanded && (
+                        <div className="pointer-events-none absolute inset-x-2.5 bottom-7 h-4 bg-gradient-to-t from-stone-50/80 to-transparent" />
+                      )}
+                      <span className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-medium text-brand-600">
+                        {expanded ? '收起' : '展开指令'}
+                        <ChevronDown className={cn('h-3 w-3 transition-transform', expanded && 'rotate-180')} />
+                      </span>
+                    </button>
                   </div>
                 </CardContent>
               </Card>

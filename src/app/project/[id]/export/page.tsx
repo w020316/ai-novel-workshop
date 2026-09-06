@@ -10,6 +10,7 @@ import { exportTxt, downloadTxt } from '@/lib/export/txt';
 import { buildCollisionAppendix } from '@/lib/export/collision-appendix';
 import { loadLiveRankedTitles } from '@/lib/rank/store';
 import { exportMarkdown, downloadMarkdown } from '@/lib/export/markdown';
+import { exportSubmission } from '@/lib/export/submission';
 import { exportEpub, downloadEpub, buildCoverSvg } from '@/lib/export/epub';
 import { createBackup, downloadBackup, type ProjectBackup } from '@/lib/export/backup';
 import { compileExportPackManifest, buildExportPackZip } from '@/lib/export/export-pack';
@@ -21,7 +22,7 @@ import {
   type WebDAVConfig, type RemoteBackup,
 } from '@/lib/sync/webdav';
 import { toast } from 'sonner';
-import type { NovelProject, Chapter } from '@/types';
+import type { NovelProject, Chapter, Volume } from '@/types';
 
 const PLATFORM_TIPS: [string, string, string][] = [
   ['番茄小说', 'EPUB', '免费爽文平台，导入后标题+简介需符合平台规范，附带 AI 披露。'],
@@ -35,6 +36,7 @@ export default function ExportPage() {
   const projectId = params.id;
   const [project, setProject] = useState<NovelProject | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [volumes, setVolumes] = useState<Volume[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -57,9 +59,10 @@ export default function ExportPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [p, chs] = await Promise.all([
+    const [p, chs, ol] = await Promise.all([
       getProject(projectId),
       listChapters(projectId),
+      getOutline(projectId).catch(() => null),
     ]);
     if (p) {
       setProject(p);
@@ -67,6 +70,7 @@ export default function ExportPage() {
       setDescription((prev) => prev || p.summary);
     }
     setChapters(chs);
+    setVolumes(ol?.volumes ?? []);
     setLoading(false);
   }, [projectId]);
 
@@ -112,6 +116,19 @@ export default function ExportPage() {
       toast.success('Markdown 导出成功');
     } catch {
       toast.error('Markdown 导出失败');
+    }
+    setExporting(null);
+  };
+
+  const handleExportSubmission = async () => {
+    if (!project) return;
+    setExporting('submission');
+    try {
+      const content = exportSubmission({ project, chapters, volumes });
+      downloadTxt(content, `${project.title}_投稿版`);
+      toast.success('投稿格式 TXT 导出成功（首行缩进·分卷标题·无标记符号）');
+    } catch {
+      toast.error('投稿格式导出失败');
     }
     setExporting(null);
   };
@@ -358,6 +375,14 @@ export default function ExportPage() {
       desc: '带目录和格式标记的 Markdown 文件',
       icon: BookMarked,
       action: handleExportMarkdown,
+      disabled: completedCount === 0,
+    },
+    {
+      key: 'submission',
+      label: '投稿格式 TXT',
+      desc: '首行缩进·分卷标题·无标记符号，可直接粘贴到作家后台投稿',
+      icon: FileText,
+      action: handleExportSubmission,
       disabled: completedCount === 0,
     },
     {

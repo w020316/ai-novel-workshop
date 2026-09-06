@@ -5,9 +5,12 @@
 //       本模块提供基于题材与简介的本地模板生成能力，作为离线 fallback 与开发期占位。
 // 时代背景：每个题材提供多个差异明显的候选（era: string[]），生成时随机挑选一条，
 //       避免每次生成都是同一个时代（如千篇一律的"末法时代"）。
+// 差异化：以（书名+简介）哈希为种子做确定性随机组合——同一灵感稳定复现，不同灵感彼此不同；
+//         并从简介中识别金手指创意、从平台趋势（起点×题材）织入热门桥段，避免千篇一律。
 // ============================================================================
 import type { Genre, Worldview } from '@/types';
 import { generateId } from '@/lib/utils';
+import { getTrend } from '@/lib/trend/trends';
 
 export interface WorldviewGenerationInput {
   projectId: string;
@@ -508,30 +511,159 @@ export function getEraOptions(genre: Genre): string[] {
 }
 
 /**
- * 基于题材与简介生成本地世界观模板。
+ * 字符串哈希 → 随机种子（FNV-1a）。
+ */
+function hashSeed(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * mulberry32 伪随机数生成器（确定性：同种子同序列）。
+ */
+function makeRng(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pickByRng<T>(rng: () => number, arr: T[]): T {
+  return arr[Math.floor(rng() * arr.length) % arr.length];
+}
+
+/** 简介金手指类型识别表：命中即把创意注入世界观（顺序即优先级） */
+const GOLDEN_FINGER_PATTERNS: [RegExp, string][] = [
+  [/存档|回溯|时间循环|读档/, '存档回溯'],
+  [/签到|打卡/, '每日签到'],
+  [/系统|面板|金手指/, '系统面板'],
+  [/重生|重回|回到过去/, '重生先知'],
+  [/穿越|穿成|穿书|快穿|位面/, '穿越身份'],
+  [/空间|灵泉|随身老爷爷|田/, '随身空间'],
+  [/血脉|觉醒|天赋|体质|神格/, '血脉天赋'],
+  [/吞噬|掠夺|吸收|复制/, '掠夺进化'],
+  [/模拟|推演|预知|先知|占卜/, '模拟推演'],
+  [/直播|弹幕|围观|短视频/, '直播围观'],
+  [/副本|无限流|闯关|游戏/, '副本闯关'],
+  [/炼丹|炼器|功法|修炼|修为/, '修行传承'],
+  [/光滑|富甲|神豪|暴富|返利/, '财富神豪'],
+];
+
+/**
+ * 从简介中识别金手指/核心创意类型（用于把创意落地进世界观，避免题材通稿）。
+ */
+export function detectGoldenFinger(summary: string): string | null {
+  const text = summary.trim();
+  if (!text) return null;
+  for (const [pattern, label] of GOLDEN_FINGER_PATTERNS) {
+    if (pattern.test(text)) return label;
+  }
+  return null;
+}
+
+/**
+ * 基于题材、书名与简介生成本地世界观模板（差异化版）。
+ * 差异化机制：
+ * 1. 种子随机：以（书名+简介）哈希为种子——同一灵感稳定复现，不同灵感在时代/桥段/热词上各不相同；
+ * 2. 创意落地：从简介识别金手指类型，把创意的成立依据/代价/争夺注入世界架构与力量体系；
+ * 3. 平台风向：把起点×题材的热门方向与桥段转化为本作的世界土壤、对立格局与设定规则。
  * 输出已包含 project 关联与默认未锁定状态，可直接保存到数据库。
  */
 export function generateWorldviewTemplate(input: WorldviewGenerationInput): Worldview {
   const template = GENRE_TEMPLATES[input.genre] ?? GENRE_TEMPLATES['其他'];
   const now = Date.now();
 
+  // —— 种子随机（确定性）：同一灵感复现，不同灵感不同组合 ——
+  const rng = makeRng(hashSeed(`${input.title}|${input.summary}`));
+  const era = pickByRng(rng, template.era);
+
+  // —— 平台热门风向（起点 × 题材）——
+  const trend = getTrend('qidian', input.genre);
+  const tropes = trend?.tropes ?? [];
+  const contrast = trend?.contrast ?? [];
+  const words = trend?.words ?? [];
+  const tropeA = tropes.length ? pickByRng(rng, tropes) : '';
+  const tropeB = tropes.length ? pickByRng(rng, tropes) : '';
+  const contrastPick = contrast.length ? pickByRng(rng, contrast) : '';
+  const wordA = words.length ? pickByRng(rng, words) : '';
+  const wordB = words.length ? pickByRng(rng, words) : '';
+
+  // —— 灵感创意落地：简介金手指注入 ——
+  const gf = detectGoldenFinger(input.summary);
+  const ideaLine = gf
+    ? `本作核心创意「${gf}」：世界规则需为其成立提供依据，并围绕其代价、限制与各方势力的争夺、管控展开冲突。`
+    : '';
+  const powerIdeaLine = gf
+    ? `创意绑定：力量体系需能解释「${gf}」的来源、边界与代价，越阶动用须有反噬或制衡。`
+    : '';
+  const geoLine =
+    wordA && wordB && wordA !== wordB
+      ? `标志性场景：以「${wordA}」「${wordB}」相关的地标作为关键冲突舞台。`
+      : '';
+  const factionLine = contrastPick
+    ? `对立格局：以「${contrastPick}」的结构性矛盾为主线阵营冲突来源${
+        tropeB && tropeB !== tropeA ? `，可衍生「${tropeB}」相关的势力推手` : ''
+      }。`
+    : '';
+
   // 若简介提供额外信息，附加到世界架构尾部（作为创作者补充提示）
   const extraHint = input.summary.trim()
     ? `\n\n（项目简介提示：${input.summary.trim()}）`
     : '';
 
+  const worldStructure = [
+    template.worldStructure,
+    ideaLine,
+    hotspotLine(trend, input.genre, tropeA),
+    extraHint,
+  ]
+    .filter((s) => s && s.trim())
+    .join('\n\n');
+
   return {
     id: generateId('wv'),
     projectId: input.projectId,
-    worldStructure: template.worldStructure + extraHint,
-    powerSystem: template.powerSystem,
-    geography: template.geography,
-    era: pickEra(template.era),
-    factions: template.factions,
-    rules: [...template.rules],
+    worldStructure,
+    powerSystem: [template.powerSystem, powerIdeaLine].filter(Boolean).join('\n'),
+    geography: [template.geography, geoLine].filter(Boolean).join('\n'),
+    era,
+    factions: [template.factions, factionLine].filter(Boolean).join('\n'),
+    rules: normalizeRules(
+      [
+        ...template.rules,
+        tropeA ? `爽点兑现：设定需支持「${tropeA}」类桥段的合理落地与持续复用` : '',
+        tropeB && tropeB !== tropeA
+          ? `冲突引擎：围绕「${tropeB}」设计世界级矛盾（势力/规则层面）`
+          : '',
+        '差异化：与同题材常见设定错位，突出本作独有规则',
+      ].filter(Boolean)
+    ),
     locked: false,
     updatedAt: now,
   };
+}
+
+/** 平台热门风向句（无趋势数据时返回空） */
+function hotspotLine(
+  trend: ReturnType<typeof getTrend>,
+  genre: Genre,
+  trope: string
+): string {
+  if (!trend && !trope) return '';
+  const parts = [
+    trend?.hotspot,
+    trope ? `桥段「${trope}」` : '',
+  ].filter(Boolean);
+  if (parts.length === 0) return '';
+  return `平台热门风向（起点中文网 × ${genre}）：${parts.join('；')}——世界结构需为上述方向提供舞台与土壤。`;
 }
 
 /**

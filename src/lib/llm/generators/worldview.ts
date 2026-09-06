@@ -9,6 +9,7 @@ import type { Genre, Worldview } from '@/types';
 import { chat, LLMClientError } from '@/lib/llm/client';
 import { generateId, safeParseJSON } from '@/lib/utils';
 import { isRewritten } from '@/lib/llm/polish-guard';
+import { getTrend } from '@/lib/trend/trends';
 import {
   generateWorldviewTemplate,
   normalizeRules,
@@ -48,23 +49,39 @@ const SYSTEM_PROMPT = `你是一位资深网络小说世界观架构师。请根
 
 /**
  * 基于题材 / 书名 / 简介，调用真实 LLM 生成世界观。
+ * 差异化：prompt 注入起点×题材的平台热门风向供参考，并强制要求紧扣本作简介创意、
+ * 与常见通稿设定明显错位——不同灵感产出的世界观彼此不同。
  * @throws LLMClientError - LLM 不可用或未返回有效核心内容（worldStructure 为空）时抛出，供上层回退。
  */
 export async function generateWorldviewWithLLM(
   input: WorldviewLLMInput
 ): Promise<Worldview> {
+  // 平台热门风向参考（起点 × 题材）：桥段可借鉴，设定不得雷同
+  const trend = getTrend('qidian', input.genre);
+  const trendBlock = trend
+    ? `
+
+【平台热门风向参考（起点中文网 × ${input.genre}）】
+高热方向：${trend.hotspot}
+高频桥段：${trend.tropes.join('、')}
+热度关键词：${trend.words.join('、')}`
+    : '';
+
   const userPrompt = `题材：${input.genre}
 书名：${input.title || '（未命名）'}
-简介：${input.summary || '（无，请按题材常规立意创作）'}
+简介：${input.summary || '（无，请按题材常规立意创作）'}${trendBlock}
 
-请按系统提示要求产出符合题材特色的世界观 JSON。`;
+【差异化硬要求】
+1. 世界观必须紧扣本作简介中的独有创意（金手指、冲突、钩子）展开——它们是世界规则的中心，而不是题材通用设定的点缀；
+2. 可参考热门风向设计冲突土壤，但设定内容须与同题材常见通稿明显错位，禁止套用模板化设定；
+3. 按系统提示要求产出符合题材特色、彼此自洽的世界观 JSON。`;
 
   const result = await chat(
     [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userPrompt },
     ],
-    { responseFormat: 'json', temperature: 0.8, maxTokens: 1400 }
+    { responseFormat: 'json', temperature: 0.9, maxTokens: 1600 }
   );
 
   const raw = safeParseJSON<RawWorldview>(result.content, {});

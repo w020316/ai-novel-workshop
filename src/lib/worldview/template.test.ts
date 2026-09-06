@@ -6,6 +6,7 @@ import {
   isWorldviewEmpty,
   normalizeRules,
   parseRulesInput,
+  detectGoldenFinger,
 } from './template';
 import type { Genre } from '@/types';
 
@@ -89,6 +90,74 @@ describe('worldview/template', () => {
       expect(a.id).not.toBe(b.id);
     });
 
+    it('差异化：同一灵感稳定复现，不同灵感的时代/风向注入不同', () => {
+      const input = {
+        projectId: 'p1',
+        genre: '仙侠' as Genre,
+        title: '存档炼丹',
+        summary: '杂役弟子身怀每日存档天赋，以命换道炼出禁忌神丹。',
+      };
+      const a = generateWorldviewTemplate(input);
+      const b = generateWorldviewTemplate(input);
+      // 同一灵感：确定性复现（era 与注入内容一致）
+      expect(a.era).toBe(b.era);
+      expect(a.worldStructure).toBe(b.worldStructure);
+
+      // 不同灵感：era 候选/桥段/热词组合应随种子变化（多组灵感至少一项不同）
+      const samples = [
+        '凡人流苟道修仙，宗门大比夺魁',
+        '夺舍重生的老怪物重走长生路',
+        '丹器双修的散修在坊市发家',
+        '灵根觉醒的少年被卷入上古道基之争',
+        '老实散修误入宗门博弈漩涡',
+      ].map((summary, i) =>
+        generateWorldviewTemplate({ ...input, title: `仙途${i}`, summary })
+      );
+      const distinct = new Set(samples.map((w) => w.era + '|' + w.worldStructure));
+      expect(distinct.size).toBeGreaterThan(1);
+    });
+
+    it('简介金手指创意落地：注入世界架构与力量体系', () => {
+      expect(detectGoldenFinger('他的天赋是每日状态存档回溯')).toBe('存档回溯');
+      expect(detectGoldenFinger('签到百年后家族陷落')).toBe('每日签到');
+      expect(detectGoldenFinger('一个普通的修仙故事')).toBeNull();
+
+      const wv = generateWorldviewTemplate({
+        projectId: 'p1',
+        genre: '仙侠',
+        title: '存档炼丹',
+        summary: '杂役弟子身怀每日存档天赋，以命换道。',
+      });
+      expect(wv.worldStructure).toContain('存档回溯');
+      expect(wv.powerSystem).toContain('存档回溯');
+    });
+
+    it('平台热门风向织入：世界架构含风向参考，规则含桥段兑现与差异化要求', () => {
+      const wv = generateWorldviewTemplate({
+        projectId: 'p1',
+        genre: '仙侠',
+        title: '凡人苟道',
+        summary: '凡人流苟道修仙',
+      });
+      expect(wv.worldStructure).toContain('平台热门风向（起点中文网 × 仙侠）');
+      expect(wv.worldStructure).toContain('凡人流修行'); // 起点×仙侠 hotspot
+      expect(wv.rules.some((r) => r.includes('爽点兑现'))).toBe(true);
+      expect(wv.rules.some((r) => r.includes('差异化'))).toBe(true);
+    });
+
+    it('基础模板内容保留：注入是追加而非替换', () => {
+      const wv = generateWorldviewTemplate({
+        projectId: 'p1',
+        genre: '玄幻',
+        title: '仙道长青',
+        summary: '一个凡人修仙的故事',
+      });
+      expect(wv.worldStructure).toContain('九重天渊');
+      expect(wv.powerSystem).toContain('炼气');
+      expect(wv.factions).toContain('正道六宗');
+      expect(wv.geography).toContain('东荒大陆');
+    });
+
     it('rules 应为独立副本（修改不影响模板）', () => {
       const a = generateWorldviewTemplate({
         projectId: 'p1',
@@ -145,14 +214,19 @@ describe('worldview/template', () => {
       expect(pickEra([])).toBe('');
     });
 
-    it('多次生成可得到不同时代背景（随机性冒烟）', () => {
+    it('不同灵感可得到不同时代背景（种子差异化冒烟）', () => {
       const seen = new Set<string>();
       for (let i = 0; i < 40; i++) {
         seen.add(
-          generateWorldviewTemplate({ projectId: 'p1', genre: '仙侠', title: 'x', summary: '' }).era
+          generateWorldviewTemplate({
+            projectId: 'p1',
+            genre: '仙侠',
+            title: `仙途${i}`,
+            summary: `第${i}位修士的独行之路`,
+          }).era
         );
       }
-      // 40 次采样至少覆盖 2 种候选（概率上极大概率命中更多）
+      // 40 组不同灵感采样应覆盖至少 2 种时代背景候选
       expect(seen.size).toBeGreaterThanOrEqual(2);
     });
   });

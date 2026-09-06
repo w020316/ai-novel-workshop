@@ -13,6 +13,7 @@ import { styleGuideToPrompt } from '@/lib/style/clone';
 import { personaToPrompt } from '@/lib/style/persona';
 import { buildAvoidance } from '@/lib/originality/check';
 import { buildSkillsPromptForStage } from '@/lib/skills/store';
+import { goldenThreePrompt } from '@/lib/agents/golden-three';
 
 /**
  * 文笔创作 Agent 的默认 System Prompt
@@ -115,6 +116,13 @@ function buildWritingPrompt(
   if (genre) {
     parts.push('【原创性要求·请务必遵守】');
     parts.push(buildAvoidance({ genre }).prompt);
+    parts.push('');
+  }
+
+  // 黄金三章·开篇专项强化（仅前 3 章注入，非空才占位）
+  const goldenBlock = goldenThreePrompt(chapterNo);
+  if (goldenBlock) {
+    parts.push(goldenBlock);
     parts.push('');
   }
 

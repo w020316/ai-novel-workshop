@@ -13,7 +13,6 @@
 import { chat } from '@/lib/llm/client';
 import { safeParseJSON } from '@/lib/utils';
 import { buildAvoidance } from '@/lib/originality/check';
-import { GENRE_VALUES } from '@/lib/validators';
 import type { InspirationCard } from '@/types';
 
 /** 小说平台渠道（各榜口径来源，仅作选题参考） */
@@ -131,8 +130,8 @@ const SYSTEM_PROMPT = `你是一位题材策划，熟悉起点/番茄/晋江/飞
 }
 要求：
 1) cards 3-5 张，必须具体可执行（给人物关系、反差、开篇与断章卡点都可），不要空话。
-2) 题材不可漂移：所有灵感卡必须严格属于用户指定的【题材】范畴，桥段/热词优先取自该平台与该题材的热门风向与高频桥段，贴近当下最热门作品的玩法，不要写成别的题材。
-3) 每张卡额外输出 genre 字段：从合法题材白名单中选（通常等于用户指定的题材；仅当该卡明显更适合相近题材时才可给该相近题材）。`;
+2) 题材强绑定：每张卡的内容必须显式携带所选题材的标志性元素——直接使用该题材的热度词或高频桥段（如力量体系词、题材专属设定），不含任何题材元素的泛用灵感视为废稿。严格属于【题材】范畴，不要写成别的题材。
+3) 每张卡的 genre 字段固定填用户指定的【题材】本身，不得填其他题材。`;
 
 interface RawResult {
   cards?: Array<{ kind?: string; title?: string; content?: string; genre?: string }>;
@@ -142,12 +141,65 @@ const CARD_KINDS: InspirationCard['kind'][] = [
   'golden-three', 'hook', 'coolpoint', 'pacing', 'character', 'structure', 'other',
 ];
 
-/** 合法题材白名单（LLM 输出 genre 越界时回落所选题材） */
-const GENRE_WHITELIST: readonly string[] = GENRE_VALUES;
+/**
+ * 题材签名词集：题材名 + 热度词 + 高频桥段 + 人设反差短语。
+ * 用于校验灵感卡内容是否真的携带所选题材元素（强绑定校验），而非只看 LLM 自报的 genre。
+ */
+export function buildGenreSignature(trend: TrendAnalysis): string[] {
+  const sig = new Set<string>([trend.genre, ...trend.words, ...trend.tropes]);
+  for (const c of trend.contrast) {
+    for (const seg of c.split(/[·；;，,]/)) {
+      const s = seg.trim();
+      if (s.length >= 2) sig.add(s);
+    }
+  }
+  return [...sig];
+}
+
+/** 强绑定校验：文本命中任一签名词（≥2 字）即视为贴合题材 */
+export function matchesGenre(text: string, signature: string[]): boolean {
+  if (!text) return false;
+  return signature.some((k) => k.length >= 2 && text.includes(k));
+}
 
 /**
- * 生成趋势灵感卡：先做确定性分析，再调用 LLM 扩写为 3-5 张可收藏灵感卡；
- * LLM 失败/返回非法时降级为确定性派生建议（无 cards 时给出 1 张结构卡兜底）。
+ * 确定性题材卡：由趋势画像（桥段 × 人设反差 × 开篇钩子）直接拼装，
+ * 内容天然携带题材元素，用于 LLM 有效卡不足时的强绑定补齐。
+ */
+export function deterministicGenreCards(
+  projectId: string,
+  trend: TrendAnalysis,
+  count: number,
+  excludeTitles: string[] = []
+): InspirationCard[] {
+  const excluded = new Set(excludeTitles.map((t) => t.trim()).filter(Boolean));
+  const now = Date.now();
+  const cards: InspirationCard[] = [];
+  for (let i = 0; i < trend.tropes.length && cards.length < count; i++) {
+    const trope = trend.tropes[i];
+    const contrast = trend.contrast[i % Math.max(1, trend.contrast.length)] ?? '';
+    const title = `${trend.genre}·${trope}`;
+    if (excluded.has(title)) continue;
+    cards.push({
+      id: `trend_${now}_d${i}`,
+      projectId,
+      kind: 'structure',
+      title,
+      content: `以「${trope}」为核心桥段${contrast ? `，人设从「${contrast}」切入` : ''}；开篇按「${trend.hookPattern}」设计，行文呼应${trend.words.slice(0, 3).map((w) => `「${w}」`).join('')}等题材热词。`,
+      sourceDeconstructionId: `trend_${trend.genre}`,
+      genre: trend.genre,
+      createdAt: now,
+    });
+  }
+  return cards;
+}
+
+/**
+ * 生成趋势灵感卡（题材强绑定版）：
+ * 1. LLM 生成后按题材签名词逐卡校验，剔除无题材元素的漂移卡；
+ * 2. 有效卡不足 3 张时带「返工要求」重试一次，重试结果同样过签名词校验；
+ * 3. 仍不足则用确定性题材卡补齐（内容天然贴合所选题材）；
+ * 4. 卡片 genre 字段强制锁定所选题材（供「以此新建小说」题材联动）。
  * @param excludeTitles 已出过的灵感标题（换一批时避开，尽量不重复）
  */
 export async function generateTrendInspiration(
@@ -160,31 +212,61 @@ export async function generateTrendInspiration(
   const base = deriveTrendHints(trend);
   // 平台榜单参考 + 原创性规避负例（同题材代表作黑名单）
   const avoidance = buildAvoidance({ genre: trend.genre, platformId: sourceId });
+  const signature = buildGenreSignature(trend);
   let fromLLM = false;
+  let llmReturned = false;
   let cards: InspirationCard[] = [];
 
-  const userPrompt = [
-    `【平台】${trend.sourceName}`,
-    `【题材】${trend.genre}`,
-    `【热度方向】${trend.hotspot}`,
-    `【高频桥段】${trend.tropes.join('、')}`,
-    `【人设反差】${trend.contrast.join('；')}`,
-    `【节奏】${trend.rhythm}｜【开篇/断章】${trend.hookPattern}`,
-    '',
-    `【目标平台榜单参考】`,
-    avoidance.rankingHint || '（暂无内置榜单参考，请自行把握热度方向）',
-    '',
-    `【原创性/规避要求】`,
-    avoidance.prompt,
-    '',
-    '注意：以上榜单与热梗仅作选题方向参考。请在同题材下做差异化创新，灵感卡必须给出差异化设定与差异化人设，不要整体复刻下方列入规避名单的代表作。',
-    excludeTitles.length
-      ? `【去重要求】以下灵感已经出过，本批标题不得重复、创意也不得换皮重复：${excludeTitles.slice(-30).join('、')}`
-      : '',
-    '请给出 3-5 张可收藏的选题灵感卡（严格 JSON）。',
-  ].join('\n');
+  const excludedTitles = new Set(excludeTitles.map((t) => t.trim()).filter(Boolean));
 
-  try {
+  /** 解析 LLM 返回 → 基础清洗（白名单 kind、截断、去空、去重已出标题），genre 强制锁定所选题材 */
+  const parseCards = (content: string): InspirationCard[] => {
+    const parsed = safeParseJSON<RawResult>(content ?? '', {});
+    const raw = Array.isArray(parsed.cards) ? parsed.cards.slice(0, 5) : [];
+    if (raw.length === 0) return [];
+    const now = Date.now();
+    return raw
+      .map((c, i) => ({
+        id: `trend_${now}_${i}`,
+        projectId,
+        kind: (CARD_KINDS as string[]).includes(c.kind ?? '')
+          ? (c.kind as InspirationCard['kind'])
+          : 'structure',
+        title: (c.title ?? '趋势灵感').trim().slice(0, 40),
+        content: (c.content ?? '').trim(),
+        sourceDeconstructionId: `trend_${sourceId}`,
+        genre: trend.genre,
+        createdAt: now,
+      }))
+      .filter((c) => c.content.length > 0 && !excludedTitles.has(c.title));
+  };
+
+  /** 调一次 LLM；reworkNote 非空时追加题材绑定返工要求 */
+  const requestCards = async (reworkNote = ''): Promise<InspirationCard[]> => {
+    const userPrompt = [
+      `【平台】${trend.sourceName}`,
+      `【题材】${trend.genre}`,
+      `【热度方向】${trend.hotspot}`,
+      `【高频桥段】${trend.tropes.join('、')}`,
+      `【人设反差】${trend.contrast.join('；')}`,
+      `【节奏】${trend.rhythm}｜【开篇/断章】${trend.hookPattern}`,
+      '',
+      `【目标平台榜单参考】`,
+      avoidance.rankingHint || '（暂无内置榜单参考，请自行把握热度方向）',
+      '',
+      `【原创性/规避要求】`,
+      avoidance.prompt,
+      '',
+      '注意：以上榜单与热梗仅作选题方向参考。请在同题材下做差异化创新，灵感卡必须给出差异化设定与差异化人设，不要整体复刻下方列入规避名单的代表作。',
+      excludeTitles.length
+        ? `【去重要求】以下灵感已经出过，本批标题不得重复、创意也不得换皮重复：${excludeTitles.slice(-30).join('、')}`
+        : '',
+      reworkNote,
+      '请给出 3-5 张可收藏的选题灵感卡（严格 JSON）。',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
     const result = await chat(
       [
         { role: 'system', content: SYSTEM_PROMPT },
@@ -192,32 +274,35 @@ export async function generateTrendInspiration(
       ],
       { responseFormat: 'json', temperature: 0.6, maxTokens: 700 }
     ).catch(() => null);
+    if (!result) return [];
+    return parseCards(result.content ?? '');
+  };
 
-    if (result) {
-      const parsed = safeParseJSON<RawResult>(result.content ?? '', {});
-      const raw = Array.isArray(parsed.cards) ? parsed.cards.slice(0, 5) : [];
-      const excluded = new Set(excludeTitles.map((t) => t.trim()).filter(Boolean));
-      if (raw.length > 0) {
-        cards = raw
-          .map((c, i) => ({
-            id: `trend_${Date.now()}_${i}`,
-            projectId,
-            kind: (CARD_KINDS as string[]).includes(c.kind ?? '')
-              ? (c.kind as InspirationCard['kind'])
-              : 'structure',
-            title: (c.title ?? '趋势灵感').trim().slice(0, 40),
-            content: (c.content ?? '').trim(),
-            sourceDeconstructionId: `trend_${sourceId}`,
-            // 卡片自带题材：白名单校验，非法/缺省回落所选题材（供「以此新建小说」题材联动）
-            genre: GENRE_WHITELIST.includes(c.genre ?? '') ? (c.genre as string) : trend.genre,
-            createdAt: Date.now(),
-          }))
-          .filter((c) => c.content.length > 0 && !excluded.has(c.title));
-        fromLLM = cards.length > 0;
-      }
+  try {
+    const first = await requestCards();
+    const sawLlmCards = first.length > 0;
+    let bound = first.filter((c) => matchesGenre(`${c.title}：${c.content}`, signature));
+    // 有效卡不足 3 张 → 带题材绑定返工要求重试一次，重试结果同样过签名词校验
+    if (bound.length < 3) {
+      const retryRaw = await requestCards(
+        `【题材绑定返工】每张卡的内容必须显式使用「${trend.genre}」的热度词或高频桥段（例如：${signature.slice(1, 6).join('、')}），不携带题材元素的泛用灵感视为废稿。`
+      );
+      const retryBound = retryRaw.filter((c) =>
+        matchesGenre(`${c.title}：${c.content}`, signature)
+      );
+      if (retryBound.length > bound.length) bound = retryBound;
     }
+    cards = bound;
+    fromLLM = cards.length > 0;
+    llmReturned = sawLlmCards;
   } catch {
     // 静默降级
+  }
+
+  // 强绑定补齐：LLM 有返回但有效卡不足 3 张（含全部因题材漂移被剔除）时，
+  // 用确定性题材卡补足——内容天然携带题材元素，优于通用兜底
+  if (cards.length < 3 && llmReturned) {
+    cards = [...cards, ...deterministicGenreCards(projectId, trend, 3 - cards.length, [...excludeTitles, ...cards.map((c) => c.title)])];
   }
 
   if (cards.length === 0) {

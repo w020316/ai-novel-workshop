@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { BackHomeLink } from '@/components/back-home';
 import {
   listSkills,
   ensureSeedSkills,
@@ -314,6 +315,7 @@ export default function SkillsPage() {
 
   return (
     <div className="space-y-6">
+      <BackHomeLink />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 font-serif text-xl text-stone-800">

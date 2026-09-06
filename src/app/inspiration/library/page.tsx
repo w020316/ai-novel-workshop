@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronLeft, Library as LibraryIcon, Copy, Check, Plus, Trash2, BookOpen, Settings2 } from 'lucide-react';
 import { listAllInspirationCards, deleteInspirationCard, listProjects } from '@/lib/db/queries';
 import { mergeCardIntoOutline, mergeCardIntoWorldview } from '@/lib/inspiration/merge';
+import { BackHomeLink } from '@/components/back-home';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -118,10 +119,13 @@ export default function GlobalLibraryPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-6 py-8">
-      <Link href="/inspiration" className="mb-6 inline-flex items-center text-sm text-stone-500 hover:text-stone-700">
-        <ChevronLeft className="mr-1 h-4 w-4" />
-        返回找灵感
-      </Link>
+      <div className="mb-6 flex items-center gap-4">
+        <Link href="/inspiration" className="inline-flex items-center text-sm text-stone-500 hover:text-stone-700">
+          <ChevronLeft className="mr-1 h-4 w-4" />
+          返回找灵感
+        </Link>
+        <BackHomeLink />
+      </div>
 
       <header className="mb-6">
         <h1 className="flex items-center gap-2 font-serif text-2xl font-bold text-brand-800">

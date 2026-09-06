@@ -9,7 +9,7 @@ import type { Genre, Worldview } from '@/types';
 import { chat, LLMClientError } from '@/lib/llm/client';
 import { generateId, safeParseJSON } from '@/lib/utils';
 import { isRewritten } from '@/lib/llm/polish-guard';
-import { getTrend } from '@/lib/trend/trends';
+import { getPlatformTrends } from '@/lib/trend/trends';
 import {
   generateWorldviewTemplate,
   normalizeRules,
@@ -56,15 +56,17 @@ const SYSTEM_PROMPT = `你是一位资深网络小说世界观架构师。请根
 export async function generateWorldviewWithLLM(
   input: WorldviewLLMInput
 ): Promise<Worldview> {
-  // 平台热门风向参考（起点 × 题材）：桥段可借鉴，设定不得雷同
-  const trend = getTrend('qidian', input.genre);
-  const trendBlock = trend
+  // 各大平台榜单视角参考（按题材频道取 3-4 家主流平台）：桥段可借鉴，设定必须改编
+  const platformTrends = getPlatformTrends(input.genre);
+  const trendBlock = platformTrends.length
     ? `
 
-【平台热门风向参考（起点中文网 × ${input.genre}）】
-高热方向：${trend.hotspot}
-高频桥段：${trend.tropes.join('、')}
-热度关键词：${trend.words.join('、')}`
+【各大平台热门榜单参考（同题材）】
+${platformTrends
+  .slice(0, 3)
+  .map((t) => `- ${t.sourceName}（${t.sourceFocus}）：高热方向「${t.hotspot}」；高频桥段：${t.tropes.join('、')}`)
+  .join('\n')}
+热度关键词：${platformTrends[0]?.words.join('、') ?? ''}`
     : '';
 
   const userPrompt = `题材：${input.genre}
@@ -73,8 +75,9 @@ export async function generateWorldviewWithLLM(
 
 【差异化硬要求】
 1. 世界观必须紧扣本作简介中的独有创意（金手指、冲突、钩子）展开——它们是世界规则的中心，而不是题材通用设定的点缀；
-2. 可参考热门风向设计冲突土壤，但设定内容须与同题材常见通稿明显错位，禁止套用模板化设定；
-3. 按系统提示要求产出符合题材特色、彼此自洽的世界观 JSON。`;
+2. 上述榜单信息仅作取材视角：桥段必须经过错位改编（换规则 / 换代价 / 换势力主体，至少改其一）后化为自有设定，禁止照搬任何平台的作品设定或原文措辞；
+3. 输出中不得出现「平台」「榜单」「热门风向」等元信息字样——设定文案要像本作原创，而不是风向报告；
+4. 按系统提示要求产出符合题材特色、彼此自洽的世界观 JSON。`;
 
   const result = await chat(
     [
@@ -136,7 +139,8 @@ const REFINE_SYSTEM_PROMPT = `你是一位资深网络小说世界观架构师�
 2. 【最重要】当前设定是底稿，不是参考：逐句保留原有设定的用语与表述，在原有句子基础上追加细节与例子（如具体地名/势力名/境界名/规则细则）；各字段篇幅不得少于原文（原文为空的字段除外）；严禁整体改写、换一种说法复述、删并压缩已有内容；
 3. 核心规则只增不减：原有规则必须逐条保留，可在其后补充新规则；
 4. 修补各字段之间不自洽之处，仅删除与简介直接矛盾的设定；
-5. 时代背景须贴合题材且多样化，避免千篇一律的末法/衰落设定。
+5. 时代背景须贴合题材且多样化，避免千篇一律的末法/衰落设定；
+6. 若原设定中带有「取材参考」等改编提示，须将其消化为本作自有设定表述，禁止照搬榜单作品或保留元信息字样。
 
 必须严格以 JSON 对象输出，字段如下：
 {

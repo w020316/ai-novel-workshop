@@ -6,11 +6,11 @@
 // 时代背景：每个题材提供多个差异明显的候选（era: string[]），生成时随机挑选一条，
 //       避免每次生成都是同一个时代（如千篇一律的"末法时代"）。
 // 差异化：以（书名+简介）哈希为种子做确定性随机组合——同一灵感稳定复现，不同灵感彼此不同；
-//         并从简介中识别金手指创意、从平台趋势（起点×题材）织入热门桥段，避免千篇一律。
+//         并从简介中识别金手指创意、从各大平台榜单（起点/番茄/晋江/飞卢等）改写式织入热门桥段。
 // ============================================================================
 import type { Genre, Worldview } from '@/types';
 import { generateId } from '@/lib/utils';
-import { getTrend } from '@/lib/trend/trends';
+import { getPlatformTrends } from '@/lib/trend/trends';
 
 export interface WorldviewGenerationInput {
   projectId: string;
@@ -585,11 +585,12 @@ export function generateWorldviewTemplate(input: WorldviewGenerationInput): Worl
   const rng = makeRng(hashSeed(`${input.title}|${input.summary}`));
   const era = pickByRng(rng, template.era);
 
-  // —— 平台热门风向（起点 × 题材）——
-  const trend = getTrend('qidian', input.genre);
-  const tropes = trend?.tropes ?? [];
-  const contrast = trend?.contrast ?? [];
-  const words = trend?.words ?? [];
+  // —— 多平台榜单视角（按题材频道取 3-4 家主流平台）——
+  const platformTrends = getPlatformTrends(input.genre);
+  const platformNames = platformTrends.map((t) => t.sourceName).slice(0, 3);
+  const tropes = platformTrends[0]?.tropes ?? [];
+  const contrast = platformTrends[0]?.contrast ?? [];
+  const words = platformTrends[0]?.words ?? [];
   const tropeA = tropes.length ? pickByRng(rng, tropes) : '';
   const tropeB = tropes.length ? pickByRng(rng, tropes) : '';
   const contrastPick = contrast.length ? pickByRng(rng, contrast) : '';
@@ -622,7 +623,7 @@ export function generateWorldviewTemplate(input: WorldviewGenerationInput): Worl
   const worldStructure = [
     template.worldStructure,
     ideaLine,
-    hotspotLine(trend, input.genre, tropeA),
+    adaptationLine(platformNames, input.genre, tropeA, tropeB),
     extraHint,
   ]
     .filter((s) => s && s.trim())
@@ -639,9 +640,9 @@ export function generateWorldviewTemplate(input: WorldviewGenerationInput): Worl
     rules: normalizeRules(
       [
         ...template.rules,
-        tropeA ? `爽点兑现：设定需支持「${tropeA}」类桥段的合理落地与持续复用` : '',
+        tropeA ? `桥段变体：「${tropeA}」在本作中以差异化形式落地（改条件 / 改代价 / 改主体，至少改其一）` : '',
         tropeB && tropeB !== tropeA
-          ? `冲突引擎：围绕「${tropeB}」设计世界级矛盾（势力/规则层面）`
+          ? `冲突引擎：围绕「${tropeB}」设计世界级矛盾（势力/规则层面），并与本作核心创意勾连`
           : '',
         '差异化：与同题材常见设定错位，突出本作独有规则',
       ].filter(Boolean)
@@ -651,19 +652,26 @@ export function generateWorldviewTemplate(input: WorldviewGenerationInput): Worl
   };
 }
 
-/** 平台热门风向句（无趋势数据时返回空） */
-function hotspotLine(
-  trend: ReturnType<typeof getTrend>,
+/**
+ * 改写式风向注入：把多平台榜单潮流转述为本作的世界取材指引（演绎，不照搬榜单原文）。
+ */
+function adaptationLine(
+  platformNames: string[],
   genre: Genre,
-  trope: string
+  tropeA: string,
+  tropeB: string
 ): string {
-  if (!trend && !trope) return '';
-  const parts = [
-    trend?.hotspot,
-    trope ? `桥段「${trope}」` : '',
-  ].filter(Boolean);
-  if (parts.length === 0) return '';
-  return `平台热门风向（起点中文网 × ${genre}）：${parts.join('；')}——世界结构需为上述方向提供舞台与土壤。`;
+  if (platformNames.length === 0 && !tropeA) return '';
+  const base = platformNames.length
+    ? `取材参考：${platformNames.join('、')}等主流榜单的同题材「${genre}」作品`
+    : `取材参考：主流榜单的同题材「${genre}」作品`;
+  const variants = [
+    tropeA ? `以「${tropeA}」为明线土壤` : '',
+    tropeB && tropeB !== tropeA ? `「${tropeB}」为暗线变体` : '',
+  ]
+    .filter(Boolean)
+    .join('、');
+  return `${base}${variants ? `，${variants}` : ''}；以上为取材视角而非照搬对象——需对常见设定做错位改编（换规则 / 换代价 / 换势力主体），形成本作自有世界。`;
 }
 
 /**

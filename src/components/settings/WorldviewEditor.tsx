@@ -197,7 +197,7 @@ export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewE
     });
     setDirty(true);
     toast.success(`已填充 ${filled} 项设定${addedRules ? ` + ${addedRules} 条规则` : ''}`, {
-      description: '只有空白字段被填充，可继续编辑后保存',
+      description: '已按各大平台榜单题材改编起底；建议点击「按简介完善世界观」让 AI 进一步优化为自有设定',
     });
   };
 

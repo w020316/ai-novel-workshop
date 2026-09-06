@@ -132,16 +132,21 @@ describe('worldview/template', () => {
       expect(wv.powerSystem).toContain('存档回溯');
     });
 
-    it('平台热门风向织入：世界架构含风向参考，规则含桥段兑现与差异化要求', () => {
+    it('多平台榜单改编织入：取材视角而非照搬，规则要求桥段变体', () => {
       const wv = generateWorldviewTemplate({
         projectId: 'p1',
         genre: '仙侠',
         title: '凡人苟道',
         summary: '凡人流苟道修仙',
       });
-      expect(wv.worldStructure).toContain('平台热门风向（起点中文网 × 仙侠）');
-      expect(wv.worldStructure).toContain('凡人流修行'); // 起点×仙侠 hotspot
-      expect(wv.rules.some((r) => r.includes('爽点兑现'))).toBe(true);
+      // 多平台榜单视角（男频仙侠 → 起点/番茄/飞卢/纵横取前三）
+      expect(wv.worldStructure).toContain('取材参考');
+      expect(wv.worldStructure).toContain('主流榜单');
+      expect(wv.worldStructure).toContain('错位改编');
+      // 不照搬：不再出现原文风向报告式表述
+      expect(wv.worldStructure).not.toContain('平台热门风向（');
+      // 规则要求对桥段做变体改编
+      expect(wv.rules.some((r) => r.includes('桥段变体'))).toBe(true);
       expect(wv.rules.some((r) => r.includes('差异化'))).toBe(true);
     });
 

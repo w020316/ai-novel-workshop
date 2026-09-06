@@ -112,6 +112,23 @@ export function getTrend(sourceId: string, genre: string): TrendAnalysis | null 
   };
 }
 
+/**
+ * 多平台榜单视角：按题材所属频道返回 3-4 家主流平台对同一题材的榜单侧重。
+ * 用于世界观/灵感生成的「各大热门小说榜单参考」——平台口径不同，取材视角互补。
+ */
+export function getPlatformTrends(genre: string): TrendAnalysis[] {
+  const g = GENRE_TRENDS.find((x) => x.genre === genre) ?? GENRE_TRENDS[GENRE_TRENDS.length - 1];
+  const ids =
+    g.channel === 'male'
+      ? ['qidian', 'fanqie', 'feilu', 'zongheng']
+      : g.channel === 'female'
+        ? ['jinjiang', 'xiaoxiang', 'hongxiu', 'fanqie']
+        : ['qidian', 'fanqie', 'jinjiang', 'feilu'];
+  return ids
+    .map((id) => getTrend(id, genre))
+    .filter((t): t is TrendAnalysis => t !== null);
+}
+
 /** 确定性派生选题建议（LLM 不可用兜底） */
 export function deriveTrendHints(t: TrendAnalysis): string[] {
   const s: string[] = [];

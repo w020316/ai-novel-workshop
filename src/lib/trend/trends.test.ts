@@ -123,6 +123,79 @@ describe('lib/trend/题材强绑定（签名词校验）', () => {
     const again = deterministicGenreCards('p1', t, 2, [first.title]);
     expect(again.map((c) => c.title)).not.toContain(first.title);
   });
+
+  it('buildGenreSignature：签名词去重（题材名与热词重叠时不重复）', () => {
+    const t = getTrend('qidian', '玄幻')!;
+    const sig = buildGenreSignature(t);
+    expect(new Set(sig).size).toBe(sig.length);
+  });
+
+  it('matchesGenre：标题单独携带题材词也可通过（title：content 联合校验）', () => {
+    const sig = buildGenreSignature(getTrend('qidian', '玄幻')!);
+    expect(matchesGenre('血脉觉醒：开篇遭遇灭门之危', sig)).toBe(true);
+  });
+
+  it('matchesGenre：短于 2 字的签名词不参与匹配（防误伤）', () => {
+    expect(matchesGenre('文本含单字', ['文'])).toBe(false);
+    expect(matchesGenre('文本含双字', ['双字'])).toBe(true);
+    expect(matchesGenre('任意文本', [])).toBe(false);
+  });
+
+  it('deterministicGenreCards：count=0 返回空；超过桥段数时按桥段数封顶', () => {
+    const t = getTrend('qidian', '仙侠')!;
+    expect(deterministicGenreCards('p1', t, 0)).toHaveLength(0);
+    expect(deterministicGenreCards('p1', t, 99).length).toBeLessThanOrEqual(t.tropes.length);
+  });
+});
+
+describe('lib/trend/题材强绑定（生成流程联动）', () => {
+  it('LLM 有效卡 ≥3 张 → 单次调用不返工、不补齐', async () => {
+    chatMock.mockResolvedValue(
+      chatResult(
+        JSON.stringify({
+          cards: [
+            { kind: 'hook', title: '觉醒一', content: '废柴血脉觉醒，章末跃迁' },
+            { kind: 'hook', title: '觉醒二', content: '气运加身，帝尊之姿' },
+            { kind: 'hook', title: '觉醒三', content: '异界降临，圣境压制' },
+          ],
+        })
+      )
+    );
+    chatMock.mockClear();
+    const { cards, fromLLM } = await generateTrendInspiration('p1', 'qidian', '玄幻');
+    expect(cards).toHaveLength(3);
+    expect(fromLLM).toBe(true);
+    expect(chatMock).toHaveBeenCalledTimes(1); // 无返工重试
+    expect(cards.every((c) => !c.id.includes('_d'))).toBe(true); // 无确定性补齐卡
+  });
+
+  it('excludeTitles（换一批）：LLM 卡与确定性补齐卡均避开已出标题', async () => {
+    const used = ['血脉觉醒'];
+    chatMock.mockResolvedValue(
+      chatResult(
+        JSON.stringify({
+          cards: [
+            { kind: 'hook', title: '血脉觉醒', content: '开篇血脉觉醒，章末跃迁' },
+            { kind: 'hook', title: '气运加身', content: '气运加身，帝尊之姿' },
+          ],
+        })
+      )
+    );
+    const { cards } = await generateTrendInspiration('p1', 'qidian', '玄幻', used);
+    expect(cards.map((c) => c.title)).not.toContain('血脉觉醒');
+    expect(cards.length).toBeGreaterThanOrEqual(2); // 1 张有效 LLM 卡 + 确定性补齐
+  });
+
+  it('每次生成的确定性补齐卡 id 唯一（同批不冲突）', async () => {
+    chatMock.mockResolvedValue(
+      chatResult(
+        JSON.stringify({ cards: [{ kind: 'hook', title: '觉醒卡', content: '血脉觉醒开局' }] })
+      )
+    );
+    const { cards } = await generateTrendInspiration('p1', 'qidian', '玄幻');
+    const ids = cards.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });
 
 describe('lib/trend/generateTrendInspiration（LLM 路径）', () => {

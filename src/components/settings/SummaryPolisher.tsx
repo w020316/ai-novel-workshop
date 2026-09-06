@@ -51,13 +51,21 @@ export function SummaryPolisher({
     }
     setPolishing(true);
     try {
-      const { summary: polished, fromLLM } = await polishSummary({ genre, title, summary });
-      record(summary, 'AI 润色前'); // 应用结果前记录快照，支持回退
+      const { summary: polished, fromLLM, keptOriginal } = await polishSummary({
+        genre,
+        title,
+        summary,
+      });
+      if (!keptOriginal) record(summary, 'AI 润色前'); // 应用结果前记录快照，支持回退
       setSummary(polished); // 仅填入输入框，不直接保存
       setDirty(true);
-      if (fromLLM) {
+      if (keptOriginal) {
+        toast.warning('AI 两次输出均为整体改写，已保留原简介', {
+          description: '润色仅在原文基础上扩写，不会改写内容；可稍后重试或手动补充',
+        });
+      } else if (fromLLM) {
         toast.success('AI 润色完成', {
-          description: '结果已填入输入框；不满意可点击「回退上一版」',
+          description: '已按原文扩写；不满意可点击「回退上一版」',
         });
       } else {
         toast.info('AI 暂不可用，已做本地清理', {
@@ -201,7 +209,7 @@ export function SummaryPolisher({
         )}
 
         <p className="text-[10px] text-stone-400">
-          AI 润色会在原简介基础上扩写完善（不缩减）；每次润色前自动记录版本，可回退上一版或任意历史版本；确认后保存。LLM 不可用时自动降级为本地清理。
+          AI 润色以你的原文为底稿逐句保留、只做扩写（内置改写侦测，整体改写的输出会被拦截返工，仍不合规则保留原文）；每次润色前自动记录版本，可回退上一版或任意历史版本；确认后保存。LLM 不可用时自动降级为本地清理。
         </p>
       </CardContent>
     </Card>

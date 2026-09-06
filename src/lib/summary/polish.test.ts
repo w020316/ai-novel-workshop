@@ -25,32 +25,66 @@ describe('cleanupSummary（本地降级清理）', () => {
 });
 
 describe('polishSummary', () => {
-  it('LLM 成功：返回润色文本且 fromLLM 为 true', async () => {
+  const BASE = {
+    genre: '都市',
+    title: '隐藏大佬',
+    summary: '主角有个系统，每天签到，后来家里出事了，他就出手了。',
+  };
+  /** 在原文基础上扩写的合规润色（原文语句全保留 + 追加内容） */
+  const EXPANDED = '主角有个系统，每天签到领奖。后来家里出事了，他就出手了，一鸣惊人。';
+  /** 整体改写的不合规润色（措辞全部更换） */
+  const REWRITTEN = '少年意外觉醒神秘面板，从此踏上逆袭巅峰之路，家族危机中力挽狂澜。';
+
+  it('LLM 成功（扩写式润色）：返回润色文本且 fromLLM 为 true', async () => {
     mockChat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        summary: '签到百年，家族陷落那夜，他终于不再隐藏。',
-      }),
+      content: JSON.stringify({ summary: EXPANDED }),
     } as never);
 
-    const result = await polishSummary({
-      genre: '都市',
-      title: '隐藏大佬',
-      summary: '主角有个系统，每天签到，后来家里出事了，他就出手了。',
-    });
+    const result = await polishSummary(BASE);
 
     expect(result.fromLLM).toBe(true);
-    expect(result.summary).toBe('签到百年，家族陷落那夜，他终于不再隐藏。');
+    expect(result.summary).toBe(EXPANDED);
     expect(mockChat).toHaveBeenCalledTimes(1);
-    // prompt 中应包含题材与原简介
+    // prompt 中应包含题材与原简介（底稿）
     const [messages] = mockChat.mock.calls[0] as unknown as [{ content?: string }[]];
     const combined = messages.map((m: { content?: string }) => m.content ?? '').join('\n');
     expect(combined).toContain('都市');
     expect(combined).toContain('隐藏大佬');
     expect(combined).toContain('主角有个系统');
-    // 润色 prompt 必须约束「扩写完善而非缩减」
+    // 润色 prompt 必须约束「原文为底稿、严禁整体改写」
     const system = messages[0]?.content ?? '';
-    expect(system).toContain('扩写');
-    expect(system).toContain('不得少于原简介');
+    expect(system).toContain('原文是底稿');
+    expect(system).toContain('严禁整体改写');
+  });
+
+  it('首轮整体改写 → 守卫拦截并带返工要求重试，返工通过后返回', async () => {
+    mockChat
+      .mockResolvedValueOnce({ content: JSON.stringify({ summary: REWRITTEN }) } as never)
+      .mockResolvedValueOnce({ content: JSON.stringify({ summary: EXPANDED }) } as never);
+
+    const result = await polishSummary(BASE);
+
+    expect(result.fromLLM).toBe(true);
+    expect(result.summary).toBe(EXPANDED);
+    expect(mockChat).toHaveBeenCalledTimes(2);
+    // 第二次调用的 user 消息携带返工要求
+    const secondMessages = mockChat.mock.calls[1]?.[0] as { content?: string }[];
+    expect(secondMessages[1]?.content).toContain('返工要求');
+    expect(secondMessages[1]?.content).toContain('整体改写');
+  });
+
+  it('两次均整体改写 → 保留原简介（keptOriginal）且不视为 LLM 结果', async () => {
+    mockChat
+      .mockResolvedValueOnce({ content: JSON.stringify({ summary: REWRITTEN }) } as never)
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ summary: REWRITTEN.replace('少年', '青年') }),
+      } as never);
+
+    const result = await polishSummary(BASE);
+
+    expect(result.fromLLM).toBe(false);
+    expect(result.keptOriginal).toBe(true);
+    expect(result.summary).toBe(BASE.summary);
   });
 
   it('LLM 失败：降级为本地清理文本且 fromLLM 为 false', async () => {
@@ -95,9 +129,9 @@ describe('polishSummary', () => {
     expect(result.summary).toBe('一个普通的升级流故事');
   });
 
-  it('LLM 润色结果超长时截断到 200 字', async () => {
+  it('LLM 润色结果超长时截断到 200 字（原文保留在结果内）', async () => {
     mockChat.mockResolvedValueOnce({
-      content: JSON.stringify({ summary: '钩'.repeat(260) }),
+      content: JSON.stringify({ summary: '一个普通的升级流故事' + '钩'.repeat(260) }),
     } as never);
 
     const result = await polishSummary({

@@ -156,7 +156,7 @@ describe('refineWorldviewWithSummary（按简介完善世界观）', () => {
     expect(result.rules).toEqual(['规则一', '新增规则二']);
   });
 
-  it('system prompt 约束「扩写而非缩减、篇幅不少于原文」', async () => {
+  it('system prompt 约束「原文为底稿、严禁整体改写、篇幅不少于原文」', async () => {
     chatMock.mockResolvedValue(chatResult(JSON.stringify({ worldStructure: 'x' })));
     await refineWorldviewWithSummary({
       projectId: 'p1',
@@ -167,12 +167,74 @@ describe('refineWorldviewWithSummary（按简介完善世界观）', () => {
     });
     const [messages] = chatMock.mock.calls[0] as [{ content?: string }[]];
     const system = messages[0]?.content ?? '';
-    expect(system).toContain('扩写而非缩减');
+    expect(system).toContain('当前设定是底稿');
+    expect(system).toContain('严禁整体改写');
     expect(system).toContain('不得少于原文');
+    expect(system).toContain('只增不减');
     // user prompt 应携带当前各字段供 AI 在其基础上完善
     const user = messages[1]?.content ?? '';
     expect(user).toContain('原有世界架构');
     expect(user).toContain('规则一');
+  });
+
+  it('字段级守卫：LLM 字段构成整体改写时保留当前值；规则并集只增不减', async () => {
+    chatMock.mockResolvedValue(
+      chatResult(
+        JSON.stringify({
+          // 相对「原有世界架构」几乎无保留 → 守卫拦截，保留当前值
+          worldStructure: '万物皆可修行的全新高武世界，武道昌盛凡人如蝼蚁',
+          powerSystem: '原有力量体系基础上，追加丹器符阵四道的进阶分支与境界细则',
+          rules: ['规则一的扩充说明', '新增规则二'],
+        })
+      )
+    );
+    const result = await refineWorldviewWithSummary({
+      projectId: 'p1',
+      genre: '玄幻',
+      title: '星河黎明',
+      summary: '灵气复苏与星辰修道',
+      current,
+    });
+    // 改写字段被拦 → 保留原文
+    expect(result.worldStructure).toBe('原有世界架构');
+    // 扩写字段（保留原文表述）→ 采纳
+    expect(result.powerSystem).toContain('原有力量体系');
+    expect(result.powerSystem).toContain('追加');
+    // 规则并集：原规则保留 + 新规则追加
+    expect(result.rules).toContain('规则一');
+    expect(result.rules).toContain('新增规则二');
+  });
+
+  it('核心字段被守卫拦截 → 带返工要求重试一次，逐字段择优', async () => {
+    chatMock
+      .mockResolvedValueOnce(
+        chatResult(
+          JSON.stringify({
+            worldStructure: '灵气枯竭的末法废土，人人如蝼蚁般挣扎求存', // 整体改写
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        chatResult(
+          JSON.stringify({
+            // 返工：保留原文表述并扩写
+            worldStructure: '原有世界架构之上，扩展出三层天穹、星轨法则与界域通道的完整细节',
+          })
+        )
+      );
+    const result = await refineWorldviewWithSummary({
+      projectId: 'p1',
+      genre: '玄幻',
+      title: '星河黎明',
+      summary: '灵气复苏与星辰修道',
+      current,
+    });
+    expect(result.worldStructure).toContain('原有世界架构');
+    expect(result.worldStructure).toContain('三层天穹');
+    expect(chatMock.mock.calls).toHaveLength(2);
+    // 返工消息携带要求
+    const secondMessages = chatMock.mock.calls[1]?.[0] as { content?: string }[];
+    expect(secondMessages[1]?.content).toContain('返工要求');
   });
 
   it('返回空 / 无效文本时抛出错误', async () => {

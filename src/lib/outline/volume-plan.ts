@@ -6,9 +6,11 @@
 //   - 每章按 2500 字估算（20 万-500 万字区间的常见档位）
 //   - 目标卷数 = clamp(ceil(总章数 / 60), 4, 12)，即每卷约 60 章（15-20 万字）
 //   - 各卷均分章节区间，末卷承接收尾
+//   - 每卷摘要注入「期待感三层引擎」卷级设计（大奖/节奏/天坑碎片，见 anticipation.ts）
 //   - 零依赖、纯函数，便于单测与页面/表单即时预览
 // ============================================================================
 import type { Volume } from '@/types';
+import { anticipationDesign, formatAnticipation } from './anticipation';
 
 /** 每章估算字数（影响总章数与分卷均分） */
 export const WORDS_PER_CHAPTER = 2500;
@@ -102,7 +104,7 @@ export function planVolumes(
     volumes.push({
       volumeNo: i + 1,
       title: volumeTitle(genre, i, count),
-      summary: volumeSummary(i, count),
+      summary: `${volumeSummary(i, count)}${formatAnticipation(anticipationDesign(i, count))}`,
       chapterRange: [start, end],
       coreConflict: volumeConflict(i, count),
     });

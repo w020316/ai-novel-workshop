@@ -78,4 +78,50 @@ describe('lib/outline/volume-plan（自适应分卷）', () => {
   it('WORDS_PER_CHAPTER 常量参与推导（一致性）', () => {
     expect(estimateTotalChapters(250_000)).toBe(Math.ceil(250000 / WORDS_PER_CHAPTER));
   });
+
+  // ===== 显式卷数覆盖（用户可调） =====
+  describe('显式卷数覆盖 explicitVolumeCount', () => {
+    it('提供显式卷数时覆盖自动推算，均分逻辑不变', () => {
+      // 30 万字自动推算为 4 卷，显式指定 6 卷 → 6 卷
+      const vs = planVolumes(300000, '玄幻', 2500, 6);
+      expect(vs).toHaveLength(6);
+      expect(vs[0].chapterRange[0]).toBe(1);
+      // 区间连续
+      for (let i = 1; i < vs.length; i++) {
+        expect(vs[i].chapterRange[0]).toBe(vs[i - 1].chapterRange[1] + 1);
+      }
+      // 末卷覆盖到估算总章
+      expect(vs[5].chapterRange[1]).toBe(120);
+      expect(vs[0].title).toContain('玄幻');
+    });
+
+    it('显式卷数 clamp 到 1-20；非法（NaN/Infinity）回落自动推算', () => {
+      expect(planVolumes(300000, '玄幻', 2500, 0)).toHaveLength(1);
+      expect(planVolumes(300000, '玄幻', 2500, -5)).toHaveLength(1);
+      expect(planVolumes(300000, '玄幻', 2500, 99)).toHaveLength(20);
+      // 非法输入 → 自动推算 4 卷
+      expect(planVolumes(300000, '玄幻', 2500, Number.NaN)).toHaveLength(4);
+      expect(planVolumes(300000, '玄幻', 2500, Number.POSITIVE_INFINITY)).toHaveLength(4);
+      expect(planVolumes(300000, '玄幻', 2500, undefined)).toHaveLength(4);
+    });
+
+    it('100 万字显式指定 3 卷 → 3 卷且总章数仍为 400', () => {
+      const vs = planVolumes(1_000_000, '玄幻', 2500, 3);
+      expect(vs).toHaveLength(3);
+      expect(vs[2].chapterRange[1]).toBe(400);
+      expect(vs[2].title).toContain('终局');
+    });
+
+    it('summarizePlan 透传显式卷数', () => {
+      const s = summarizePlan(1_000_000, '科幻', 2500, 8);
+      expect(s.volumeCount).toBe(8);
+      expect(s.volumes).toHaveLength(8);
+      expect(s.totalChapters).toBe(400);
+    });
+
+    it('summarizePlan 不传显式卷数行为不变', () => {
+      const s = summarizePlan(1_000_000, '科幻');
+      expect(s.volumeCount).toBe(7);
+    });
+  });
 });

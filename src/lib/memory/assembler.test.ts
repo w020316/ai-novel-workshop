@@ -223,3 +223,60 @@ describe('estimateMemoryTokens', () => {
     );
   });
 });
+
+describe('中期记忆从长期记忆衍生兜底（需求 11）', () => {
+  const longTermWithData: LongTermMemory = {
+    worldview: null,
+    characters: [
+      { id: 'c1', projectId: 'p', name: '林动', role: 'protagonist', appearance: '', personality: '坚韧不屈', catchphrase: '', background: '', motivation: '为父报仇', weakness: '', growthArc: '', relationships: [], speechStyle: '', behaviorPattern: '', locked: false, updatedAt: 0 },
+    ],
+    outline: null,
+    pendingForeshadowings: [
+      { id: 'f1', projectId: 'p', description: '神秘石符的来历', setupChapter: 1, importance: 'high', status: 'pending', relatedCharacters: [], createdAt: 0 } satisfies Foreshadowing,
+    ],
+    stylePreset: null,
+  };
+
+  it('无摘要时应从长期记忆衍生人物状态与待回收伏笔，并标记 derivedFromLongTerm', async () => {
+    const result = await assembleMemory(longTermWithData, emptyMidTerm);
+    expect(result.midTerm.derivedFromLongTerm).toBe(true);
+    expect(result.midTerm.characterStates['林动']).toBe('坚韧不屈；为父报仇');
+    expect(result.midTerm.foreshadowingsToRecover).toHaveLength(1);
+    expect(result.midTerm.relevantSummaries).toEqual([]);
+  });
+
+  it('无摘要但已有待回收伏笔/支线时保留原值，仅补齐空缺的人物状态', async () => {
+    const ownForeshadowing = { id: 'f-own', projectId: 'p', description: '原检索伏笔', setupChapter: 1, importance: 'high', status: 'pending', relatedCharacters: [], createdAt: 0 } satisfies Foreshadowing;
+    const ownThread = { id: 't1', projectId: 'p', name: '支线', type: 'subplot' as const, description: '追查真相', status: 'active' as const, relatedChapters: [], embedding: new Float32Array(), updatedAt: 0 };
+    const midTerm: MidTermMemory = {
+      relevantSummaries: [],
+      activePlotThreads: [ownThread],
+      foreshadowingsToRecover: [ownForeshadowing],
+      characterStates: {},
+    };
+    const result = await assembleMemory(longTermWithData, midTerm);
+    expect(result.midTerm.derivedFromLongTerm).toBe(true);
+    expect(result.midTerm.foreshadowingsToRecover).toEqual([ownForeshadowing]);
+    expect(result.midTerm.activePlotThreads).toEqual([ownThread]);
+    expect(result.midTerm.characterStates['林动']).toBe('坚韧不屈；为父报仇');
+  });
+
+  it('摘要存在时保持原路径，不标记衍生', async () => {
+    const summary: ChapterSummary = {
+      id: 's1', projectId: 'p', chapterId: 'ch1', chapterNo: 1, volumeNo: 1,
+      summary: '主角闭关突破', keyEvents: [], characterStates: {},
+      embedding: new Float32Array(), createdAt: 0,
+    };
+    const midTerm: MidTermMemory = {
+      relevantSummaries: [summary],
+      activePlotThreads: [],
+      foreshadowingsToRecover: [],
+      characterStates: { chapter_1: '突破' },
+    };
+    const result = await assembleMemory(longTermWithData, midTerm);
+    expect(result.midTerm.derivedFromLongTerm).toBeUndefined();
+    expect(result.midTerm.characterStates).toEqual({ chapter_1: '突破' });
+    expect(result.midTerm.foreshadowingsToRecover).toEqual([]);
+    expect(result.midTerm.relevantSummaries).toEqual([summary]);
+  });
+});

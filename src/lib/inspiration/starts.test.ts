@@ -13,9 +13,33 @@ import {
   FALLBACK_STARTS,
   type InspirationStart,
 } from './starts';
+import { GENRE_VALUES } from '@/lib/validators';
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('FALLBACK_STARTS（内置精选池）', () => {
+  it('热门品类扩容：池子达 60 条左右', () => {
+    expect(FALLBACK_STARTS.length).toBeGreaterThanOrEqual(55);
+    expect(FALLBACK_STARTS.length).toBeLessThanOrEqual(70);
+  });
+
+  it('全部条目题材为合法 Genre 值且书名不重复', () => {
+    const genres = new Set<string>(GENRE_VALUES);
+    for (const s of FALLBACK_STARTS) {
+      expect(genres.has(s.genre), `${s.title} 的题材 ${s.genre} 应合法`).toBe(true);
+    }
+    const titles = FALLBACK_STARTS.map((s) => s.title);
+    expect(new Set(titles).size).toBe(titles.length);
+  });
+
+  it('覆盖当下热门品类赛道（苟道/规则怪谈/神豪/年代/御兽/快穿等）', () => {
+    const titles = FALLBACK_STARTS.map((s) => s.title).join('、');
+    for (const kw of ['苟在初圣', '怪谈', '神豪', '重生2008', '御兽', '快穿', '团宠', '天灾囤货']) {
+      expect(titles).toContain(kw);
+    }
+  });
 });
 
 describe('normalizeStarts', () => {

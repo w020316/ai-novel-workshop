@@ -2,8 +2,8 @@
 // 中期记忆查询测试
 // ============================================================================
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { loadMidTermMemory } from './mid-term';
-import type { Foreshadowing } from '@/types';
+import { loadMidTermMemory, deriveMidTermFromLongTerm } from './mid-term';
+import type { Foreshadowing, LongTermMemory } from '@/types';
 
 vi.mock('@/lib/db/queries', () => ({
   listChapterSummaries: vi.fn(),
@@ -78,5 +78,45 @@ describe('loadMidTermMemory', () => {
       r1.relevantSummaries.map((s) => s.chapterId)
     );
     expect(r1.relevantSummaries[0]?.chapterId).toBe('ch1');
+  });
+});
+
+describe('deriveMidTermFromLongTerm（需求 11：中期记忆从长期记忆衍生）', () => {
+  const longTerm: LongTermMemory = {
+    worldview: null,
+    characters: [
+      { id: 'c1', projectId: 'p', name: '林动', role: 'protagonist', appearance: '', personality: '坚韧不屈，越挫越勇', catchphrase: '', background: '', motivation: '为父报仇，登顶武道巅峰', weakness: '', growthArc: '', relationships: [], speechStyle: '', behaviorPattern: '', locked: false, updatedAt: 0 },
+      { id: 'c2', projectId: 'p', name: '应欢欢', role: 'supporting', appearance: '', personality: 'P'.repeat(40), catchphrase: '', background: '', motivation: 'M'.repeat(40), weakness: '', growthArc: '', relationships: [], speechStyle: '', behaviorPattern: '', locked: false, updatedAt: 0 },
+    ],
+    outline: null,
+    pendingForeshadowings: [
+      { id: 'f1', projectId: 'p', description: '神秘石符的来历', setupChapter: 1, importance: 'high', status: 'pending', relatedCharacters: [], createdAt: 0 },
+    ] as Foreshadowing[],
+    stylePreset: null,
+  };
+
+  it('应从人物档案衍生「姓名 → 性格+执念」快照（50 字内）', () => {
+    const derived = deriveMidTermFromLongTerm(longTerm);
+    expect(derived.characterStates['林动']).toBe('坚韧不屈，越挫越勇；为父报仇，登顶武道巅峰');
+    // 超长描述应被截到 50 字内
+    expect(derived.characterStates['应欢欢'].length).toBeLessThanOrEqual(50);
+    expect(derived.derivedFromLongTerm).toBe(true);
+  });
+
+  it('应沿用长期记忆的待回收伏笔，摘要与支线为空', () => {
+    const derived = deriveMidTermFromLongTerm(longTerm);
+    expect(derived.foreshadowingsToRecover).toEqual(longTerm.pendingForeshadowings);
+    expect(derived.relevantSummaries).toEqual([]);
+    expect(derived.activePlotThreads).toEqual([]);
+  });
+
+  it('性格与执念皆空的人物不应产出空快照', () => {
+    const derived = deriveMidTermFromLongTerm({
+      ...longTerm,
+      characters: [
+        { id: 'c3', projectId: 'p', name: '路人甲', role: 'minor', appearance: '', personality: '', catchphrase: '', background: '', motivation: '', weakness: '', growthArc: '', relationships: [], speechStyle: '', behaviorPattern: '', locked: false, updatedAt: 0 },
+      ],
+    });
+    expect(derived.characterStates).toEqual({});
   });
 });

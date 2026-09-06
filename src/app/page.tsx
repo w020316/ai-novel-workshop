@@ -9,7 +9,7 @@ import { ProjectCard } from '@/components/project/project-card';
 import { EmptyState } from '@/components/project/empty-state';
 import { FirstVisitTour } from '@/components/onboarding/first-visit-tour';
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, TrendingUp, ShieldCheck, Info, BookOpenCheck } from 'lucide-react';
+import { Plus, Loader2, TrendingUp, ShieldCheck, Info, BookOpenCheck, Archive, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProjectStatsMap {
@@ -95,6 +95,14 @@ export default function Home() {
           <Link href="/skills" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
             <BookOpenCheck className="h-4 w-4" />
             写作技能
+          </Link>
+          <Link href="/archive" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+            <Archive className="h-4 w-4" />
+            归档管理
+          </Link>
+          <Link href="/trash" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700">
+            <Trash2 className="h-4 w-4" />
+            回收站
           </Link>
           {projects.length > 0 && (
             <Link href="/project/new">

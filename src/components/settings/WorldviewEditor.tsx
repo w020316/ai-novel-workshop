@@ -11,6 +11,7 @@ import {
   markChapterNeedsRecheck,
 } from '@/lib/db/queries';
 import { normalizeRules, parseRulesInput, generateWorldviewTemplate } from '@/lib/worldview/template';
+import { refineWorldviewWithSummary } from '@/lib/llm/generators/worldview';
 import { countChineseWords, formatTime } from '@/lib/utils';
 import type { Worldview, Genre } from '@/types';
 import {
@@ -22,12 +23,17 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 
 interface WorldviewEditorProps {
   projectId: string;
   /** 项目题材：用于「从题材模板填充」快速起底（可选） */
   genre?: Genre;
+  /** 项目书名：用于「按简介完善世界观」的 LLM 输入（可选） */
+  title?: string;
+  /** 项目简介：用于「按简介完善世界观」（可选；提供后展示该入口） */
+  summary?: string;
 }
 
 const FIELD_CONFIG: Array<{
@@ -70,9 +76,10 @@ const FIELD_CONFIG: Array<{
   },
 ];
 
-export function WorldviewEditor({ projectId, genre }: WorldviewEditorProps) {
+export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewEditorProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [refining, setRefining] = useState(false);
   const [wv, setWv] = useState<Worldview | null>(null);
   const [newRule, setNewRule] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -181,6 +188,48 @@ export function WorldviewEditor({ projectId, genre }: WorldviewEditorProps) {
     toast.success(`已填充 ${filled} 项设定${addedRules ? ` + ${addedRules} 条规则` : ''}`, {
       description: '只有空白字段被填充，可继续编辑后保存',
     });
+  };
+
+  /** 按项目简介完善世界观：LLM 结果先填入表单，由用户确认后手动保存（人工可控）；
+   *  失败时仅提示错误，不改动表单数据。 */
+  const refineWithSummary = async () => {
+    if (locked || refining || !genre || !summary?.trim()) return;
+    setRefining(true);
+    try {
+      const refined = await refineWorldviewWithSummary({
+        projectId,
+        genre,
+        title: title ?? '',
+        summary,
+        current: {
+          worldStructure: fields.worldStructure,
+          powerSystem: fields.powerSystem,
+          geography: fields.geography,
+          era: fields.era,
+          factions: fields.factions,
+          rules,
+        },
+      });
+      setFields((prev) => ({
+        ...prev,
+        worldStructure: refined.worldStructure,
+        powerSystem: refined.powerSystem,
+        geography: refined.geography,
+        era: refined.era,
+        factions: refined.factions,
+      }));
+      setRules(normalizeRules(refined.rules));
+      setDirty(true);
+      toast.success('已按简介完善世界观', {
+        description: '结果已填入表单，请检查后手动保存',
+      });
+    } catch (e) {
+      toast.error('按简介完善失败', {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setRefining(false);
+    }
   };
 
   const toggleLock = async () => {
@@ -343,6 +392,24 @@ export function WorldviewEditor({ projectId, genre }: WorldviewEditorProps) {
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <CardTitle className="text-base">世界观设定</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            {genre && summary?.trim() && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={refineWithSummary}
+                disabled={locked || refining}
+                title="把当前世界观与项目简介交给 AI，产出与简介绑定的完善设定（结果填入表单，确认后再保存）"
+              >
+                {refining ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1 h-3.5 w-3.5" />
+                )}
+                按简介完善世界观
+              </Button>
+            )}
             {genre && (
               <Button
                 type="button"
@@ -356,6 +423,7 @@ export function WorldviewEditor({ projectId, genre }: WorldviewEditorProps) {
                 从题材模板填充
               </Button>
             )}
+          </div>
           </div>
           <CardDescription>
             填写世界规则、势力、地理与时代背景。锁定后将在生成章节时强制校验一致性。

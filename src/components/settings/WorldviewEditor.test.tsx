@@ -3,18 +3,24 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { WorldviewEditor } from './WorldviewEditor';
 import type { Worldview } from '@/types';
 
-const { getWorldviewMock, saveWorldviewMock, markChapterNeedsRecheckMock, toastMock } =
-  vi.hoisted(() => ({
-    getWorldviewMock: vi.fn(),
-    saveWorldviewMock: vi.fn(),
-    markChapterNeedsRecheckMock: vi.fn(),
-    toastMock: {
-      success: vi.fn(),
-      error: vi.fn(),
-      warning: vi.fn(),
-      info: vi.fn(),
-    },
-  }));
+const {
+  getWorldviewMock,
+  saveWorldviewMock,
+  markChapterNeedsRecheckMock,
+  toastMock,
+  refineWorldviewWithSummaryMock,
+} = vi.hoisted(() => ({
+  getWorldviewMock: vi.fn(),
+  saveWorldviewMock: vi.fn(),
+  markChapterNeedsRecheckMock: vi.fn(),
+  toastMock: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+  },
+  refineWorldviewWithSummaryMock: vi.fn(),
+}));
 
 vi.mock('@/lib/db/queries', () => ({
   getWorldview: (id: string) => getWorldviewMock(id),
@@ -23,6 +29,10 @@ vi.mock('@/lib/db/queries', () => ({
 }));
 
 vi.mock('sonner', () => ({ toast: toastMock }));
+
+vi.mock('@/lib/llm/generators/worldview', () => ({
+  refineWorldviewWithSummary: (args: unknown) => refineWorldviewWithSummaryMock(args),
+}));
 
 vi.mock('@/lib/worldview/template', () => ({
   normalizeRules: (rules: string[]) => rules,
@@ -195,5 +205,71 @@ describe('WorldviewEditor', () => {
     await waitFor(() => expect(saveWorldviewMock).toHaveBeenCalledTimes(1));
     expect(saveWorldviewMock).toHaveBeenCalledWith(expect.objectContaining({ locked: true }));
     expect(toastMock.success).toHaveBeenCalledWith('世界观已锁定', expect.any(Object));
+  });
+
+  it('无简介时不展示「按简介完善世界观」入口', async () => {
+    getWorldviewMock.mockResolvedValue(wvFixture);
+    render(<WorldviewEditor projectId="p1" genre="玄幻" />);
+    await screen.findByRole('button', { name: /从题材模板填充/ });
+    expect(screen.queryByRole('button', { name: /按简介完善世界观/ })).not.toBeInTheDocument();
+  });
+
+  it('按简介完善世界观：结果填入表单且不直接保存（需用户确认）', async () => {
+    getWorldviewMock.mockResolvedValue(wvFixture);
+    refineWorldviewWithSummaryMock.mockResolvedValue({
+      worldStructure: 'AI 完善后的世界架构',
+      powerSystem: 'AI 完善后的力量体系',
+      geography: 'AI 完善后的地理',
+      era: 'AI 完善后的时代',
+      factions: 'AI 完善后的势力',
+      rules: ['AI 规则一', 'AI 规则二'],
+    });
+    render(
+      <WorldviewEditor projectId="p1" genre="玄幻" title="星河黎明" summary="灵气复苏与星辰修道" />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /按简介完善世界观/ }));
+
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith(
+        '已按简介完善世界观',
+        expect.any(Object)
+      )
+    );
+    // 结果填入表单
+    expect(screen.getByDisplayValue('AI 完善后的世界架构')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('AI 完善后的时代')).toBeInTheDocument();
+    expect(screen.getByText('AI 规则一')).toBeInTheDocument();
+    // 未直接保存，但保存按钮已可用（dirty）
+    expect(saveWorldviewMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '保存' })).toBeEnabled();
+    // LLM 输入包含简介与当前字段
+    expect(refineWorldviewWithSummaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'p1',
+        genre: '玄幻',
+        title: '星河黎明',
+        summary: '灵气复苏与星辰修道',
+        current: expect.objectContaining({ worldStructure: wvFixture.worldStructure }),
+      })
+    );
+  });
+
+  it('按简介完善失败：提示错误且不改动表单数据', async () => {
+    getWorldviewMock.mockResolvedValue(wvFixture);
+    refineWorldviewWithSummaryMock.mockRejectedValue(new Error('LLM 不可用'));
+    render(
+      <WorldviewEditor projectId="p1" genre="玄幻" title="星河黎明" summary="灵气复苏与星辰修道" />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /按简介完善世界观/ }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith('按简介完善失败', expect.any(Object))
+    );
+    // 表单数据未变、未触发保存
+    expect(screen.getByDisplayValue(wvFixture.worldStructure)).toBeInTheDocument();
+    expect(saveWorldviewMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
   });
 });

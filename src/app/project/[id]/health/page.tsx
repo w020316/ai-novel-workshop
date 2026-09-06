@@ -6,6 +6,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { runHealthCheck } from '@/lib/health/health-check';
 import type { ProjectHealthReport, HealthIssue } from '@/lib/health/health-check';
+import { generateHealthFixes } from '@/lib/health/fixes';
+import type { HealthFix } from '@/lib/health/fixes';
+import { getProject, getOutline } from '@/lib/db/queries';
 import {
   Loader2,
   RefreshCw,
@@ -16,6 +19,7 @@ import {
   Info,
   TrendingUp,
   MessageCircleMore,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -44,12 +48,15 @@ export default function HealthPage() {
   const projectId = params.id;
   const [report, setReport] = useState<ProjectHealthReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fixes, setFixes] = useState<HealthFix[] | null>(null);
+  const [fixesLoading, setFixesLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await runHealthCheck(projectId);
       setReport(r);
+      setFixes(null); // 重新体检后旧方案已过期，清空
     } catch (e) {
       console.error(e);
       toast.error('健康体检失败');
@@ -60,6 +67,40 @@ export default function HealthPage() {
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
+
+  /** 需求 12：AI 完善方案——对当前问题清单生成具体可执行的修复步骤（可重复点击重新生成） */
+  const handleGenerateFixes = useCallback(async () => {
+    if (!report || report.issues.length === 0 || fixesLoading) return;
+    setFixesLoading(true);
+    try {
+      // 项目上下文：标题 + 简介 + 大纲主线简述
+      const [project, outline] = await Promise.all([
+        getProject(projectId),
+        getOutline(projectId),
+      ]);
+      const contextSummary = [
+        project?.title ? `书名《${project.title}》` : '',
+        project?.summary ? `简介：${project.summary}` : '',
+        outline?.mainPlotline ? `主线：${outline.mainPlotline}` : '',
+      ]
+        .filter(Boolean)
+        .join('；');
+      const res = await generateHealthFixes({
+        genre: project?.genre ?? '其他',
+        issues: report.issues,
+        contextSummary: contextSummary || '（暂无项目上下文）',
+      });
+      setFixes(res.fixes);
+      if (!res.fromLLM) {
+        toast.info('AI 暂不可用，已展示基于体检建议的基础方案');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('AI 完善方案生成失败，请重试');
+    } finally {
+      setFixesLoading(false);
+    }
+  }, [projectId, report, fixesLoading]);
 
   if (loading) {
     return (
@@ -83,6 +124,12 @@ export default function HealthPage() {
   const errorCount = report.issues.filter((i) => i.severity === 'error').length;
   const warningCount = report.issues.filter((i) => i.severity === 'warning').length;
   const ok = errorCount === 0 && warningCount === 0;
+
+  // AI 完善方案：按问题标题匹配到对应问题卡片下方；未匹配上的归入补充方案区块
+  const fixMap = new Map((fixes ?? []).map((f) => [f.title, f]));
+  const leftoverFixes = (fixes ?? []).filter(
+    (f) => !report.issues.some((i) => i.title === f.title)
+  );
 
   return (
     <div className="space-y-6">
@@ -152,32 +199,85 @@ export default function HealthPage() {
             </CardContent>
           </Card>
         ) : (
-          report.issues.map((issue, i) => {
-            const meta = SEVERITY_META[issue.severity];
-            const Icon = meta.icon;
-            return (
-              <Card key={i} className="flex gap-3 p-4">
-                <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full border', meta.cls)}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', meta.cls)}>
-                      {DIMENSION_LABEL[issue.dimension]} · {meta.label}
-                    </span>
-                    <p className="text-sm font-medium text-stone-800">{issue.title}</p>
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-stone-700">
+                问题清单（{report.issues.length}）
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateFixes}
+                disabled={fixesLoading}
+              >
+                {fixesLoading ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1 h-4 w-4 text-brand-500" />
+                )}
+                {fixesLoading ? '生成中…' : fixes ? '重新生成 AI 方案' : 'AI 完善方案'}
+              </Button>
+            </div>
+            {report.issues.map((issue, i) => {
+              const meta = SEVERITY_META[issue.severity];
+              const Icon = meta.icon;
+              const fix = fixMap.get(issue.title);
+              return (
+                <Card key={i} className="flex gap-3 p-4">
+                  <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full border', meta.cls)}>
+                    <Icon className="h-5 w-5" />
                   </div>
-                  <p className="mt-1 text-sm text-stone-600">{issue.detail}</p>
-                  {issue.suggestion && (
-                    <p className="mt-1 flex items-start gap-1 text-xs text-stone-400">
-                      <MessageCircleMore className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      <span>建议：{issue.suggestion}</span>
-                    </p>
-                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', meta.cls)}>
+                        {DIMENSION_LABEL[issue.dimension]} · {meta.label}
+                      </span>
+                      <p className="text-sm font-medium text-stone-800">{issue.title}</p>
+                    </div>
+                    <p className="mt-1 text-sm text-stone-600">{issue.detail}</p>
+                    {issue.suggestion && (
+                      <p className="mt-1 flex items-start gap-1 text-xs text-stone-400">
+                        <MessageCircleMore className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>建议：{issue.suggestion}</span>
+                      </p>
+                    )}
+                    {fix && (
+                      <div className="mt-2 rounded-md border border-brand-200 bg-brand-50/60 p-2.5">
+                        <p className="flex items-center gap-1 text-xs font-medium text-brand-600">
+                          <Sparkles className="h-3.5 w-3.5" /> AI 完善方案
+                        </p>
+                        <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-stone-600">
+                          {fix.steps.map((step, si) => (
+                            <li key={si}>{step}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+            {/* LLM 返回了未能按标题对应到问题卡片的方案，统一归入补充区块展示 */}
+            {leftoverFixes.length > 0 && (
+              <Card className="p-4">
+                <p className="flex items-center gap-1 text-xs font-medium text-brand-600">
+                  <Sparkles className="h-3.5 w-3.5" /> AI 完善方案 · 补充
+                </p>
+                <div className="mt-2 space-y-3">
+                  {leftoverFixes.map((f, fi) => (
+                    <div key={fi}>
+                      <p className="text-sm font-medium text-stone-800">{f.title}</p>
+                      <ol className="mt-1 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-stone-600">
+                        {f.steps.map((step, si) => (
+                          <li key={si}>{step}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  ))}
                 </div>
               </Card>
-            );
-          })
+            )}
+          </>
         )}
       </div>
     </div>

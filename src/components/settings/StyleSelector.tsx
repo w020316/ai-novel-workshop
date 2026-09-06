@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { listStylePresets, updateProject, saveStylePreset, getProject } from '@/lib/db/queries';
 import { BUILTIN_PERSONAS, getBuiltinPersona, recommendPersonaForGenre } from '@/lib/style/persona';
+import { recommendStylePreset, styleRecommendBasis } from '@/lib/style/recommend';
 import { cn, countChineseWords } from '@/lib/utils';
 import type { StylePreset, NarrativePerspective, Pacing, DescriptionDensity, Genre } from '@/types';
 import {
@@ -16,6 +18,7 @@ import {
   Gauge,
   Sparkles,
   UserRound,
+  Wand2,
 } from 'lucide-react';
 
 interface StyleSelectorProps {
@@ -52,6 +55,9 @@ export function StyleSelector({
   const [selecting, setSelecting] = useState<string | null>(null);
   const [bindingPersona, setBindingPersona] = useState<string | null>(null);
   const [genre, setGenre] = useState<Genre | null>(null);
+  // 按题材智能推荐（需求 8）：先展示推荐结果，用户点「应用」才切换
+  const [summary, setSummary] = useState('');
+  const [recommendation, setRecommendation] = useState<StylePreset | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -59,6 +65,7 @@ export function StyleSelector({
       const [list, project] = await Promise.all([listStylePresets(), getProject(projectId)]);
       setPresets(list);
       setGenre(project?.genre ?? null);
+      setSummary(project?.summary ?? '');
     } catch (e) {
       toast.error('加载文风预设失败', {
         description: e instanceof Error ? e.message : String(e),
@@ -85,6 +92,33 @@ export function StyleSelector({
       setSelecting(null);
     }
   };
+
+  /** 按题材/简介智能推荐：仅展示结果，用户点「应用」后才切换 */
+  const handleRecommend = () => {
+    if (presets.length === 0) {
+      toast.info('暂无预设，请先在样本上传区上传样本生成项目专属预设');
+      return;
+    }
+    const rec = recommendStylePreset({ genre: genre ?? '', summary, presets });
+    if (!rec) {
+      toast.info('暂无可推荐的文风预设');
+      return;
+    }
+    if (rec.id === currentStylePresetId) {
+      toast.info(`当前文风「${rec.name}」已是推荐文风`);
+      return;
+    }
+    setRecommendation(rec);
+  };
+
+  /** 推荐理由一句话（按命中依据生成） */
+  const recommendReason = (() => {
+    if (!recommendation) return '';
+    const basis = styleRecommendBasis(genre ?? '', summary);
+    if (basis === 'summary') return '项目简介中的题材关键词与该文风匹配';
+    if (basis === 'genre') return `题材「${genre}」的经典文风搭配`;
+    return '暂无更精准的题材匹配，推荐使用第一个预设';
+  })();
 
   /** 绑定/解绑叙述者人格（仅项目专属预设可改；内置预设只读） */
   const handleBindPersona = async (preset: StylePreset, personaId: string | null) => {
@@ -114,15 +148,53 @@ export function StyleSelector({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Palette className="h-4 w-4 text-brand-600" />
-          文风预设
-        </CardTitle>
-        <CardDescription>
-          选择内置预设或将&ldquo;基于样本&rdquo;生成的项目专属预设应用到当前项目
-        </CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Palette className="h-4 w-4 text-brand-600" />
+              文风预设
+            </CardTitle>
+            <CardDescription>
+              选择内置预设或将&ldquo;基于样本&rdquo;生成的项目专属预设应用到当前项目
+            </CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={handleRecommend} disabled={loading}>
+            <Wand2 className="h-3.5 w-3.5" />
+            按题材智能推荐
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
+        {/* 智能推荐结果（需求 8）：确认后才切换 */}
+        {recommendation && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-brand-200 bg-brand-50/50 p-3">
+            <div className="min-w-0 text-xs text-stone-700">
+              <p className="font-medium">推荐文风：{recommendation.name}</p>
+              <p className="text-[11px] text-stone-500">{recommendReason} · 点击「应用」后才会切换</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setRecommendation(null)}
+                disabled={selecting !== null}
+              >
+                取消
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setRecommendation(null);
+                  void handleSelect(recommendation);
+                }}
+                disabled={selecting !== null}
+              >
+                {selecting !== null && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                应用
+              </Button>
+            </div>
+          </div>
+        )}
         {presets.length === 0 ? (
           <p className="py-8 text-center text-sm text-stone-500">
             暂无预设，请先在样本上传区上传样本生成项目专属预设

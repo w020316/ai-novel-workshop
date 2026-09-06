@@ -32,8 +32,8 @@ export function ProjectCard({ project, stats, onArchive }: ProjectCardProps) {
     project.targetWords > 0
       ? Math.min(100, Math.round((stats.totalWords / project.targetWords) * 100))
       : 0;
-  // 按目标字数预估最终卷/章规模（百万字长篇预期管理）
-  const plan = summarizePlan(project.targetWords, project.genre, project.chapterWords);
+  // 按目标字数预估最终卷/章规模（百万字长篇预期管理）；用户指定过卷数时按指定值展示
+  const plan = summarizePlan(project.targetWords, project.genre, project.chapterWords, project.volumeCount);
 
   return (
     <Card className="group transition-shadow hover:shadow-md">

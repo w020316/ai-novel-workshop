@@ -11,8 +11,9 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card';
-import { saveCharacter, listCharacters, markChapterNeedsRecheck } from '@/lib/db/queries';
+import { saveCharacter, listCharacters, markChapterNeedsRecheck, getProject } from '@/lib/db/queries';
 import { suggestRelations, getRoleLabel } from '@/lib/character/template';
+import { generateCharacterFromInspiration } from '@/lib/llm/generators/character';
 import { countChineseWords } from '@/lib/utils';
 import type { Character, CharacterRole, CharacterRelation } from '@/types';
 import {
@@ -23,6 +24,7 @@ import {
   Loader2,
   Link2,
   Sparkles,
+  Wand2,
 } from 'lucide-react';
 
 interface CharacterFormProps {
@@ -105,6 +107,12 @@ export function CharacterForm({ projectId, initial, onClose, onSaved }: Characte
   const [allCharacters, setAllCharacters] = useState<Character[]>([]);
   const [newRelationTarget, setNewRelationTarget] = useState('');
   const [newRelationDesc, setNewRelationDesc] = useState('');
+  // 灵感一键生成（需求 7）：项目题材/简介 + 可折叠灵感输入区
+  const [projectGenre, setProjectGenre] = useState('');
+  const [projectSummary, setProjectSummary] = useState('');
+  const [ideaOpen, setIdeaOpen] = useState(false);
+  const [ideaText, setIdeaText] = useState('');
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     void listCharacters(projectId).then((list) => {
@@ -112,8 +120,59 @@ export function CharacterForm({ projectId, initial, onClose, onSaved }: Characte
     });
   }, [projectId, initial?.id]);
 
+  useEffect(() => {
+    void getProject(projectId).then((p) => {
+      if (p) {
+        setProjectGenre(p.genre);
+        setProjectSummary(p.summary ?? '');
+      }
+    });
+  }, [projectId]);
+
   const updateField = (key: string, value: string) => {
     setFields((prev) => ({ ...prev, [key]: value }));
+  };
+
+  /** 灵感一键生成：只填充表单草稿，不直接落库，用户可逐字段微调后再保存 */
+  const handleInspirationFill = async () => {
+    if (!projectSummary.trim() && !ideaText.trim()) {
+      setIdeaOpen(true);
+      toast.warning('项目简介为空，请先粘贴灵感文本再生成');
+      return;
+    }
+    // 编辑已有人物：覆盖表单当前值前需确认
+    if (initial && !confirm('将从灵感重新生成并覆盖表单当前内容，确定继续？')) return;
+    setGenerating(true);
+    try {
+      const draft = await generateCharacterFromInspiration({
+        genre: projectGenre || undefined,
+        summary: projectSummary,
+        ideaText,
+        role,
+      });
+      if (draft.name) setName(draft.name);
+      if (draft.role) setRole(draft.role);
+      setFields((prev) => ({
+        appearance: draft.appearance ?? prev.appearance,
+        personality: draft.personality ?? prev.personality,
+        catchphrase: draft.catchphrase ?? prev.catchphrase,
+        background: draft.background ?? prev.background,
+        motivation: draft.motivation ?? prev.motivation,
+        weakness: draft.weakness ?? prev.weakness,
+        growthArc: draft.growthArc ?? prev.growthArc,
+        speechStyle: draft.speechStyle ?? prev.speechStyle,
+        behaviorPattern: draft.behaviorPattern ?? prev.behaviorPattern,
+      }));
+      toast.success(
+        draft.fromLLM
+          ? '已生成人物草稿，可逐字段微调后保存'
+          : 'LLM 暂不可用，已按灵感关键词生成草稿，可微调后保存'
+      );
+    } catch (e) {
+      toast.error('生成失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const addRelation = () => {
@@ -229,6 +288,56 @@ export function CharacterForm({ projectId, initial, onClose, onSaved }: Characte
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
+        {/* 灵感一键生成（需求 7）：填充表单草稿，可逐字段人工微调后再保存 */}
+        <div className="space-y-2 rounded-md border border-brand-200 bg-brand-50/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1 text-xs font-medium text-stone-700">
+                <Wand2 className="h-3.5 w-3.5 text-brand-600" />
+                从灵感一键生成
+              </p>
+              <p className="text-[11px] text-stone-500">
+                {projectSummary.trim()
+                  ? '将按项目简介生成各字段草稿，生成后可逐字段微调再保存'
+                  : '项目简介为空：可展开灵感输入框粘贴灵感文本后再生成'}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIdeaOpen((v) => !v)}
+                disabled={generating || saving || initial?.locked}
+              >
+                {ideaOpen ? '收起灵感' : '灵感文本'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void handleInspirationFill()}
+                disabled={generating || saving || initial?.locked}
+              >
+                {generating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Wand2 className="h-3.5 w-3.5" />
+                )}
+                从灵感生成
+              </Button>
+            </div>
+          </div>
+          {ideaOpen && (
+            <Textarea
+              value={ideaText}
+              onChange={(e) => setIdeaText(e.target.value)}
+              placeholder="粘贴灵感卡或一段灵感描述：身份、能力、冲突、名场面…"
+              style={{ minHeight: 60 }}
+              disabled={generating || saving || initial?.locked}
+            />
+          )}
+        </div>
+
         {/* 基础信息 */}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="space-y-1.5">

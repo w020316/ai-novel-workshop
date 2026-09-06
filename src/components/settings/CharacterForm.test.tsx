@@ -10,6 +10,8 @@ const {
   suggestRelationsMock,
   getRoleLabelMock,
   getRoleBadgeClassMock,
+  getProjectMock,
+  generateFromInspirationMock,
   toastMock,
 } = vi.hoisted(() => ({
   saveCharacterMock: vi.fn(),
@@ -18,6 +20,8 @@ const {
   suggestRelationsMock: vi.fn(),
   getRoleLabelMock: vi.fn(),
   getRoleBadgeClassMock: vi.fn(),
+  getProjectMock: vi.fn(),
+  generateFromInspirationMock: vi.fn(),
   toastMock: {
     success: vi.fn(),
     error: vi.fn(),
@@ -37,6 +41,7 @@ vi.mock('@/lib/db/queries', () => ({
   saveCharacter: (c: Character) => saveCharacterMock(c),
   listCharacters: (id: string) => listCharactersMock(id),
   markChapterNeedsRecheck: (id: string) => markChapterNeedsRecheckMock(id),
+  getProject: (id: string) => getProjectMock(id),
 }));
 
 vi.mock('sonner', () => ({ toast: toastMock }));
@@ -45,6 +50,11 @@ vi.mock('@/lib/character/template', () => ({
   suggestRelations: (...args: unknown[]) => suggestRelationsMock(...args),
   getRoleLabel: (r: CharacterRole) => getRoleLabelMock(r),
   getRoleBadgeClass: (r: CharacterRole) => getRoleBadgeClassMock(r),
+}));
+
+vi.mock('@/lib/llm/generators/character', () => ({
+  generateCharacterFromInspiration: (...args: unknown[]) =>
+    generateFromInspirationMock(...args),
 }));
 
 function makeChar(overrides: Partial<Character> = {}): Character {
@@ -88,6 +98,7 @@ describe('CharacterForm', () => {
     saveCharacterMock.mockResolvedValue(undefined);
     markChapterNeedsRecheckMock.mockResolvedValue(0);
     listCharactersMock.mockResolvedValue([]);
+    getProjectMock.mockResolvedValue({ id: 'p1', genre: '玄幻', summary: '废柴少年觉醒古镜复仇' });
     getRoleLabelMock.mockImplementation((r: CharacterRole) => ROLE_LABELS[r] ?? String(r));
     getRoleBadgeClassMock.mockReturnValue('');
     suggestRelationsMock.mockReturnValue([]);
@@ -287,5 +298,145 @@ describe('CharacterForm', () => {
     render(<CharacterForm projectId="p1" onClose={onClose} onSaved={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // ============ 灵感一键生成（需求 7） ============
+  const draft = {
+    name: '洛无咎',
+    role: 'protagonist' as const,
+    appearance: '玄衣负手，眉间一道旧疤',
+    personality: '隐忍狠戾，笑里藏刀的反派式主角',
+    catchphrase: '镜中人，你说谎。',
+    background: '古镜之灵转世',
+    motivation: '渴望复仇，却害怕连累同伴',
+    weakness: '触及旧事时易冲动',
+    growthArc: '从独行到执剑护道',
+    speechStyle: '惜字如金，例：『剑在，人在。』',
+    behaviorPattern: '遇险先观察后出手',
+    relationships: [],
+    fromLLM: true,
+  };
+
+  it('从灵感一键生成：字段被填充进表单且仍可人工微调后保存', async () => {
+    generateFromInspirationMock.mockResolvedValue(draft);
+    const onSaved = vi.fn();
+    render(<CharacterForm projectId="p1" onClose={() => {}} onSaved={onSaved} />);
+
+    // 等待项目信息加载
+    await waitFor(() => expect(getProjectMock).toHaveBeenCalledWith('p1'));
+    fireEvent.click(screen.getByRole('button', { name: '从灵感生成' }));
+
+    await waitFor(() => expect(generateFromInspirationMock).toHaveBeenCalledTimes(1));
+    expect(generateFromInspirationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        genre: '玄幻',
+        summary: '废柴少年觉醒古镜复仇',
+        ideaText: '',
+        role: 'protagonist',
+      })
+    );
+    // 各字段被填充
+    expect((screen.getByPlaceholderText('如：李云渊') as HTMLInputElement).value).toBe('洛无咎');
+    const personalityBox = screen.getByPlaceholderText(
+      '至少 10 字描述其核心性格…'
+    ) as HTMLTextAreaElement;
+    expect(personalityBox.value).toContain('隐忍狠戾');
+    // 不直接落库
+    expect(saveCharacterMock).not.toHaveBeenCalled();
+    // 仍可人工微调
+    fireEvent.change(personalityBox, { target: { value: '微调后的性格描述内容' } });
+    expect((screen.getByPlaceholderText('至少 10 字描述其核心性格…') as HTMLTextAreaElement).value).toBe(
+      '微调后的性格描述内容'
+    );
+    // 微调后可正常保存
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(saveCharacterMock).toHaveBeenCalledWith(
+        expect.objectContaining({ name: '洛无咎', personality: '微调后的性格描述内容' })
+      )
+    );
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('降级生成时 toast 提示可微调', async () => {
+    generateFromInspirationMock.mockResolvedValue({ ...draft, fromLLM: false });
+    render(<CharacterForm projectId="p1" onClose={() => {}} onSaved={() => {}} />);
+    await waitFor(() => expect(getProjectMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: '从灵感生成' }));
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith(
+        'LLM 暂不可用，已按灵感关键词生成草稿，可微调后保存'
+      )
+    );
+  });
+
+  it('编辑已有人物：生成覆盖前需 confirm 确认，取消则不生成', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    generateFromInspirationMock.mockResolvedValue(draft);
+    render(
+      <CharacterForm
+        projectId="p1"
+        initial={makeChar({ id: 'c1', name: '李四' })}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    );
+    await waitFor(() => expect(getProjectMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: '从灵感生成' }));
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+    expect(generateFromInspirationMock).not.toHaveBeenCalled();
+    // 表单值未被覆盖
+    expect((screen.getByPlaceholderText('如：李云渊') as HTMLInputElement).value).toBe('李四');
+    confirmSpy.mockRestore();
+  });
+
+  it('编辑已有人物：confirm 确认后生成并覆盖表单内容', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    generateFromInspirationMock.mockResolvedValue(draft);
+    render(
+      <CharacterForm
+        projectId="p1"
+        initial={makeChar({ id: 'c1', name: '李四' })}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    );
+    await waitFor(() => expect(getProjectMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: '从灵感生成' }));
+    await waitFor(() => expect(generateFromInspirationMock).toHaveBeenCalledTimes(1));
+    expect((screen.getByPlaceholderText('如：李云渊') as HTMLInputElement).value).toBe('洛无咎');
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith('已生成人物草稿，可逐字段微调后保存')
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it('项目简介为空且未粘贴灵感时提示并展开灵感输入框', async () => {
+    getProjectMock.mockResolvedValue({ id: 'p1', genre: '玄幻', summary: '' });
+    render(<CharacterForm projectId="p1" onClose={() => {}} onSaved={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/项目简介为空/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '从灵感生成' }));
+    await waitFor(() =>
+      expect(toastMock.warning).toHaveBeenCalledWith('项目简介为空，请先粘贴灵感文本再生成')
+    );
+    // 输入框已自动展开，未触发生成
+    expect(screen.getByPlaceholderText(/粘贴灵感卡或一段灵感描述/)).toBeInTheDocument();
+    expect(generateFromInspirationMock).not.toHaveBeenCalled();
+  });
+
+  it('简介为空时可粘贴灵感文本后生成', async () => {
+    getProjectMock.mockResolvedValue({ id: 'p1', genre: '玄幻', summary: '' });
+    generateFromInspirationMock.mockResolvedValue(draft);
+    render(<CharacterForm projectId="p1" onClose={() => {}} onSaved={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/项目简介为空/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '灵感文本' }));
+    fireEvent.change(screen.getByPlaceholderText(/粘贴灵感卡或一段灵感描述/), {
+      target: { value: '神秘古镜 觉醒' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '从灵感生成' }));
+    await waitFor(() => expect(generateFromInspirationMock).toHaveBeenCalledTimes(1));
+    expect(generateFromInspirationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ summary: '', ideaText: '神秘古镜 觉醒' })
+    );
   });
 });

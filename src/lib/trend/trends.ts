@@ -13,6 +13,7 @@
 import { chat } from '@/lib/llm/client';
 import { safeParseJSON } from '@/lib/utils';
 import { buildAvoidance } from '@/lib/originality/check';
+import { GENRE_VALUES } from '@/lib/validators';
 import type { InspirationCard } from '@/types';
 
 /** 小说平台渠道（各榜口径来源，仅作选题参考） */
@@ -63,7 +64,7 @@ export const GENRE_TRENDS: GenreTrend[] = [
   { genre: '都市', channel: 'neutral', hotspot: '身份反差 + 阶层冲突 + 打脸节奏', tropes: ['赘婿/神医', '重生暴富', '隐藏大佬', '卧底归来'], contrast: ['人前落魄·人后巨鳄', '草根出身·隐藏皇商'], rhythm: 'fast', hookPattern: '开篇被轻慢/侮辱，章末揭底打脸或身份反转', words: ['隐藏', '逆袭', '打脸', '夫人', '巨头'] },
   { genre: '言情', channel: 'female', hotspot: '人设吸引力前置，糖刀交替 + 阶层/身份反差', tropes: ['双洁/强强', '破镜重圆', '替身/追妻火葬场', '先婚后爱'], contrast: ['高冷强者·内心温柔', '落魄千金·身边隐世大佬'], rhythm: 'medium', hookPattern: '开篇一次意外相遇或误会，章末情感倒钩', words: ['心动', '暗恋', '偏爱', '救赎', '一眼万年'] },
   { genre: '甜宠', channel: 'female', hotspot: '高糖低虐 + 双向奔赴 + 日常撒糖', tropes: ['先婚后爱', '青梅竹马', '契约恋爱', '奶团萌宝'], contrast: ['外冷内热大佬·只对她温柔', '元气小红花·实则团宠'], rhythm: 'fast', hookPattern: '开篇一次心动误伤，章末暧昧升温小甜钩', words: ['心动', '撒糖', '偏爱', '官宣', '双洁'] },
-  { genre: '快穿', channel: 'female', hotspot: '位面任务 + 反套路攻略 + 位面之心的真相', tropes: ['炮灰逆袭', '攻略反派', '系统任务', '位面穿梭'], contrast: ['任人拿捏炮灰·实则攻略大师', '高冷反派·每世沦陷'], rhythm: 'fast', hookPattern: '开篇空降新位面接手烂摊子，章末任务异变/男主察觉', words: ['位面', '攻略', '炮灰', '任务', '黑化'] },
+  { genre: '快穿', channel: 'female', hotspot: '位面任务 + 反套路攻略 + 位面之心的真相', tropes: ['炮灰逆袭', '攻略反派', '系统任务', '位面穿梭'], contrast: ['任人拿捏炮灰·实则攻略大师', '高冷反派·每世沦陷'], rhythm: 'fast', hookPattern: '开篇空降新位面接手烂摊子，章末任务异变/男主察觉', words: ['位面', '攻略', '炮灰', '任务', '黑化', '万人迷', '穿书'] },
   { genre: '种田', channel: 'female', hotspot: '家长里短 + 空间灵泉 + 发家致富', tropes: ['穿越种田', '空间囤货', '继室当家', '科举兴家'], contrast: ['被欺负的继室·暗藏空间金手指', '老实农户·妻管严却旺妻'], rhythm: 'slow', hookPattern: '开篇家徒四壁/被分家，章末第一桶金或极品上门', words: ['灵泉', '发家', '极品', '分家', '丰收'] },
   { genre: '悬疑', channel: 'neutral', hotspot: '开篇即命案/谜题，走线密集 + 终局反转', tropes: ['连环案', '密室/孤岛', '记忆迷藏', '复仇真相'], contrast: ['无害负责人·每案真凶', '老实邻居·潜伏者的善良'], rhythm: 'medium', hookPattern: '开篇一个反常细节或命案，章末新证据/危险逼近', words: ['真相', '反转', '线索', '凶案', '面具'] },
   { genre: '灵异', channel: 'neutral', hotspot: '民俗怪谈 + 阴阳眼 + 规则求生', tropes: ['凶宅探秘', '纸人抬轿', '赶尸传人', '阴婚缠身'], contrast: ['无神论者·天生阴阳眼', '怂包主播·百邪不侵'], rhythm: 'medium', hookPattern: '开篇一桩反常灵异事件，章末邪祟升级/规矩破解', words: ['阴气', '纸人', '凶宅', '邪祟', '民俗'] },
@@ -71,7 +72,7 @@ export const GENRE_TRENDS: GenreTrend[] = [
   { genre: '历史', channel: 'male', hotspot: '权谋博弈 + 历史事件亲历 + 改史爽点', tropes: ['穿越改史', '明君改造', '权臣/将门', '乱世群雄'], contrast: ['低阶寒门·胸中韬略', '闲散纨绔·运筹帷幄'], rhythm: 'slow', hookPattern: '开篇一场朝堂危机或命运节点，章末计谋落子', words: ['权谋', '朝堂', '争霸', '变法', '社稷'] },
   { genre: '军事', channel: 'male', hotspot: '烽火硝烟 + 铁血军旅 + 谍战暗涌', tropes: ['抗战谍战', '特种兵王', '雇佣军团', '军工强国'], contrast: ['文书小兵·实战天才', '敌方潜伏者·双重身份博弈'], rhythm: 'medium', hookPattern: '开篇一场遭遇战或身份危机，章末战局反转/密电曝光', words: ['硝烟', '谍影', '番号', '突击', '密电'] },
   { genre: '末世', channel: 'male', hotspot: '生存高压 + 人性抉择 + 金手指自救', tropes: ['丧尸围城', '天灾求生', '基地流', '重生末世前'], contrast: ['普通人·隐藏先知', '冷血首领·重情内核'], rhythm: 'fast', hookPattern: '开篇末世降临求生，章末新威胁或物资危机', words: ['幸存', '变异', '危机', '基地', '求生'] },
-  { genre: '游戏', channel: 'male', hotspot: '职业/系统脑洞 + 副本与隐藏奖励', tropes: ['无限流', '全息沉浸', '生活玩家', '系统流'], contrast: ['低级职业·隐藏天命', '咸鱼玩家·公会支柱'], rhythm: 'fast', hookPattern: '开篇一个反常属性/隐藏任务，章末bug级收获', words: ['副本', '隐藏任务', '神装', '甩锅', '欧皇'] },
+  { genre: '游戏', channel: 'male', hotspot: '职业/系统脑洞 + 副本与隐藏奖励', tropes: ['无限流', '全息沉浸', '生活玩家', '系统流'], contrast: ['低级职业·隐藏天命', '咸鱼玩家·公会支柱'], rhythm: 'fast', hookPattern: '开篇一个反常属性/隐藏任务，章末bug级收获', words: ['副本', '隐藏任务', '神装', '甩锅', '欧皇', '御兽', '电竞'] },
   { genre: '脑洞', channel: 'male', hotspot: '一句话怪设定 + 规则怪谈 + 脑洞清奇', tropes: ['规则怪谈', '万人迷', '全民转职', '直播脑洞'], contrast: ['垫底废柴·全场唯一隐藏S级', '疯批反派·被主角脑洞降伏'], rhythm: 'fast', hookPattern: '开篇一条反常规则/怪设定，章末规则漏洞变现', words: ['规则', '转职', '怪谈', '全网', '名场面'] },
   { genre: '体育', channel: 'male', hotspot: '竞技热血 + 天赋觉醒 + 赛场逆袭', tropes: ['天才重生', '青训逆袭', '伤病归来', '国征大赛'], contrast: ['替补板凳·隐藏王牌', '过气老将·带队翻盘'], rhythm: 'fast', hookPattern: '开篇一场关键失利或淘汰危机，章末绝杀/数据爆炸', words: ['绝杀', '巅峰', '冠军', '天赋', '逆风'] },
   { genre: '轻小说', channel: 'neutral', hotspot: '反套路吐槽 + 轻日常 + 名场面造梗', tropes: ['吐槽役', '社团日常', '异世界打工', '性转/伪娘'], contrast: ['魔王千金·社畜打工人', '高冷学姐·中二病'], rhythm: 'fast', hookPattern: '开篇一个反差名场面，章末吐槽点+小反转', words: ['吐槽', '名场面', 'flag', '社死', '反差萌'] },
@@ -79,7 +80,7 @@ export const GENRE_TRENDS: GenreTrend[] = [
   { genre: '玄幻言情', channel: 'female', hotspot: '东方幻言情 + 双强联手 + 命运纠缠', tropes: ['神女归来', '师徒虐恋', '凤凰血脉', '三生纠葛'], contrast: ['外柔内刚小仙女·上古战神', '魔尊·只为她低头'], rhythm: 'medium', hookPattern: '开篇一次身份揭露或命运重逢，章末情敌/大限卡点', words: ['神女', '凤凰', '三生', '神识', '天命'] },
   { genre: '纯爱', channel: 'female', hotspot: '双向暗恋 + 命运重逢 + 细腻情感流', tropes: ['破镜重圆', '双向暗恋', '久别重逢', '救赎HE'], contrast: ['高岭之花·先动心', '痞帅浪子·唯一认真'], rhythm: 'medium', hookPattern: '开篇一次意外重逢或误会，章末心动倒钩', words: ['心动', '救赎', '偏爱', '重逢', 'HE'] },
   { genre: '同人衍生', channel: 'neutral', hotspot: '原著情怀 + IF线改写 + OC自然融入', tropes: ['if线', '穿成炮灰', '原著剧透', '意难平改写'], contrast: ['炮灰配角·知晓剧情', '反派·被主角拿捏'], rhythm: 'medium', hookPattern: '开篇穿成原著意难平角色，章末剧情偏移卡点', words: ['if线', '炮灰', '剧透', '意难平', 'cp'] },
-  { genre: '现实', channel: 'neutral', hotspot: '行业深耕 + 小人物奋斗 + 时代脉搏', tropes: ['年代创业', '行业文', '北漂/深漂', '乡村振兴'], contrast: ['职场小白·行业黑马', '落魄中年·二次创业'], rhythm: 'slow', hookPattern: '开篇一次裁员/人生变故，章末第一个转机落地', words: ['创业', '行业', '奋斗', '年代', '风口'] },
+  { genre: '现实', channel: 'neutral', hotspot: '行业深耕 + 小人物奋斗 + 时代脉搏', tropes: ['年代创业', '行业文', '北漂/深漂', '乡村振兴'], contrast: ['职场小白·行业黑马', '落魄中年·二次创业'], rhythm: 'slow', hookPattern: '开篇一次裁员/人生变故，章末第一个转机落地', words: ['创业', '行业', '奋斗', '年代', '风口', '年代创业', '重生08'] },
   { genre: '其他', channel: 'neutral', hotspot: '跨题材融合 / 轻日常，靠人设与梗取胜', tropes: ['轻小说日常', '同人衍生', '系统日常', '治愈'], contrast: ['废物人设·隐藏实力', '高冷设定·反差萌'], rhythm: 'medium', hookPattern: '开篇一个笑点或萌点，章末抛一个日常反转', words: ['萌', '沙雕', '隐藏', '反差', '治愈'] },
 ];
 
@@ -125,18 +126,24 @@ export function deriveTrendHints(t: TrendAnalysis): string[] {
 const SYSTEM_PROMPT = `你是一位题材策划，熟悉起点/番茄/晋江/飞卢/七猫等小说平台的榜单口味。用户会给出一个平台 + 一个题材，请你据此给出可直接用的「选题灵感」，严格只输出 JSON（不要解释/前后缀/markdown），字段如下：
 {
   "cards": [
-    { "kind": "hook|coolpoint|pacing|character|structure|other", "title": "灵感卡标题", "content": "可落地的具体写法/人设/卡点设定（1-3 句）" }
+    { "kind": "hook|coolpoint|pacing|character|structure|other", "title": "灵感卡标题", "content": "可落地的具体写法/人设/卡点设定（1-3 句）", "genre": "题材" }
   ]
 }
-要求：cards 3-5 张，必须具体可执行（给人物关系、反差、开篇与断章卡点都可），不要空话。`;
+要求：
+1) cards 3-5 张，必须具体可执行（给人物关系、反差、开篇与断章卡点都可），不要空话。
+2) 题材不可漂移：所有灵感卡必须严格属于用户指定的【题材】范畴，桥段/热词优先取自该平台与该题材的热门风向与高频桥段，贴近当下最热门作品的玩法，不要写成别的题材。
+3) 每张卡额外输出 genre 字段：从合法题材白名单中选（通常等于用户指定的题材；仅当该卡明显更适合相近题材时才可给该相近题材）。`;
 
 interface RawResult {
-  cards?: Array<{ kind?: string; title?: string; content?: string }>;
+  cards?: Array<{ kind?: string; title?: string; content?: string; genre?: string }>;
 }
 
 const CARD_KINDS: InspirationCard['kind'][] = [
   'golden-three', 'hook', 'coolpoint', 'pacing', 'character', 'structure', 'other',
 ];
+
+/** 合法题材白名单（LLM 输出 genre 越界时回落所选题材） */
+const GENRE_WHITELIST: readonly string[] = GENRE_VALUES;
 
 /**
  * 生成趋势灵感卡：先做确定性分析，再调用 LLM 扩写为 3-5 张可收藏灵感卡；
@@ -201,6 +208,8 @@ export async function generateTrendInspiration(
             title: (c.title ?? '趋势灵感').trim().slice(0, 40),
             content: (c.content ?? '').trim(),
             sourceDeconstructionId: `trend_${sourceId}`,
+            // 卡片自带题材：白名单校验，非法/缺省回落所选题材（供「以此新建小说」题材联动）
+            genre: GENRE_WHITELIST.includes(c.genre ?? '') ? (c.genre as string) : trend.genre,
             createdAt: Date.now(),
           }))
           .filter((c) => c.content.length > 0 && !excluded.has(c.title));
@@ -220,6 +229,8 @@ export async function generateTrendInspiration(
         title: `${trend.genre} · ${trend.sourceName} 选题方向`,
         content: ['[悬避撞提示] 请差异化创新，不要整体复刻：' + (avoidance.avoid.join('、') || '暂无内置代表作，请保持原创'), trend.hotspot, ...base].join('\n'),
         sourceDeconstructionId: `trend_${sourceId}`,
+        // 兜底卡题材 = 所选题材（供「以此新建小说」题材联动）
+        genre: trend.genre,
         createdAt: Date.now(),
       },
     ];

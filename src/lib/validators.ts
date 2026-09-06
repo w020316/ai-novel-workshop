@@ -71,6 +71,13 @@ export const projectFormSchema = z.object({
     .int('每章字数必须为整数')
     .min(1000, '每章字数不少于 1000')
     .max(10000, '每章字数不超过 1 万'),
+  /** 目标卷数（可选）：留空 undefined 表示按字数自动推算；z.coerce 兼容表单字符串数字输入 */
+  volumeCount: z.coerce
+    .number()
+    .int('卷数必须为整数')
+    .min(1, '目标卷数不少于 1')
+    .max(20, '目标卷数不超过 20')
+    .optional(),
   stylePresetId: z.string().min(1, '请选择文风预设'),
   llmProvider: z.enum(['gemini', 'zhipu', 'deepseek', 'qwen', 'ollama']),
   temperature: z.number().min(0).max(2),

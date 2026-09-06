@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Loader2, Heart } from 'lucide-react';
@@ -59,6 +59,31 @@ const TARGET_WORD_PRESETS: { value: number; label: string }[] = [
 /** 章节数快捷档：按每章字数反推目标字数，与字数双向换算 */
 const CHAPTER_PRESETS: number[] = [100, 200, 400, 800, 1500];
 
+/** 目标卷数快捷档（可调，改卷数不影响字数，仅影响分卷规划；留空则按字数自动推算） */
+const VOLUME_PRESETS: number[] = [4, 6, 8, 12];
+
+/**
+ * 题材 → 推荐文风预设名（按序取第一个在预设库中命中的名字；来自灵感场景时自动匹配）。
+ * 未收录的题材走硬核爽文兜底。
+ */
+const GENRE_STYLE_RECOMMENDATIONS: Record<string, string[]> = {
+  玄幻: ['热血升级', '硬核爽文'],
+  仙侠: ['热血升级', '硬核爽文'],
+  武侠: ['热血升级', '硬核爽文'],
+  悬疑: ['悬疑冷峻', '诡秘惊悚'],
+  灵异: ['悬疑冷峻', '诡秘惊悚'],
+  历史: ['史诗厚重', '古风雅韵'],
+  言情: ['细腻言情'],
+  甜宠: ['女频甜宠'],
+  快穿: ['快穿利落'],
+  种田: ['治愈日常'],
+  都市: ['都市轻喜', '霸总苏爽'],
+  轻小说: ['轻松幽默', '网感吐槽体'],
+  末世: ['硬核爽文'],
+  游戏: ['硬核爽文'],
+};
+const GENRE_STYLE_FALLBACK: string[] = ['硬核爽文'];
+
 const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
   gemini: [
     { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (免费推荐，最新)' },
@@ -87,7 +112,7 @@ const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
 /** 三步向导：每步对应的必校验字段（选填字段不拦） */
 const STEP_META: { title: string; hint: string; fields: (keyof ProjectFormValues)[] }[] = [
   { title: '故事想法', hint: '想写一个什么故事', fields: ['title', 'genre'] },
-  { title: '篇幅与文风', hint: '写多长、什么味', fields: ['targetWords', 'stylePresetId'] },
+  { title: '篇幅与文风', hint: '写多长、什么味', fields: ['targetWords', 'stylePresetId', 'volumeCount'] },
   { title: 'AI 配置', hint: '新手保持默认即可', fields: [] },
 ];
 
@@ -109,6 +134,10 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
   const [inspirationStarts, setInspirationStarts] = useState<InspirationStart[]>([]);
   const [refreshingStarts, setRefreshingStarts] = useState(false);
   const draftTimer = useRef<number | undefined>(undefined);
+  /** 是否来自灵感场景（选题起点/灵感带入）：是则题材变化时自动匹配推荐文风 */
+  const fromInspirationRef = useRef(false);
+  /** 用户是否手动改过文风：手动选择优先，自动匹配不再覆盖 */
+  const styleTouchedRef = useRef(false);
 
   // 每次进入都换一批新起点：已喜欢的（♥）固定保留并置顶，其余从精选池随机补足
   useEffect(() => {
@@ -167,7 +196,9 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
   }
 
   const form = useForm<ProjectFormValues>({
-    resolver: zodResolver(projectFormSchema),
+    // z.coerce 的输入侧类型是 unknown，与输出型 ProjectFormValues 不一致；
+    // 运行时 coerce 行为保留（兼容字符串数字），此处仅做类型层对齐
+    resolver: zodResolver(projectFormSchema) as unknown as Resolver<ProjectFormValues>,
     defaultValues: {
       title: '',
       genre: '玄幻',
@@ -197,11 +228,16 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
     setValue('targetWords', words);
   };
   const selectedGenre = watch('genre');
-  // 动态预估：按目标字数与每章字数实时展示预计卷数与章节数（百万字也能看到规划）
+  // 用户显式指定的卷数（留空/非法 → undefined，走自动推算）
+  const explicitVolume = (() => {
+    const n = Number(watch('volumeCount'));
+    return Number.isFinite(n) && n >= 1 && n <= 20 ? Math.round(n) : undefined;
+  })();
+  // 动态预估：按目标字数与每章字数实时展示预计卷数与章节数（百万字也能看到规划）；指定卷数时按指定值
   const plan =
     Number.isFinite(targetWords) && targetWords > 0
-      ? summarizePlan(targetWords, selectedGenre, chapterWords)
-      : summarizePlan(300000, selectedGenre, chapterWords);
+      ? summarizePlan(targetWords, selectedGenre, chapterWords, explicitVolume)
+      : summarizePlan(300000, selectedGenre, chapterWords, explicitVolume);
 
   // ===== 三步向导 =====
   const [step, setStep] = useState(0);
@@ -224,9 +260,10 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
     scrollTop();
   };
 
-  // 从「一句话灵感 → 自动开书」带入：prefill.version 变化即填入
+  // 从「一句话灵感 → 自动开书」带入：prefill.version 变化即填入（属于「来自灵感」场景）
   useEffect(() => {
     if (!prefill || !prefill.title) return;
+    fromInspirationRef.current = true;
     setValue('title', prefill.title.slice(0, 60));
     if (GENRE_OPTIONS.some((o) => o.value === prefill.genre)) {
       setValue('genre', prefill.genre as ProjectFormValues['genre']);
@@ -236,7 +273,7 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.version]);
 
-  // 从「趋势灵感」带入：读 URL query 预填标题/题材/简介
+  // 从「趋势灵感」带入：读 URL query 预填标题/题材/简介（属于「来自灵感」场景）
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const t = q.get('title');
@@ -255,8 +292,26 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
       setValue('summary', s.slice(0, 200));
       changed = true;
     }
-    if (changed) toast.info('已带入灵感，可再调整');
+    if (changed) {
+      fromInspirationRef.current = true;
+      toast.info('已带入灵感，可再调整');
+    }
   }, [setValue]);
+
+  // 题材 → 推荐文风自动匹配：「来自灵感」场景且用户未手动改过文风时，
+  // 按预设名找第一个命中的预设（找不到就不动）；手动选择后以手动为准
+  useEffect(() => {
+    if (!fromInspirationRef.current || styleTouchedRef.current) return;
+    const names = GENRE_STYLE_RECOMMENDATIONS[selectedGenre] ?? GENRE_STYLE_FALLBACK;
+    for (const name of names) {
+      const hit = stylePresets.find((p) => p.name === name);
+      if (hit) {
+        setValue('stylePresetId', hit.id);
+        break;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGenre, loadedPresets, stylePresets]);
 
   // 恢复未提交的草稿：仅当没有「灵感带入」query 时（避免覆盖带剧情境）
   useEffect(() => {
@@ -304,6 +359,8 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
         targetWords: values.targetWords,
         chapterWords: values.chapterWords,
         stylePresetId: values.stylePresetId,
+        // 指定过卷数才透传（留空 undefined 不入库，由大纲按字数自动推算）
+        ...(values.volumeCount != null ? { volumeCount: values.volumeCount } : {}),
         llmConfig: {
           provider: values.llmProvider,
           model,
@@ -417,6 +474,8 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
                     <button
                       type="button"
                       onClick={() => {
+                        // 点选题起点属于「来自灵感」场景：题材变化时按推荐自动匹配文风
+                        fromInspirationRef.current = true;
                         setValue('title', s.title);
                         setValue('genre', s.genre as never);
                       }}
@@ -619,6 +678,44 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
             )}
           </div>
 
+          {/* 目标卷数（可调）：改卷数不影响字数，仅影响分卷规划；留空按字数自动推算 */}
+          <div className="space-y-1.5">
+            <Label htmlFor="volumeCount">目标卷数（可调）</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Input
+                id="volumeCount"
+                type="number"
+                min={1}
+                max={20}
+                placeholder="留空自动推算"
+                className="max-w-48"
+                {...register('volumeCount', {
+                  setValueAs: (v) => (v === '' || v == null ? undefined : Number(v)),
+                })}
+              />
+              {VOLUME_PRESETS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setValue('volumeCount', n)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    explicitVolume === n
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
+                  }`}
+                >
+                  {n} 卷
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-stone-400">
+              指定后大纲按该卷数划分（1-20 卷）；留空则按目标字数自动推算（当前预估 {plan.volumeCount} 卷）
+            </p>
+            {errors.volumeCount && (
+              <p className="text-xs text-accent-600">{errors.volumeCount.message}</p>
+            )}
+          </div>
+
           {/* 文风预设 */}
           <div className="space-y-1.5">
             <Label htmlFor="stylePresetId">文风预设 *</Label>
@@ -627,7 +724,12 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
             ) : (
               <select
                 id="stylePresetId"
-                {...register('stylePresetId')}
+                {...register('stylePresetId', {
+                  // 手动选择优先：标记 touched 后自动匹配不再覆盖
+                  onChange: () => {
+                    styleTouchedRef.current = true;
+                  },
+                })}
                 className="flex h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm"
               >
                 {stylePresets.map((preset) => (

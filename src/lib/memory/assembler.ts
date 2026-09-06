@@ -8,6 +8,7 @@
 // ============================================================================
 import { estimateTokens, truncateAtSentence } from '@/lib/utils';
 import type { AssembledMemory, LongTermMemory, MidTermMemory, ShortTermMemory } from '@/types';
+import { deriveMidTermFromLongTerm } from '@/lib/memory/mid-term';
 
 /** 默认 Token 预算 */
 const DEFAULT_TOKEN_BUDGET = 4096;
@@ -46,22 +47,55 @@ export async function assembleMemory(
   const resolvedShortTerm: ShortTermMemory =
     shortTerm ?? getShortTermFromStore();
 
+  // 2. 需求 11：项目刚起步（当前章之前无任何可检索摘要）时，
+  //    中期记忆从长期记忆确定性衍生兜底，避免人物状态/待回收伏笔为空
+  const effectiveMidTerm = applyMidTermFallback(longTerm, midTerm);
+
   const assembled: AssembledMemory = {
     longTerm,
-    midTerm,
+    midTerm: effectiveMidTerm,
     shortTerm: resolvedShortTerm,
     tokenEstimate: 0,
   };
 
-  // 2. 估算当前 Token 消耗
+  // 3. 估算当前 Token 消耗
   assembled.tokenEstimate = estimateMemoryTokens(assembled);
 
-  // 3. 若超预算，执行压缩策略
+  // 4. 若超预算，执行压缩策略
   if (assembled.tokenEstimate > maxTokens) {
     return compressMemory(assembled, maxTokens);
   }
 
   return assembled;
+}
+
+/**
+ * 中期记忆从长期记忆衍生兜底（需求 11）。
+ * 仅当没有检索到任何章节摘要（项目刚起步）时触发：
+ * - characterStates / foreshadowingsToRecover 为空时用长期记忆衍生结果补齐；
+ * - activePlotThreads 保持原检索逻辑的产出（从伏笔推测支线仍然有效）；
+ * - 打上 derivedFromLongTerm 标记。
+ * 摘要存在时保持原路径，不做任何覆盖。
+ */
+function applyMidTermFallback(
+  longTerm: LongTermMemory,
+  midTerm: MidTermMemory
+): MidTermMemory {
+  if (midTerm.relevantSummaries.length > 0) return midTerm;
+
+  const derived = deriveMidTermFromLongTerm(longTerm);
+  return {
+    ...midTerm,
+    characterStates:
+      Object.keys(midTerm.characterStates).length > 0
+        ? midTerm.characterStates
+        : derived.characterStates,
+    foreshadowingsToRecover:
+      midTerm.foreshadowingsToRecover.length > 0
+        ? midTerm.foreshadowingsToRecover
+        : derived.foreshadowingsToRecover,
+    derivedFromLongTerm: true,
+  };
 }
 
 /**

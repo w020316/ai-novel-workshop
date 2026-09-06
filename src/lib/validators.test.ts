@@ -89,6 +89,35 @@ describe('validators/projectFormSchema', () => {
     expect(projectFormSchema.safeParse({ ...makeValidProject(), topP: 1.1 }).success).toBe(false);
     expect(projectFormSchema.safeParse({ ...makeValidProject(), topP: -0.1 }).success).toBe(false);
   });
+
+  // ===== volumeCount（目标卷数，可选，合法范围 1-20） =====
+  it('volumeCount 留空（undefined/缺省）应通过且解析为 undefined', () => {
+    // makeValidProject 本身不含 volumeCount → 缺省
+    const result = projectFormSchema.safeParse(makeValidProject());
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.volumeCount).toBeUndefined();
+    expect(projectFormSchema.safeParse({ ...makeValidProject(), volumeCount: undefined }).success).toBe(true);
+  });
+
+  it('volumeCount 边界 1 与 20 应通过', () => {
+    expect(projectFormSchema.safeParse({ ...makeValidProject(), volumeCount: 1 }).success).toBe(true);
+    expect(projectFormSchema.safeParse({ ...makeValidProject(), volumeCount: 20 }).success).toBe(true);
+  });
+
+  it('volumeCount 越界 0 与 21 应失败', () => {
+    expect(projectFormSchema.safeParse({ ...makeValidProject(), volumeCount: 0 }).success).toBe(false);
+    expect(projectFormSchema.safeParse({ ...makeValidProject(), volumeCount: 21 }).success).toBe(false);
+  });
+
+  it('volumeCount 非整数应失败', () => {
+    expect(projectFormSchema.safeParse({ ...makeValidProject(), volumeCount: 6.5 }).success).toBe(false);
+  });
+
+  it('volumeCount 字符串数字应被 coerce（表单 number 输入场景）', () => {
+    const result = projectFormSchema.safeParse({ ...makeValidProject(), volumeCount: '8' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.volumeCount).toBe(8);
+  });
 });
 
 describe('validators/worldviewFormSchema', () => {

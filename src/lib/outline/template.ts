@@ -43,15 +43,18 @@ const ENDING: Record<string, string> = {
  * 生成某个题材的大纲「起底模板」。
  * @param genre - 题材（决定主线/结局/卷标题风味）
  * @param targetWords - 目标字数（>0 时按自适应分卷；0/缺省按 30 万，塌到 4 卷骨架）
+ * @param wordsPerChapter - 每章字数（可选，透传给分卷规划）
+ * @param explicitVolumeCount - 用户显式指定的卷数（可选；透传给分卷规划，clamp 1-20）
  * 字段内容可作为起点，用户可继续编辑；不覆盖已有人工内容（由调用方决定如何合并）。
  */
 export function generateOutlineTemplate(
   genre: string,
   targetWords?: number,
-  wordsPerChapter?: number
+  wordsPerChapter?: number,
+  explicitVolumeCount?: number
 ): OutlineTemplate {
   const mainPlotline = MAIN_PLOT[genre] ?? MAIN_PLOT['玄幻'];
   const ending = ENDING[genre] ?? ENDING['玄幻'];
-  const volumes = planVolumes(targetWords ?? 300000, genre, wordsPerChapter);
+  const volumes = planVolumes(targetWords ?? 300000, genre, wordsPerChapter, explicitVolumeCount);
   return { mainPlotline, ending, volumes };
 }

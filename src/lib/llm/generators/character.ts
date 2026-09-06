@@ -5,7 +5,7 @@
 // 降级：字段缺失用本地角色模板对应字段补齐；核心字段（personality）缺失则抛错，
 //       由调用方整体回退到模板路径（复用 lib/character/template.ts）。
 // ============================================================================
-import type { Character, CharacterRole, Genre } from '@/types';
+import type { Character, CharacterRelation, CharacterRole, Genre } from '@/types';
 import { chat, LLMClientError } from '@/lib/llm/client';
 import { generateId, safeParseJSON } from '@/lib/utils';
 import { generateCharacterTemplate } from '@/lib/character/template';
@@ -21,6 +21,7 @@ export interface CharacterLLMInput {
 /** LLM 返回的最小结构（字段均可选，缺省由模板补齐） */
 interface RawCharacter {
   name?: string;
+  role?: string;
   appearance?: string;
   personality?: string;
   catchphrase?: string;
@@ -123,4 +124,167 @@ ${input.genre ? `题材：${input.genre}` : ''}
     locked: false,
     updatedAt: Date.now(),
   };
+}
+
+// ============================================================================
+// 灵感 → 人物档案关键词一键生成（需求 7）
+// 输入灵感文本优先取项目简介（summary），为空时回落用户粘贴的灵感内容（ideaText）。
+// LLM 失败/非法输出时确定性降级：从灵感文本提取关键词填入 personality/motivation
+// 模板句，其余字段复用角色模板，保证草稿字段齐备、绝不抛错。
+// 产出为 Partial<Character> 草稿（不含 id/projectId），由表单填充后再人工微调保存。
+// ============================================================================
+
+export interface CharacterInspirationInput {
+  /** 项目题材（如「玄幻」） */
+  genre?: string;
+  /** 项目简介（灵感文本首选来源） */
+  summary?: string;
+  /** 用户粘贴/选择的灵感卡内容（项目简介为空时的灵感来源） */
+  ideaText?: string;
+  /** 角色定位（缺省主角） */
+  role?: CharacterRole;
+}
+
+/** 人物草稿的完整字段形状（不含 id/projectId 等落库字段） */
+interface CharacterDraft {
+  name: string;
+  role: CharacterRole;
+  appearance: string;
+  personality: string;
+  catchphrase: string;
+  background: string;
+  motivation: string;
+  weakness: string;
+  growthArc: string;
+  relationships: CharacterRelation[];
+  speechStyle: string;
+  behaviorPattern: string;
+}
+
+const VALID_ROLES: CharacterRole[] = ['protagonist', 'supporting', 'antagonist', 'minor'];
+
+/** 灵感关键词不足时的兜底词（保证降级模板句子完整） */
+const DEFAULT_IDEA_KEYWORDS = ['逆风翻盘', '在意之人', '被掩埋的真相'];
+
+const INSPIRATION_SYSTEM_PROMPT = `你是资深网文人物设定师。请基于给定题材与灵感文本，生成一套与灵感设定一致、且有反差记忆点的人物档案关键词。
+
+要求：
+一、人设长在故事里：从灵感文本中提炼身份、能力、处境、冲突等要素，人物必须与灵感设定强相关
+二、有反差记忆点：至少一处「表面 X / 内里 Y」的反差设定，让读者一眼记住
+三、严格只输出 JSON（字段名与人物档案对齐，relationships 固定为空数组），格式：
+{
+  "name": "人物姓名（2-3 字网文名）",
+  "role": "protagonist|supporting|antagonist|minor 之一",
+  "appearance": "外貌一句话（写具体辨识特征，不写空泛评价）",
+  "personality": "性格（先给 2-4 个标签，再点出内核冲突）",
+  "catchphrase": "一句有辨识度的口头禅",
+  "background": "背景（与灵感文本联动，解释内核冲突来源）",
+  "motivation": "核心执念（用句式：渴望…，却害怕…，所以总是…）",
+  "weakness": "弱点（明确，能被对手利用）",
+  "growthArc": "成长线（从…到…，可支撑长篇展开）",
+  "speechStyle": "说话风格（可附一句示范台词）",
+  "behaviorPattern": "行为模式（遇事如何反应）",
+  "relationships": []
+}
+不要输出 JSON 以外的解释。`;
+
+/**
+ * 从灵感文本中确定性提取候选关键词（供降级模板与单测使用）：
+ * 按标点/空白切分，保留 2-10 字短语，去重后最多取 6 个。
+ */
+export function extractInspirationKeywords(ideaText: string): string[] {
+  return ideaText
+    .split(/[，,。.！!？?、；;：:（）()【】\[\]「」『』“”‘’"'·—…\s\u3000]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 2 && s.length <= 10)
+    .filter((s, i, arr) => arr.indexOf(s) === i)
+    .slice(0, 6);
+}
+
+/** 灵感降级草稿：关键词提取 + 角色模板，确定性产出字段齐备的草稿 */
+function buildInspirationFallback(
+  ideaText: string,
+  genre: string | undefined,
+  role: CharacterRole
+): CharacterDraft & { fromLLM: false } {
+  const keywords = extractInspirationKeywords(ideaText);
+  const [k0, k1, k2] = [...keywords, ...DEFAULT_IDEA_KEYWORDS];
+  // 复用角色模板保证其余字段确定性非空，再用灵感关键词改写性格与核心执念
+  const tpl = generateCharacterTemplate({
+    projectId: 'inspiration-draft',
+    keywords: keywords.join('、'),
+    name: '',
+    role,
+  });
+  return {
+    name: tpl.name,
+    role,
+    appearance: tpl.appearance,
+    personality: `围绕「${k0}」展开：渴望${k0}，却害怕因此失去${k1}，所以总是先人一步布局；${genre ? `在${genre}背景下，` : ''}「${k0}」与「${k1}」构成其反差记忆点。`,
+    catchphrase: tpl.catchphrase,
+    background: tpl.background,
+    motivation: `渴望${k0}，却始终被${k1}牵制，因此不断在「${k2}」上押注、试探与妥协。`,
+    weakness: tpl.weakness,
+    growthArc: tpl.growthArc,
+    relationships: [],
+    speechStyle: tpl.speechStyle,
+    behaviorPattern: tpl.behaviorPattern,
+    fromLLM: false,
+  };
+}
+
+/**
+ * 灵感文本 → 人物档案关键词草稿（不落库，供表单填充后人工微调）。
+ * 灵感文本优先取 summary，为空时用 ideaText；LLM 失败/非法时确定性降级，不抛错。
+ */
+export async function generateCharacterFromInspiration(
+  input: CharacterInspirationInput
+): Promise<Partial<Character> & { fromLLM: boolean }> {
+  const role: CharacterRole = input.role ?? 'protagonist';
+  const idea = input.summary?.trim() ? input.summary.trim() : (input.ideaText ?? '').trim();
+  const fallback = buildInspirationFallback(idea, input.genre, role);
+
+  const userPrompt = [
+    input.genre ? `【题材】${input.genre}` : '',
+    `【灵感文本】${idea || '（空，请按题材自拟一个与主流套路有反差的人物）'}`,
+    `【角色定位】${ROLE_PROMPT[role]}`,
+    '',
+    '请输出符合要求的 JSON 人物档案关键词。',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  try {
+    const result = await chat(
+      [
+        { role: 'system', content: INSPIRATION_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ],
+      { responseFormat: 'json', temperature: 0.9, maxTokens: 1200 }
+    );
+
+    const raw = safeParseJSON<RawCharacter>(result.content, {});
+    if (!raw || typeof raw !== 'object' || !raw.personality?.trim()) {
+      throw new LLMClientError('LLM 未返回有效灵感人物档案', 502, true);
+    }
+
+    return {
+      name: sanitizeCharacterName(raw.name ?? '') || fallback.name,
+      role: raw.role && (VALID_ROLES as string[]).includes(raw.role) ? (raw.role as CharacterRole) : role,
+      appearance: raw.appearance?.trim() || fallback.appearance,
+      personality: raw.personality.trim(),
+      catchphrase: raw.catchphrase?.trim() || fallback.catchphrase,
+      background: raw.background?.trim() || fallback.background,
+      motivation: raw.motivation?.trim() || fallback.motivation,
+      weakness: raw.weakness?.trim() || fallback.weakness,
+      growthArc: raw.growthArc?.trim() || fallback.growthArc,
+      relationships: [],
+      speechStyle: raw.speechStyle?.trim() || fallback.speechStyle,
+      behaviorPattern: raw.behaviorPattern?.trim() || fallback.behaviorPattern,
+      fromLLM: true,
+    };
+  } catch {
+    // LLM 失败/非法输出：确定性降级，绝不抛错
+    return fallback;
+  }
 }

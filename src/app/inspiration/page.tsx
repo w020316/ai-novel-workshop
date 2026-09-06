@@ -262,7 +262,7 @@ export default function InspirationPage() {
                       {copiedId === c.id ? '已复制' : '复制灵感'}
                     </button>
                     <Link
-                      href={`/project/new?auto=1&genre=${encodeURIComponent(effectiveGenre)}&idea=${encodeURIComponent(
+                      href={`/project/new?auto=1&genre=${encodeURIComponent(c.genre ?? effectiveGenre)}&idea=${encodeURIComponent(
                         `${c.title}：${c.content}`
                       )}`}
                       className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700"

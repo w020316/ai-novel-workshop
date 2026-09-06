@@ -51,6 +51,38 @@ export const FALLBACK_STARTS: InspirationStart[] = [
   { title: '重生宠妻', genre: '甜宠' },
   { title: '隐世神医', genre: '都市' },
   { title: '我在古代点科技', genre: '历史' },
+  // —— 热门品类扩充池：对齐当下平台热门赛道，支持多轮「换一批」低重复 ——
+  { title: '苟在初圣', genre: '仙侠' },
+  { title: '长生苟道', genre: '仙侠' },
+  { title: '洪荒证道录', genre: '仙侠' },
+  { title: '我在怪谈当规则', genre: '灵异' },
+  { title: '深海低语', genre: '灵异' },
+  { title: '收容失效日', genre: '脑洞' },
+  { title: '全民直播答题', genre: '脑洞' },
+  { title: '全民领主', genre: '脑洞' },
+  { title: '重返1984', genre: '现实' },
+  { title: '重生2008', genre: '现实' },
+  { title: '神豪签到系统', genre: '都市' },
+  { title: '鉴宝金瞳', genre: '都市' },
+  { title: '大佬马甲藏不住', genre: '都市' },
+  { title: '赘婿崛起', genre: '都市' },
+  { title: '归来战神', genre: '都市' },
+  { title: '女配觉醒后', genre: '玄幻言情' },
+  { title: '反派养成计划', genre: '玄幻' },
+  { title: '诸天行走', genre: '玄幻' },
+  { title: '丧尸爆发前夜', genre: '末世' },
+  { title: '天灾囤货指南', genre: '末世' },
+  { title: '电竞巅峰', genre: '游戏' },
+  { title: '御兽进化录', genre: '游戏' },
+  { title: '无限轮回副本', genre: '游戏' },
+  { title: '团宠小福宝', genre: '甜宠' },
+  { title: '穿书成炮灰女配', genre: '快穿' },
+  { title: '快穿万人迷', genre: '快穿' },
+  { title: '医妃倾天下', genre: '宫斗' },
+  { title: '嫡女归来', genre: '宫斗' },
+  { title: '年代小夫妻', genre: '种田' },
+  { title: '影视世界逍遥行', genre: '同人衍生' },
+  { title: '机甲崛起', genre: '科幻' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -103,7 +135,7 @@ export async function generateInspirationStarts(
         {
           role: 'system',
           content:
-            '你是网文选题策划。输出 JSON：{"starts":[{"title":"书名","genre":"题材"}]}。要求：1) 5 条；2) 书名 2-6 个字、有画面感与钩子，像热门网文书名；3) genre 从「' + GENRES.join('/') + '」中选，尽量彼此不同；4) 每条书名须暗含一类脑洞内核，且本批覆盖尽量多的脑洞类型——金手指类（独特外挂/系统/体质）、剧情类（反转/身份错位/绝境开局）、设定类（新奇的世界规则/力量体系）、角色类（反差人设/非常规主角）；5) 不要输出 JSON 以外的解释。',
+            '你是网文选题策划。输出 JSON：{"starts":[{"title":"书名","genre":"题材"}]}。要求：1) 5 条；2) 书名 2-6 个字、有画面感与钩子，像热门网文书名；3) genre 从「' + GENRES.join('/') + '」中选，尽量彼此不同；4) 每条书名须暗含一类脑洞内核，且本批覆盖尽量多的脑洞类型——金手指类（独特外挂/系统/体质）、剧情类（反转/身份错位/绝境开局）、设定类（新奇的世界规则/力量体系）、角色类（反差人设/非常规主角）；5) 题材口味尽量贴近主流平台热门品类（如苟道长生、规则怪谈、直播、神豪、鉴宝、年代文、天灾囤货、御兽、电竞、团宠、穿书、快穿、马甲大佬、赘婿战神等当红赛道）；6) 不要输出 JSON 以外的解释。',
         },
         {
           role: 'user',

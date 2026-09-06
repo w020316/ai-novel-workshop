@@ -51,6 +51,15 @@ const GENRE_PATTERNS: Array<[RegExp, Genre, string, string]> = [
   [/游戏|电竞|副本|直播/, '游戏', '游戏天赋/未卜先知的版本理解', '虚拟与现实的利益纠葛逐步失控'],
 ];
 
+/**
+ * 从文本启发式推断题材；无关键词命中返回 null。
+ * 区别于 heuristicBookPackage 的「玄幻」兜底，供调用方自行决定回落题材。
+ */
+export function inferGenreFromText(text: string): Genre | null {
+  const hit = GENRE_PATTERNS.find(([re]) => re.test(text));
+  return hit ? hit[1] : null;
+}
+
 /** 启发式开书包：从灵感文本提取关键词组装，确定性可测 */
 export function heuristicBookPackage(idea: string): BookPackage {
   const text = idea.trim();

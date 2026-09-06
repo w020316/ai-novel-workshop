@@ -22,6 +22,15 @@ export const CHAPTERS_PER_VOLUME = 60;
 export const MIN_VOLUMES = 4;
 /** 卷数上限（避免卷太多管理成本过高） */
 export const MAX_VOLUMES = 12;
+/** 显式指定卷数的合法范围（用户可手动调整，比自动推算范围更宽） */
+export const EXPLICIT_MIN_VOLUMES = 1;
+export const EXPLICIT_MAX_VOLUMES = 20;
+
+/** 归一化显式卷数：clamp 到 1-20；非法（NaN/Infinity/未提供）返回 undefined（走自动推算） */
+function normalizeExplicitVolumeCount(explicit?: number): number | undefined {
+  if (!Number.isFinite(explicit)) return undefined;
+  return Math.min(EXPLICIT_MAX_VOLUMES, Math.max(EXPLICIT_MIN_VOLUMES, Math.round(explicit as number)));
+}
 
 /**
  * 主流平台爆款作品的常见章节字数标准（快捷档位）。
@@ -85,16 +94,22 @@ function volumeConflict(index: number, count: number): string {
  * @param targetWords - 项目目标字数（>0 时参与计算；0/非法按 30 万兜底）
  * @param genre - 题材（用于卷标题风味，缺省「通用」）
  * @param wordsPerChapter - 每章字数（可选，缺省 2500；影响总章数与分卷均分）
+ * @param explicitVolumeCount - 用户显式指定的卷数（可选；clamp 1-20，非法/缺省按字数自动推算）
  * @returns Volume[]，章区间连续覆盖估算总章数，末卷覆盖至末章
  */
 export function planVolumes(
   targetWords: number,
   genre = '通用',
-  wordsPerChapter = WORDS_PER_CHAPTER
+  wordsPerChapter = WORDS_PER_CHAPTER,
+  explicitVolumeCount?: number
 ): Volume[] {
   const words = Number.isFinite(targetWords) && targetWords > 0 ? targetWords : 300000;
   const total = estimateTotalChapters(words, wordsPerChapter);
-  const count = estimateVolumeCount(words, wordsPerChapter);
+  // 显式卷数优先（clamp 1-20）；非法/缺省按字数自动推算。再钳到不超过总章数，避免空卷/倒挂区间
+  const count = Math.min(
+    normalizeExplicitVolumeCount(explicitVolumeCount) ?? estimateVolumeCount(words, wordsPerChapter),
+    total
+  );
 
   const volumes: Volume[] = [];
   let start = 1;
@@ -116,13 +131,14 @@ export function planVolumes(
   return volumes;
 }
 
-/** 便于展示的摘要信息 */
+/** 便于展示的摘要信息（explicitVolumeCount 可选，透传给 planVolumes） */
 export function summarizePlan(
   targetWords: number,
   genre = '通用',
-  wordsPerChapter = WORDS_PER_CHAPTER
+  wordsPerChapter = WORDS_PER_CHAPTER,
+  explicitVolumeCount?: number
 ): { totalChapters: number; volumeCount: number; volumes: Volume[] } {
-  const volumes = planVolumes(targetWords, genre, wordsPerChapter);
+  const volumes = planVolumes(targetWords, genre, wordsPerChapter, explicitVolumeCount);
   return {
     totalChapters: volumes[volumes.length - 1].chapterRange[1],
     volumeCount: volumes.length,

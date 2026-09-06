@@ -45,11 +45,11 @@ export default function ProjectConfigPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('确认永久删除此项目？此操作不可撤销，所有章节与设定将被清除。')) return;
+    if (!confirm('确认删除此项目？项目将移入回收站，可在回收站恢复。')) return;
     setDeleting(true);
     try {
       await deleteProject(projectId);
-      toast.success('项目已删除');
+      toast.success('已移入回收站，可在回收站恢复');
       router.push('/');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '删除失败');
@@ -170,8 +170,8 @@ export default function ProjectConfigPage() {
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-stone-800">永久删除项目</p>
-              <p className="text-xs text-stone-500">删除后无法恢复，所有数据将被清除</p>
+              <p className="text-sm font-medium text-stone-800">删除项目</p>
+              <p className="text-xs text-stone-500">删除后移入回收站，可在回收站恢复或彻底删除</p>
             </div>
             <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               {deleting ? (

@@ -19,7 +19,12 @@ vi.mock('@/lib/llm/client', () => ({
   LLMClientError: ErrorClass,
 }));
 
-import { generateCharacterWithLLM, sanitizeCharacterName } from './character';
+import {
+  generateCharacterWithLLM,
+  generateCharacterFromInspiration,
+  extractInspirationKeywords,
+  sanitizeCharacterName,
+} from './character';
 
 const input = {
   projectId: 'p1',
@@ -132,5 +137,118 @@ describe('sanitizeCharacterName', () => {
     );
     const c = await generateCharacterWithLLM(input);
     expect(c.name).toBe('寂灭者');
+  });
+});
+
+describe('extractInspirationKeywords', () => {
+  it('按标点与空白切分短语，去重并限量 6 个', () => {
+    expect(extractInspirationKeywords('废柴少年 觉醒古镜，复仇！废柴少年、隐藏血脉')).toEqual([
+      '废柴少年',
+      '觉醒古镜',
+      '复仇',
+      '隐藏血脉',
+    ]);
+  });
+
+  it('过滤单字与超长短语，空文本返回空数组', () => {
+    expect(extractInspirationKeywords('剑 歌')).toEqual([]);
+    expect(
+      extractInspirationKeywords('一个超过十个字的长短语片段不应被收录比如这句就是')
+    ).toEqual([]);
+    expect(extractInspirationKeywords('   ')).toEqual([]);
+  });
+});
+
+describe('generateCharacterFromInspiration', () => {
+  const ideaInput = {
+    genre: '玄幻',
+    summary: '废柴少年 觉醒古镜 踏上复仇路',
+    role: 'protagonist' as const,
+  };
+
+  it('LLM 成功：返回字段齐备的草稿，fromLLM 为 true，relationships 留空', async () => {
+    chatMock.mockResolvedValue(
+      chatResult(
+        JSON.stringify({
+          name: '洛无咎',
+          role: 'antagonist',
+          appearance: '玄衣负手，眉间一道旧疤',
+          personality: '隐忍狠戾，笑里藏刀',
+          catchphrase: '镜中人，你说谎。',
+          background: '古镜之灵',
+          motivation: '吞噬气运，重塑真身',
+          weakness: '惧怕本心',
+          growthArc: '从器灵到魔主',
+          speechStyle: '古雅反问',
+          behaviorPattern: '借人之手，从不亲自动手',
+        })
+      )
+    );
+    const d = await generateCharacterFromInspiration(ideaInput);
+    expect(d.fromLLM).toBe(true);
+    expect(d.name).toBe('洛无咎');
+    expect(d.role).toBe('antagonist');
+    expect(d.personality).toContain('隐忍');
+    expect(d.relationships).toEqual([]);
+  });
+
+  it('LLM 返回非法 role 时回落传入的 role', async () => {
+    chatMock.mockResolvedValue(
+      chatResult(JSON.stringify({ name: '某人', role: 'boss', personality: '沉稳老练的角色' }))
+    );
+    const d = await generateCharacterFromInspiration(ideaInput);
+    expect(d.role).toBe('protagonist');
+  });
+
+  it('chat 失败：确定性降级不抛错，personality/motivation 含灵感关键词，fromLLM 为 false', async () => {
+    chatMock.mockRejectedValue(new ErrorClass('LLM 不可用', 503, true));
+    const d = await generateCharacterFromInspiration(ideaInput);
+    expect(d.fromLLM).toBe(false);
+    expect(d.role).toBe('protagonist');
+    expect(d.personality).toContain('废柴少年');
+    expect(d.motivation).toContain('觉醒古镜');
+    // 其余字段由模板兜底，保证草稿齐备可微调
+    expect(d.appearance?.trim().length).toBeGreaterThan(0);
+    expect(d.speechStyle?.trim().length).toBeGreaterThan(0);
+  });
+
+  it('非法 JSON 输出：同样走降级路径', async () => {
+    chatMock.mockResolvedValue(chatResult('no json'));
+    const d = await generateCharacterFromInspiration(ideaInput);
+    expect(d.fromLLM).toBe(false);
+    expect(d.personality).toContain('废柴少年');
+  });
+
+  it('灵感文本优先取 summary 而非 ideaText', async () => {
+    chatMock.mockRejectedValue(new ErrorClass('LLM 不可用', 503, true));
+    const d = await generateCharacterFromInspiration({
+      genre: '科幻',
+      summary: '灵气复苏',
+      ideaText: '星际迷航',
+      role: 'supporting',
+    });
+    expect(d.fromLLM).toBe(false);
+    expect(d.role).toBe('supporting');
+    expect(d.personality).toContain('灵气复苏');
+    expect(d.personality).not.toContain('星际迷航');
+  });
+
+  it('prompt 包含题材、灵感文本与角色定位', async () => {
+    chatMock.mockResolvedValue(chatResult(JSON.stringify({ personality: '果敢坚毅的冒险者' })));
+    await generateCharacterFromInspiration(ideaInput);
+    const [messages] = chatMock.mock.calls[0] as [{ content?: string }[]];
+    const combined = messages.map((m: { content?: string }) => m.content ?? '').join('\n');
+    expect(combined).toContain('玄幻');
+    expect(combined).toContain('废柴少年');
+    expect(combined).toContain('主角');
+  });
+
+  it('summary 与 ideaText 均为空时仍降级产出可用草稿', async () => {
+    chatMock.mockRejectedValue(new ErrorClass('LLM 不可用', 503, true));
+    const d = await generateCharacterFromInspiration({ role: 'minor' });
+    expect(d.fromLLM).toBe(false);
+    expect(d.role).toBe('minor');
+    expect(d.personality?.trim().length).toBeGreaterThan(0);
+    expect(d.motivation?.trim().length).toBeGreaterThan(0);
   });
 });

@@ -46,7 +46,9 @@ export async function getProject(projectId: string): Promise<NovelProject | unde
 
 export async function listProjects(includeArchived = false): Promise<NovelProject[]> {
   const all = await db.projects.orderBy('updatedAt').reverse().toArray();
-  return includeArchived ? all : all.filter((p) => p.status !== 'archived');
+  // 回收站中的项目（已软删除）不进入正常列表
+  const alive = all.filter((p) => !p.deletedAt);
+  return includeArchived ? alive : alive.filter((p) => p.status !== 'archived');
 }
 
 export async function updateProject(
@@ -60,8 +62,32 @@ export async function archiveProject(projectId: string): Promise<void> {
   await updateProject(projectId, { status: 'archived' });
 }
 
-export async function deleteProject(projectId: string): Promise<void> {
-  // 级联删除关联数据（Dexie transaction 最多 7 个表参数，分两步处理）
+// ==== 软删除（回收站）：仅打删除标记，保留全部数据，误删可恢复 ====
+export async function softDeleteProject(projectId: string): Promise<void> {
+  await db.projects.update(projectId, { deletedAt: Date.now() });
+}
+
+export async function restoreProject(projectId: string): Promise<void> {
+  // 从回收站恢复：清空删除标记
+  await db.projects.update(projectId, { deletedAt: undefined });
+}
+
+export async function listArchivedProjects(): Promise<NovelProject[]> {
+  // 归档且未删除，按 updatedAt 新→旧
+  const all = await db.projects.orderBy('updatedAt').reverse().toArray();
+  return all.filter((p) => !p.deletedAt && p.status === 'archived');
+}
+
+export async function listDeletedProjects(): Promise<NovelProject[]> {
+  // 回收站：按删除时间新→旧
+  const all = await db.projects.toArray();
+  return all
+    .filter((p) => p.deletedAt != null)
+    .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
+}
+
+export async function purgeProject(projectId: string): Promise<void> {
+  // 彻底删除：级联删除关联数据（Dexie transaction 最多 7 个表参数，分两步处理）
   // Step 1: 删除关联表数据；删除 chapters 前先取出其 id 列表，供 Step 2 清理一致性报告
   let chapterIds: string[] = [];
   await db.transaction(

@@ -152,4 +152,29 @@ describe('lib/trend/generateTrendInspiration（LLM 路径）', () => {
     expect(fromLLM).toBe(true);
     expect(cards.length).toBe(5);
   });
+
+  it('卡片带合法 genre → 保留；非法/缺省 genre → 回落所选题材', async () => {
+    chatMock.mockResolvedValue(
+      chatResult(
+        JSON.stringify({
+          cards: [
+            { kind: 'hook', title: '合法相同', content: '内容', genre: '玄幻' },
+            { kind: 'hook', title: '合法相近', content: '内容', genre: '科幻' },
+            { kind: 'hook', title: '非法', content: '内容', genre: '不存在的题材' },
+            { kind: 'hook', title: '缺省', content: '内容' },
+          ],
+        })
+      )
+    );
+    const { cards } = await generateTrendInspiration('p1', 'qidian', '玄幻');
+    expect(cards).toHaveLength(4);
+    expect(cards.map((c) => c.genre)).toEqual(['玄幻', '科幻', '玄幻', '玄幻']);
+  });
+
+  it('降级兜底卡 genre 为所选题材', async () => {
+    chatMock.mockRejectedValue(new Error('网络错误'));
+    const { cards } = await generateTrendInspiration('p1', 'fanqie', '都市');
+    expect(cards).toHaveLength(1);
+    expect(cards[0].genre).toBe('都市');
+  });
 });

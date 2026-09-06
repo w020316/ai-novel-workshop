@@ -7,8 +7,9 @@
 // 3. 加载待回收伏笔
 // 4. 加载人物状态
 // ============================================================================
-import type { MidTermMemory, ChapterSummary, PlotThread, Foreshadowing } from '@/types';
+import type { LongTermMemory, MidTermMemory, ChapterSummary, PlotThread, Foreshadowing } from '@/types';
 import { listChapterSummaries, listForeshadowings } from '@/lib/db/queries';
+import { truncateAtSentence } from '@/lib/utils';
 import { TfIdfIndex } from './tfidf';
 
 /**
@@ -57,6 +58,39 @@ export async function loadMidTermMemory(
     activePlotThreads,
     foreshadowingsToRecover,
     characterStates,
+  };
+}
+
+/**
+ * 从长期记忆确定性衍生中期记忆（需求 11）。
+ * 适用场景：项目刚起步、当前章之前没有任何章节摘要可检索时，
+ * 中期记忆的人物状态/待回收伏笔会基本为空，此时用长期记忆兜底衍生：
+ * - characterStates：从人物档案生成「姓名 → 性格+执念快照（50 字内）」
+ * - foreshadowingsToRecover：沿用长期记忆的待回收伏笔
+ * - activePlotThreads：无法从长期记忆直接得出，返回空数组（由原检索逻辑负责产出）
+ * - relevantSummaries：无摘要，返回空数组
+ *
+ * @param longTerm - 长期记忆
+ * @returns 带 derivedFromLongTerm 标记的 MidTermMemory
+ */
+export function deriveMidTermFromLongTerm(longTerm: LongTermMemory): MidTermMemory {
+  const characterStates: Record<string, string> = {};
+  for (const c of longTerm.characters) {
+    if (!c.name) continue;
+    // 性格 + 执念拼成 50 字内的人物快照
+    const snapshot = truncateAtSentence(
+      [c.personality, c.motivation].filter(Boolean).join('；'),
+      50
+    );
+    if (snapshot) characterStates[c.name] = snapshot;
+  }
+
+  return {
+    relevantSummaries: [],
+    activePlotThreads: [],
+    foreshadowingsToRecover: longTerm.pendingForeshadowings,
+    characterStates,
+    derivedFromLongTerm: true,
   };
 }
 

@@ -1,11 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
   generateWorldviewTemplate,
+  getEraOptions,
+  pickEra,
   isWorldviewEmpty,
   normalizeRules,
   parseRulesInput,
 } from './template';
 import type { Genre } from '@/types';
+
+const ALL_GENRES: Genre[] = [
+  '玄幻', '仙侠', '武侠', '奇幻', '都市', '历史', '军事', '游戏', '科幻', '末世',
+  '脑洞', '体育', '轻小说', '言情', '甜宠', '快穿', '种田', '宫斗', '玄幻言情', '纯爱',
+  '悬疑', '灵异', '同人衍生', '现实', '其他',
+];
 
 describe('worldview/template', () => {
   describe('generateWorldviewTemplate', () => {
@@ -96,6 +104,56 @@ describe('worldview/template', () => {
         summary: '',
       });
       expect(b.rules).not.toContain('新规则');
+    });
+  });
+
+  describe('时代背景多样化（era 候选随机挑选）', () => {
+    it('全部 25 个题材应提供 3-5 条非空且互不重复的时代背景候选', () => {
+      for (const genre of ALL_GENRES) {
+        const options = getEraOptions(genre);
+        expect(options.length, `${genre} 候选数`).toBeGreaterThanOrEqual(3);
+        expect(options.length, `${genre} 候选数`).toBeLessThanOrEqual(5);
+        for (const option of options) {
+          expect(option.trim().length, `${genre} 候选文本`).toBeGreaterThan(0);
+        }
+        expect(new Set(options).size, `${genre} 候选应互不重复`).toBe(options.length);
+      }
+    });
+
+    it('未知题材应回落到「其他」的候选', () => {
+      expect(getEraOptions('不存在' as Genre)).toEqual(getEraOptions('其他'));
+    });
+
+    it('生成的 era 应来自该题材候选集合', () => {
+      const options = getEraOptions('玄幻');
+      for (let i = 0; i < 20; i++) {
+        const wv = generateWorldviewTemplate({
+          projectId: 'p1',
+          genre: '玄幻',
+          title: 'x',
+          summary: '',
+        });
+        expect(options).toContain(wv.era);
+      }
+    });
+
+    it('pickEra 应返回候选之一，空候选返回空字符串', () => {
+      const candidates = ['纪元A', '纪元B', '纪元C'];
+      for (let i = 0; i < 20; i++) {
+        expect(candidates).toContain(pickEra(candidates));
+      }
+      expect(pickEra([])).toBe('');
+    });
+
+    it('多次生成可得到不同时代背景（随机性冒烟）', () => {
+      const seen = new Set<string>();
+      for (let i = 0; i < 40; i++) {
+        seen.add(
+          generateWorldviewTemplate({ projectId: 'p1', genre: '仙侠', title: 'x', summary: '' }).era
+        );
+      }
+      // 40 次采样至少覆盖 2 种候选（概率上极大概率命中更多）
+      expect(seen.size).toBeGreaterThanOrEqual(2);
     });
   });
 

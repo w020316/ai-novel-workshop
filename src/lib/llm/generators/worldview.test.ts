@@ -19,7 +19,7 @@ vi.mock('@/lib/llm/client', () => ({
   LLMClientError: ErrorClass,
 }));
 
-import { generateWorldviewWithLLM } from './worldview';
+import { generateWorldviewWithLLM, refineWorldviewWithSummary } from './worldview';
 
 const input = { projectId: 'p1', genre: '玄幻' as const, title: '星河黎明', summary: '灵气复苏与星辰修道' };
 

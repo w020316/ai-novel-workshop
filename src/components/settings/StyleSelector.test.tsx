@@ -175,4 +175,59 @@ describe('StyleSelector', () => {
     const saved = saveStylePresetMock.mock.calls[0][0] as StylePreset;
     expect(saved.persona).toBeUndefined();
   });
+
+  // ============ 按题材智能推荐（需求 8） ============
+  it('点击智能推荐展示推荐结果与理由，点「应用」才切换', async () => {
+    const onSelected = vi.fn();
+    render(<StyleSelector projectId="p1" currentStylePresetId="" onSelected={onSelected} />);
+    await screen.findByText('细腻言情');
+
+    // 玄幻映射（热血升级/硬核爽文）未在库中 → 兜底第一个预设「细腻言情」
+    fireEvent.click(screen.getByRole('button', { name: '按题材智能推荐' }));
+
+    expect(await screen.findByText('推荐文风：细腻言情')).toBeInTheDocument();
+    expect(screen.getByText(/题材「玄幻」的经典文风搭配/)).toBeInTheDocument();
+    // 展示阶段不写入
+    expect(updateProjectMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '应用' }));
+
+    await waitFor(() => expect(updateProjectMock).toHaveBeenCalledWith('p1', { stylePresetId: 's1' }));
+    await waitFor(() => expect(onSelected).toHaveBeenCalledTimes(1));
+  });
+
+  it('推荐结果可取消，取消后不切换', async () => {
+    render(<StyleSelector projectId="p1" currentStylePresetId="" onSelected={() => {}} />);
+    await screen.findByText('细腻言情');
+    fireEvent.click(screen.getByRole('button', { name: '按题材智能推荐' }));
+    await screen.findByText('推荐文风：细腻言情');
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+
+    expect(screen.queryByText('推荐文风：细腻言情')).not.toBeInTheDocument();
+    expect(updateProjectMock).not.toHaveBeenCalled();
+  });
+
+  it('推荐与当前一致时 toast 说明已是推荐文风', async () => {
+    render(<StyleSelector projectId="p1" currentStylePresetId="s1" onSelected={() => {}} />);
+    await screen.findByText('细腻言情');
+    fireEvent.click(screen.getByRole('button', { name: '按题材智能推荐' }));
+
+    await waitFor(() =>
+      expect(toastMock.info).toHaveBeenCalledWith('当前文风「细腻言情」已是推荐文风')
+    );
+    expect(screen.queryByText('推荐文风：细腻言情')).not.toBeInTheDocument();
+  });
+
+  it('简介含「甜/宠」关键词时按简介微调推荐并给出对应理由', async () => {
+    getProjectMock.mockResolvedValue({ id: 'p1', genre: '言情', summary: '先婚后爱的高甜宠爱日常' });
+    render(<StyleSelector projectId="p1" currentStylePresetId="" onSelected={() => {}} />);
+    await screen.findByText('细腻言情');
+
+    fireEvent.click(screen.getByRole('button', { name: '按题材智能推荐' }));
+
+    // 库中无「女频甜宠」→ 简介微调取第二优先级「细腻言情」
+    expect(await screen.findByText('推荐文风：细腻言情')).toBeInTheDocument();
+    expect(screen.getByText(/项目简介中的题材关键词与该文风匹配/)).toBeInTheDocument();
+  });
 });

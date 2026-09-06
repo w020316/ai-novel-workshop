@@ -86,6 +86,8 @@ export interface NovelProject {
   targetWords: number;
   /** 每章目标字数（可选；缺省按 2500 估算，用于章节数换算与正文篇幅控制） */
   chapterWords?: number;
+  /** 用户指定的目标卷数（可选；缺省按目标字数自动推算，合法范围 1-20） */
+  volumeCount?: number;
   stylePresetId: string;
   llmConfig: LLMConfig;
   status: ProjectStatus;
@@ -93,6 +95,8 @@ export interface NovelProject {
   currentChapter: number;
   createdAt: number;
   updatedAt: number;
+  /** 软删除时间戳（非空表示已移入回收站，可恢复；彻底删除前保留全部数据） */
+  deletedAt?: number;
 }
 
 // ============ 设定层（长期记忆） ============
@@ -343,6 +347,8 @@ export interface InspirationCard {
   title: string;
   content: string;
   sourceDeconstructionId: string;
+  /** 灵感卡所属题材（可选；趋势灵感卡由 LLM 输出并经白名单校验，非法回落所选题材） */
+  genre?: string;
   createdAt: number;
 }
 
@@ -525,6 +531,8 @@ export interface MidTermMemory {
   activePlotThreads: PlotThread[];
   foreshadowingsToRecover: Foreshadowing[];
   characterStates: Record<string, string>;
+  /** 中期记忆是否由长期记忆确定性衍生兜底（项目刚起步、尚无章节摘要可检索时为 true） */
+  derivedFromLongTerm?: boolean;
 }
 
 export interface ShortTermMemory {

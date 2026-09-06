@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useProjectStore } from '@/lib/store/project-store';
 import { WorldviewGenerator } from '@/components/settings/WorldviewGenerator';
 import { WorldviewEditor } from '@/components/settings/WorldviewEditor';
+import { SummaryPolisher } from '@/components/settings/SummaryPolisher';
 import { SettingsTransfer } from '@/components/settings/SettingsTransfer';
 
 export default function WorldviewPage() {
@@ -24,6 +25,12 @@ export default function WorldviewPage() {
 
   return (
     <div className="space-y-4">
+      <SummaryPolisher
+        projectId={projectId}
+        genre={currentProject.genre}
+        title={currentProject.title}
+        initialSummary={currentProject.summary}
+      />
       <WorldviewGenerator
         projectId={projectId}
         genre={currentProject.genre}
@@ -31,7 +38,13 @@ export default function WorldviewPage() {
         summary={currentProject.summary}
         onGenerated={handleGenerated}
       />
-      <WorldviewEditor key={editorKey} projectId={projectId} genre={currentProject.genre} />
+      <WorldviewEditor
+        key={editorKey}
+        projectId={projectId}
+        genre={currentProject.genre}
+        title={currentProject.title}
+        summary={currentProject.summary}
+      />
       <SettingsTransfer projectId={projectId} />
     </div>
   );

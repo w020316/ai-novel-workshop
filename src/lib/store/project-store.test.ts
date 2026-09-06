@@ -10,7 +10,9 @@ vi.mock('@/lib/db/queries', () => ({
   getProject: vi.fn(),
   updateProject: vi.fn(),
   archiveProject: vi.fn(),
-  deleteProject: vi.fn(),
+  softDeleteProject: vi.fn(),
+  restoreProject: vi.fn(),
+  purgeProject: vi.fn(),
 }));
 
 const mockProject = (overrides: Partial<NovelProject> = {}): NovelProject => ({
@@ -142,25 +144,79 @@ describe('useProjectStore', () => {
   });
 
   describe('deleteProject', () => {
-    it('应删除项目并清空 currentProject', async () => {
+    it('应软删除项目（移入回收站）并清空 currentProject', async () => {
       useProjectStore.setState({ currentProject: mockProject({ id: 'proj_1' }) });
-      vi.mocked(queries.deleteProject).mockResolvedValue();
+      vi.mocked(queries.softDeleteProject).mockResolvedValue();
       vi.mocked(queries.listProjects).mockResolvedValue([]);
 
       await useProjectStore.getState().deleteProject('proj_1');
 
-      expect(queries.deleteProject).toHaveBeenCalledWith('proj_1');
+      expect(queries.softDeleteProject).toHaveBeenCalledWith('proj_1');
       expect(useProjectStore.getState().currentProject).toBeNull();
     });
 
     it('删除非当前项目不应清空 currentProject', async () => {
       const current = mockProject({ id: 'proj_a' });
       useProjectStore.setState({ currentProject: current });
-      vi.mocked(queries.deleteProject).mockResolvedValue();
+      vi.mocked(queries.softDeleteProject).mockResolvedValue();
       vi.mocked(queries.listProjects).mockResolvedValue([]);
 
       await useProjectStore.getState().deleteProject('proj_b');
       expect(useProjectStore.getState().currentProject).toEqual(current);
+    });
+
+    it('软删除失败应抛出并设置 error', async () => {
+      vi.mocked(queries.softDeleteProject).mockRejectedValue(new Error('删除失败'));
+      await expect(useProjectStore.getState().deleteProject('proj_1')).rejects.toThrow('删除失败');
+      expect(useProjectStore.getState().error).toBe('删除失败');
+    });
+  });
+
+  describe('restoreProject', () => {
+    it('应恢复项目并刷新列表', async () => {
+      vi.mocked(queries.restoreProject).mockResolvedValue();
+      vi.mocked(queries.listProjects).mockResolvedValue([]);
+
+      await useProjectStore.getState().restoreProject('proj_1');
+
+      expect(queries.restoreProject).toHaveBeenCalledWith('proj_1');
+      expect(queries.listProjects).toHaveBeenCalled();
+      expect(useProjectStore.getState().error).toBeNull();
+    });
+
+    it('恢复失败应抛出并设置 error', async () => {
+      vi.mocked(queries.restoreProject).mockRejectedValue(new Error('恢复失败'));
+      await expect(useProjectStore.getState().restoreProject('proj_1')).rejects.toThrow('恢复失败');
+      expect(useProjectStore.getState().error).toBe('恢复失败');
+    });
+  });
+
+  describe('purgeProject', () => {
+    it('应彻底删除项目并清空 currentProject', async () => {
+      useProjectStore.setState({ currentProject: mockProject({ id: 'proj_1' }) });
+      vi.mocked(queries.purgeProject).mockResolvedValue();
+      vi.mocked(queries.listProjects).mockResolvedValue([]);
+
+      await useProjectStore.getState().purgeProject('proj_1');
+
+      expect(queries.purgeProject).toHaveBeenCalledWith('proj_1');
+      expect(useProjectStore.getState().currentProject).toBeNull();
+    });
+
+    it('彻底删除非当前项目不应清空 currentProject', async () => {
+      const current = mockProject({ id: 'proj_a' });
+      useProjectStore.setState({ currentProject: current });
+      vi.mocked(queries.purgeProject).mockResolvedValue();
+      vi.mocked(queries.listProjects).mockResolvedValue([]);
+
+      await useProjectStore.getState().purgeProject('proj_b');
+      expect(useProjectStore.getState().currentProject).toEqual(current);
+    });
+
+    it('彻底删除失败应抛出并设置 error', async () => {
+      vi.mocked(queries.purgeProject).mockRejectedValue(new Error('彻底删除失败'));
+      await expect(useProjectStore.getState().purgeProject('proj_1')).rejects.toThrow('彻底删除失败');
+      expect(useProjectStore.getState().error).toBe('彻底删除失败');
     });
   });
 

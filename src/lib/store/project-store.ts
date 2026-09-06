@@ -21,6 +21,8 @@ export interface ProjectFormData {
   targetWords: number;
   /** 每章目标字数；缺省按 2500 估算 */
   chapterWords?: number;
+  /** 用户指定的目标卷数；缺省按目标字数自动推算（合法范围 1-20） */
+  volumeCount?: number;
   stylePresetId: string;
   llmConfig: LLMConfig;
 }
@@ -35,7 +37,12 @@ interface ProjectState {
   createProject: (data: ProjectFormData) => Promise<string>;
   updateProject: (id: string, patch: Partial<NovelProject>) => Promise<void>;
   archiveProject: (id: string) => Promise<void>;
+  /** 删除项目（软删除，移入回收站，可恢复） */
   deleteProject: (id: string) => Promise<void>;
+  /** 从回收站恢复项目 */
+  restoreProject: (id: string) => Promise<void>;
+  /** 彻底删除项目（级联清除所有关联数据，不可恢复） */
+  purgeProject: (id: string) => Promise<void>;
   setCurrentProject: (project: NovelProject | null) => void;
   refreshCurrentProject: () => Promise<void>;
   clearError: () => void;
@@ -116,7 +123,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   deleteProject: async (id) => {
     set({ loading: true, error: null });
     try {
-      await queries.deleteProject(id);
+      // 软删除：仅移入回收站，保留全部数据以便恢复
+      await queries.softDeleteProject(id);
       await get().loadProjects();
       if (get().currentProject?.id === id) {
         set({ currentProject: null });
@@ -126,6 +134,40 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({
         loading: false,
         error: e instanceof Error ? e.message : '删除项目失败',
+      });
+      throw e;
+    }
+  },
+
+  restoreProject: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      await queries.restoreProject(id);
+      await get().loadProjects();
+      set({ loading: false });
+    } catch (e) {
+      set({
+        loading: false,
+        error: e instanceof Error ? e.message : '恢复项目失败',
+      });
+      throw e;
+    }
+  },
+
+  purgeProject: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      // 彻底删除：级联清除所有关联数据，不可恢复
+      await queries.purgeProject(id);
+      await get().loadProjects();
+      if (get().currentProject?.id === id) {
+        set({ currentProject: null });
+      }
+      set({ loading: false });
+    } catch (e) {
+      set({
+        loading: false,
+        error: e instanceof Error ? e.message : '彻底删除项目失败',
       });
       throw e;
     }

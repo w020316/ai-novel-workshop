@@ -104,7 +104,7 @@ describe('db/queries', () => {
       expect(await q.listProjects(true)).toHaveLength(1);
     });
 
-    it('deleteProject 应级联删除并清理孤儿一致性报告', async () => {
+    it('purgeProject 应级联彻底删除并清理孤儿一致性报告', async () => {
       const pid = await q.createProject(makeProject());
       await db.chapters.bulkAdd([makeChapter(pid, 1), makeChapter(pid, 2)]);
       const report: ConsistencyReport = {
@@ -123,7 +123,7 @@ describe('db/queries', () => {
       await db.worldviews.add({ id: 'wv-1', projectId: pid, worldStructure: '结构', powerSystem: '力量', geography: '', era: '', factions: '', rules: [], locked: false, updatedAt: Date.now() } satisfies Worldview);
       await db.outlines.add({ id: 'ol-1', projectId: pid, volumes: [], mainPlotline: '主线', climaxNodes: [], ending: '', updatedAt: Date.now() } satisfies Outline);
 
-      await q.deleteProject(pid);
+      await q.purgeProject(pid);
 
       expect(await db.projects.get(pid)).toBeUndefined();
       expect(await db.chapters.count()).toBe(0);
@@ -132,6 +132,67 @@ describe('db/queries', () => {
       expect(await db.outlines.count()).toBe(0);
       // 关键：一致性报告随对应章节删除被清理，无孤儿
       expect(await db.consistencyReports.count()).toBe(0);
+    });
+  });
+
+  // ============ 回收站（软删除 / 恢复 / 彻底删除） ============
+  describe('回收站（软删除）', () => {
+    it('softDeleteProject 后 listProjects 不显示、listDeletedProjects 显示', async () => {
+      const id = await q.createProject(makeProject());
+      await q.softDeleteProject(id);
+      // 正常列表与含归档列表都不显示软删除项目
+      expect(await q.listProjects()).toHaveLength(0);
+      expect(await q.listProjects(true)).toHaveLength(0);
+      // 回收站中可见，且带删除时间戳
+      const deleted = await q.listDeletedProjects();
+      expect(deleted).toHaveLength(1);
+      expect(deleted[0].id).toBe(id);
+      expect(deleted[0].deletedAt).toBeTruthy();
+    });
+
+    it('listDeletedProjects 按 deletedAt 新→旧排序', async () => {
+      const a = await q.createProject(makeProject({ title: '早删' }));
+      const b = await q.createProject(makeProject({ title: '晚删' }));
+      await db.projects.update(a, { deletedAt: 1000 });
+      await db.projects.update(b, { deletedAt: 2000 });
+      const list = await q.listDeletedProjects();
+      expect(list.map((p) => p.id)).toEqual([b, a]);
+    });
+
+    it('restoreProject 清空删除标记并回到正常列表', async () => {
+      const id = await q.createProject(makeProject());
+      await q.softDeleteProject(id);
+      expect(await q.listProjects()).toHaveLength(0);
+      await q.restoreProject(id);
+      const restored = await q.getProject(id);
+      expect(restored?.deletedAt).toBeFalsy();
+      expect(await q.listProjects()).toHaveLength(1);
+      expect(await q.listDeletedProjects()).toHaveLength(0);
+    });
+
+    it('listArchivedProjects 仅返回未删除的归档项目', async () => {
+      const a = await q.createProject(makeProject({ title: '归档项' }));
+      const b = await q.createProject(makeProject({ title: '普通项' }));
+      await q.archiveProject(a);
+      // 归档项又被软删除 → 归档列表不应显示
+      await q.softDeleteProject(b);
+      await db.projects.update(b, { status: 'archived' });
+      const archived = await q.listArchivedProjects();
+      expect(archived).toHaveLength(1);
+      expect(archived[0].id).toBe(a);
+    });
+
+    it('purgeProject 彻底删除回收站中的项目（级联清理，不可恢复）', async () => {
+      const pid = await q.createProject(makeProject());
+      await db.chapters.add(makeChapter(pid, 1));
+      await q.softDeleteProject(pid);
+      expect(await q.listDeletedProjects()).toHaveLength(1);
+
+      await q.purgeProject(pid);
+
+      expect(await db.projects.get(pid)).toBeUndefined();
+      expect(await db.chapters.count()).toBe(0);
+      expect(await q.listDeletedProjects()).toHaveLength(0);
     });
   });
 

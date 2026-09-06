@@ -328,7 +328,8 @@ export default function SkillsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <main className="mx-auto min-h-screen max-w-6xl px-6 py-8">
+      <div className="space-y-6">
       <BackHomeLink />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -654,6 +655,7 @@ export default function SkillsPage() {
           })}
         </div>
       )}
-    </div>
+      </div>
+    </main>
   );
 }

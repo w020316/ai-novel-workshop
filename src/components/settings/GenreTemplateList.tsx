@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { listGenreTemplates } from '@/lib/db/queries';
 import { GENRE_TEMPLATE_SEEDS } from '@/lib/db/seed';
+import { GENRE_VALUES } from '@/lib/validators';
 import { cn } from '@/lib/utils';
 import type { GenreTemplate, Genre } from '@/types';
 import {
@@ -23,9 +24,7 @@ interface GenreTemplateListProps {
   onSelect?: (template: GenreTemplate) => void;
 }
 
-const ALL_GENRES: Genre[] = [
-  '玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他',
-];
+const ALL_GENRES: Genre[] = [...GENRE_VALUES];
 
 // 流派名（按种子数据中的 variant 字段）通过 id 索引
 function getVariantName(template: GenreTemplate, index: number): string {

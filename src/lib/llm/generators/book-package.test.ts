@@ -77,7 +77,7 @@ describe('generateBookPackage', () => {
     mockChat.mockResolvedValueOnce({
       content: JSON.stringify({
         title: '某书',
-        genre: '轻小说',
+        genre: '玛丽苏',
         summary: 'x',
         goldenFinger: 'y',
         mainConflict: 'z',
@@ -128,7 +128,7 @@ describe('generateBookPackage', () => {
 });
 
 describe('bookPackageToSummary', () => {
-  it('四要素拼接并限长 300', () => {
+  it('四要素拼接并限长 200（与表单简介校验对齐）', () => {
     const bp: BookPackage = {
       title: '甲',
       titleAlternatives: [],
@@ -145,7 +145,7 @@ describe('bookPackageToSummary', () => {
     expect(s).toContain('金手指：金指。');
     expect(s).toContain('主线冲突：冲突。');
     expect(s).toContain('长线钩子：钩子。');
-    expect(s.length).toBeLessThanOrEqual(300);
+    expect(s.length).toBeLessThanOrEqual(200);
   });
 });
 

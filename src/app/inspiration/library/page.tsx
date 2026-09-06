@@ -133,7 +133,7 @@ export default function GlobalLibraryPage() {
           全局灵感库
         </h1>
         <p className="mt-1 text-sm text-stone-500">
-          跨项目归集你收藏/生成的所有灵感卡（趋势灵感自动收藏于此），可搜索、筛选，并并入任意项目的大纲或世界观规则反哺创作
+          跨项目归集你收藏的灵感卡（在「趋势灵感」页点 ♥ 收藏），可搜索、筛选，并并入任意项目的大纲或世界观规则反哺创作
         </p>
       </header>
 
@@ -192,7 +192,7 @@ export default function GlobalLibraryPage() {
             <LibraryIcon className="mb-3 h-10 w-10 text-stone-300" />
             <p className="text-sm text-stone-500">暂无灵感卡</p>
             <Link href="/inspiration" className="mt-2 text-sm text-brand-600 hover:text-brand-700">
-              去「趋势灵感」生成并自动收藏
+              去「趋势灵感」生成，点 ♥ 收藏到这里
             </Link>
           </CardContent>
         </Card>

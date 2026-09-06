@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { getProject, listInspirationCards, saveInspirationCards } from '@/lib/db/queries';
 import { RANK_SOURCES, getTrend, generateTrendInspiration } from '@/lib/trend/trends';
+import { GENRE_VALUES } from '@/lib/validators';
 import { PLATFORMS, worksByPlatform, platformOf } from '@/lib/originality/works-db';
 import { generateDeconstruction } from '@/lib/deconstruct/analyzer';
 import { mergeCardIntoOutline } from '@/lib/inspiration/merge';
@@ -24,7 +25,7 @@ import {
   type ViralBreakdown,
 } from '@/lib/rank/viral';
 
-const GENRES = ['玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他'];
+const GENRES: string[] = [...GENRE_VALUES];
 const RHYTHM_LABEL: Record<string, string> = { fast: '快节奏', medium: '中等', slow: '慢节奏' };
 const KIND_LABEL: Record<InspirationCard['kind'], string> = {
   'golden-three': '黄金三章',

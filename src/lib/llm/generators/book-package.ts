@@ -165,11 +165,11 @@ export async function generateBookPackage(
   }
 }
 
-/** 开书包 → 向导预填摘要（简介 + 金手指 + 冲突 + 钩子，供「简介」字段直填） */
+/** 开书包 → 向导预填摘要（简介 + 金手指 + 冲突 + 钩子，供「简介」字段直填，与表单校验 200 字上限对齐） */
 export function bookPackageToSummary(bp: BookPackage): string {
   return [bp.summary, `金手指：${bp.goldenFinger}`, `主线冲突：${bp.mainConflict}`, `长线钩子：${bp.longHook}`]
     .join(' ')
-    .slice(0, 300);
+    .slice(0, 200);
 }
 
 /** 开书包 → 查重文本（书名 + 简介 + 金手指 + 冲突 + 钩子 + 世界观种子） */

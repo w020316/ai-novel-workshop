@@ -3,18 +3,46 @@
 // ============================================================================
 import { z } from 'zod';
 
+/**
+ * 题材选项（对齐主流平台分类：起点男频/晋江女频/番茄脑洞等）。
+ * 单一事实来源：表单、趋势灵感、选题起点、题材模板库均从此派生。
+ */
 export const GENRE_OPTIONS = [
+  // —— 男频向（起点/纵横/飞卢）——
   { value: '玄幻', label: '玄幻' },
-  { value: '言情', label: '言情' },
-  { value: '悬疑', label: '悬疑' },
-  { value: '科幻', label: '科幻' },
+  { value: '仙侠', label: '仙侠' },
+  { value: '武侠', label: '武侠' },
+  { value: '奇幻', label: '奇幻' },
   { value: '都市', label: '都市' },
   { value: '历史', label: '历史' },
-  { value: '末世', label: '末世' },
+  { value: '军事', label: '军事' },
   { value: '游戏', label: '游戏' },
+  { value: '科幻', label: '科幻' },
+  { value: '末世', label: '末世' },
+  { value: '脑洞', label: '脑洞' },
+  { value: '体育', label: '体育' },
+  // —— 中性（全平台通用）——
+  { value: '轻小说', label: '轻小说' },
+  { value: '悬疑', label: '悬疑' },
+  { value: '灵异', label: '灵异' },
+  { value: '同人衍生', label: '同人衍生' },
+  { value: '现实', label: '现实' },
+  // —— 女频向（晋江/红袖/潇湘）——
+  { value: '言情', label: '言情' },
+  { value: '甜宠', label: '甜宠' },
+  { value: '快穿', label: '快穿' },
+  { value: '种田', label: '种田' },
   { value: '宫斗', label: '宫斗' },
+  { value: '玄幻言情', label: '玄幻言情' },
+  { value: '纯爱', label: '纯爱' },
+  // —— 兜底 ——
   { value: '其他', label: '其他' },
 ] as const;
+
+export type GenreOptionValue = (typeof GENRE_OPTIONS)[number]['value'];
+
+/** 全部合法题材值（供白名单/类型收窄使用） */
+export const GENRE_VALUES = GENRE_OPTIONS.map((g) => g.value) as [GenreOptionValue, ...GenreOptionValue[]];
 
 export const PROVIDER_OPTIONS = [
   { value: 'gemini', label: 'Google Gemini' },
@@ -29,9 +57,7 @@ export const projectFormSchema = z.object({
     .string()
     .min(1, '请输入小说标题')
     .max(50, '标题不超过 50 字'),
-  genre: z.enum([
-    '玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他'
-  ]),
+  genre: z.enum(GENRE_VALUES),
   summary: z
     .string()
     .max(200, '简介不超过 200 字'),

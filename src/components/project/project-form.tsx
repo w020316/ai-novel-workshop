@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Heart } from 'lucide-react';
 import { useProjectStore, DEFAULT_LLM_CONFIG } from '@/lib/store/project-store';
 import { db } from '@/lib/db/schema';
 import { summarizePlan, PLATFORM_CHAPTER_STANDARDS } from '@/lib/outline/volume-plan';
-import { generateInspirationStarts, type InspirationStart } from '@/lib/inspiration/starts';
+import { generateInspirationStarts, pickFreshStarts, type InspirationStart } from '@/lib/inspiration/starts';
 import {
   projectFormSchema,
   type ProjectFormValues,
@@ -35,17 +35,17 @@ const STYLE_HINT: Record<string, string> = {
   女频甜宠: '高糖低虐、双向奔赴，例：心跳漏了一拍，宠溺一笑',
   快穿利落: '位面快节奏、任务推进，例：位面切换，好感度飙升',
   治愈日常: '温情慢节奏、生活流，例：阳光落在窗台，日子慢慢亮起来',
+  短剧钩子风: '每段一反转、强冲突钩子密，例：下一秒，全场哗然',
+  电影镜头感: '画面感强、运镜式描写，例：光落在刀锋，一声闷响',
+  市井烟火: '烟火气生活流、细腻温热，例：巷口的灯，热气腾腾',
+  霸总苏爽: '气场压制、苏点密集，例：他俯身靠近，众人噤声',
+  少年漫热血: '热血羁绊、燃点密集，例：燃烧吧，这一拳不会认输',
+  网感吐槽体: '弹幕式吐槽、梗密度高，例：好家伙，这波操作离大谱',
 };
 
-/** 灵感起点：给小白的快速选题（AI 可整批换新；首屏用内置精选，点击「换一批」由 AI 重出） */
+/** 灵感起点：给小白的快速选题（每次进入随机换新；点 ♥ 喜欢的固定保留） */
 const DRAFT_KEY = 'ai-novel-project-draft-v1';
-const INSPIRATION_STARTS: { title: string; genre: string }[] = [
-  { title: '星河黎明', genre: '科幻' },
-  { title: '赘婿归来', genre: '都市' },
-  { title: '废柴逆袭', genre: '玄幻' },
-  { title: '幕后黑手', genre: '悬疑' },
-  { title: '宫廷嫡女', genre: '宫斗' },
-];
+const LIKED_STARTS_KEY = 'ai-novel-liked-starts-v1';
 
 /** 目标字数快捷档（覆盖标准长篇与百万字超长篇） */
 const TARGET_WORD_PRESETS: { value: number; label: string }[] = [
@@ -105,17 +105,48 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
   const [submitting, setSubmitting] = useState(false);
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
   const [loadedPresets, setLoadedPresets] = useState(false);
-  const [inspirationStarts, setInspirationStarts] = useState<{ title: string; genre: string }[]>(INSPIRATION_STARTS);
+  const [likedStarts, setLikedStarts] = useState<InspirationStart[]>([]);
+  const [inspirationStarts, setInspirationStarts] = useState<InspirationStart[]>([]);
   const [refreshingStarts, setRefreshingStarts] = useState(false);
   const draftTimer = useRef<number | undefined>(undefined);
 
-  /** 换一批选题起点：AI 优先按题材多样性重出 5 个（LLM 不可用时内置池随机兜底） */
+  // 每次进入都换一批新起点：已喜欢的（♥）固定保留并置顶，其余从精选池随机补足
+  useEffect(() => {
+    let liked: InspirationStart[] = [];
+    try {
+      const raw = localStorage.getItem(LIKED_STARTS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as InspirationStart[];
+        if (Array.isArray(parsed)) {
+          liked = parsed.filter((s) => s && typeof s.title === 'string' && typeof s.genre === 'string');
+        }
+      }
+    } catch {
+      /* 收藏数据损坏则忽略 */
+    }
+    setLikedStarts(liked);
+    setInspirationStarts(pickFreshStarts(liked.map((s) => s.title), Math.max(0, 5 - liked.length)));
+  }, []);
+
+  /** 喜欢/取消喜欢选题起点：喜欢的持久保存，之后每次进入都固定显示 */
+  const toggleLikeStart = (s: InspirationStart) => {
+    const isLiked = likedStarts.some((l) => l.title === s.title);
+    const next = isLiked ? likedStarts.filter((l) => l.title !== s.title) : [...likedStarts, s];
+    setLikedStarts(next);
+    try {
+      localStorage.setItem(LIKED_STARTS_KEY, JSON.stringify(next));
+    } catch {
+      /* 忽略：存储不可用时静默 */
+    }
+    if (!isLiked) toast.success(`已喜欢「${s.title}」，以后每次进入都会显示`);
+  };
+
+  /** 换一批选题起点：AI 优先按题材多样性重出 5 个（LLM 不可用时内置池随机兜底），避开已喜欢与已看过的 */
   const handleRefreshStarts = async () => {
     setRefreshingStarts(true);
     try {
-      const { starts, usedFallback } = await generateInspirationStarts(
-        inspirationStarts.map((s) => s.title)
-      );
+      const exclude = [...likedStarts, ...inspirationStarts].map((s) => s.title);
+      const { starts, usedFallback } = await generateInspirationStarts(exclude);
       setInspirationStarts(starts);
       if (usedFallback) {
         toast.info('AI 暂不可用，已从精选池换一批');
@@ -158,12 +189,12 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
   const chapterWords = Number.isFinite(Number(watch('chapterWords'))) && Number(watch('chapterWords')) >= 500
     ? Number(watch('chapterWords'))
     : 2500;
-  // 章节数与字数双向换算（按所选的每章字数）
+  // 章节数与字数双向换算（按所选的每章字数）：总字数 = 章节数 × 每章字数，随调随算不写死
   const chapterCount = Math.max(1, Math.round(targetWords / chapterWords));
   const setChapters = (n: number) => {
     if (!Number.isFinite(n) || n <= 0) return;
-    const words = Math.round((n * chapterWords) / 10000) * 10000;
-    setValue('targetWords', Math.min(5_000_000, Math.max(10_000, words)));
+    const words = Math.min(5_000_000, Math.max(10_000, Math.round(n * chapterWords)));
+    setValue('targetWords', words);
   };
   const selectedGenre = watch('genre');
   // 动态预估：按目标字数与每章字数实时展示预计卷数与章节数（百万字也能看到规划）
@@ -200,7 +231,7 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
     if (GENRE_OPTIONS.some((o) => o.value === prefill.genre)) {
       setValue('genre', prefill.genre as ProjectFormValues['genre']);
     }
-    setValue('summary', prefill.summary.slice(0, 300));
+    setValue('summary', prefill.summary.slice(0, 200));
     toast.info('已按开书包填入向导，可再调整');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.version]);
@@ -221,7 +252,7 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
       changed = true;
     }
     if (s) {
-      setValue('summary', s.slice(0, 300));
+      setValue('summary', s.slice(0, 200));
       changed = true;
     }
     if (changed) toast.info('已带入灵感，可再调整');
@@ -295,8 +326,20 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
     }
   };
 
+  /** 提交校验失败：跳到第一个出错的步骤并提示（修复「点了没反应」——隐藏步骤的字段错误不可见） */
+  const onInvalid = (errs: Partial<Record<keyof ProjectFormValues, { message?: string }>>) => {
+    const first = STEP_META.flatMap((s, i) => s.fields.map((f) => ({ f, i }))).find(({ f }) => errs[f]);
+    if (first) {
+      setStep(first.i);
+      scrollTop();
+      toast.warning(String(errs[first.f]?.message ?? '请检查填写内容'), {
+        description: '已跳转到需要修改的步骤',
+      });
+    }
+  };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
       {/* 步骤条：已完成步可点击回跳 */}
       <ol className="flex items-center gap-2" aria-label="表单分步">
         {STEP_META.map((s, i) => (
@@ -337,18 +380,18 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
       {/* ===== 第 1 步 · 故事想法 ===== */}
       {step === 0 && (
         <>
-          {/* 灵感起点：给小白快速选题，支持 AI「换一批」 */}
+          {/* 灵感起点：给小白快速选题，支持 AI「换一批」；点 ♥ 喜欢的每次进入都固定显示 */}
           <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-stone-600">
-                不知道写什么？点一个起点，会自动帮你填好标题和题材，也可以自己起名
+                不知道写什么？点一个起点，会自动帮你填好标题和题材；点 ♥ 喜欢的会一直保留
               </p>
               <button
                 type="button"
                 onClick={handleRefreshStarts}
                 disabled={refreshingStarts}
                 className="flex shrink-0 items-center gap-1 rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs text-stone-500 transition-colors hover:border-brand-400 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-                title="由 AI 重新出 5 个选题（AI 不可用时从精选池换一批）"
+                title="重新换一批选题（尽量与之前不重复，已喜欢的保留）"
               >
                 {refreshingStarts ? (
                   <>
@@ -361,19 +404,44 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {inspirationStarts.map((s) => (
-                <button
-                  key={s.title}
-                  type="button"
-                  onClick={() => {
-                    setValue('title', s.title);
-                    setValue('genre', s.genre as never);
-                  }}
-                  className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs text-stone-600 transition-colors hover:border-brand-400 hover:text-brand-700"
-                >
-                  {s.title} · {s.genre}
-                </button>
-              ))}
+              {[...likedStarts, ...inspirationStarts].map((s) => {
+                const liked = likedStarts.some((l) => l.title === s.title);
+                return (
+                  <span
+                    key={s.title}
+                    className={cn(
+                      'inline-flex items-center overflow-hidden rounded-full border bg-white',
+                      liked ? 'border-red-200' : 'border-stone-300'
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValue('title', s.title);
+                        setValue('genre', s.genre as never);
+                      }}
+                      className={cn(
+                        'py-1 pl-3 text-xs transition-colors hover:text-brand-700',
+                        liked ? 'pr-1.5 text-stone-700' : 'px-3 text-stone-600'
+                      )}
+                    >
+                      {s.title} · {s.genre}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleLikeStart(s)}
+                      title={liked ? '取消喜欢' : '喜欢：以后每次进入都显示'}
+                      aria-label={liked ? '取消喜欢' : '喜欢'}
+                      className={cn(
+                        'mr-1.5 flex h-5 w-5 items-center justify-center rounded-full transition-colors',
+                        liked ? 'text-red-500 hover:text-red-600' : 'text-stone-300 hover:text-red-400'
+                      )}
+                    >
+                      <Heart className={cn('h-3 w-3', liked && 'fill-current')} />
+                    </button>
+                  </span>
+                );
+              })}
             </div>
           </div>
 
@@ -445,48 +513,9 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
       {/* ===== 第 2 步 · 篇幅与文风 ===== */}
       {step === 1 && (
         <>
-          {/* 目标字数 */}
+          {/* 目标章节数（主控）：总字数 = 章节数 × 每章字数，随调随算 */}
           <div className="space-y-1.5">
-            <Label htmlFor="targetWords">目标字数 *</Label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Input
-                id="targetWords"
-                type="number"
-                step={10000}
-                min={10000}
-                max={5000000}
-                className="max-w-48"
-                {...register('targetWords', { valueAsNumber: true })}
-              />
-              {TARGET_WORD_PRESETS.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => setValue('targetWords', p.value)}
-                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                    targetWords === p.value
-                      ? 'border-brand-500 bg-brand-50 text-brand-700'
-                      : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-stone-400">
-              支持 1 万-500 万字（百万字长篇友好）· 约每 2000-3000 字一章，将自动规划分卷与章节
-            </p>
-            <p className="text-xs text-stone-500">
-              预估：{plan.volumeCount} 卷 / {plan.totalChapters.toLocaleString()} 章（按每章约 {chapterWords} 字估算）
-            </p>
-            {errors.targetWords && (
-              <p className="text-xs text-accent-600">{errors.targetWords.message}</p>
-            )}
-          </div>
-
-          {/* 章节数：与目标字数双向换算，直接按章数规划 */}
-          <div className="space-y-1.5">
-            <Label htmlFor="chapterCount">目标章节数（可调）</Label>
+            <Label htmlFor="chapterCount">目标章节数 *</Label>
             <div className="flex flex-wrap items-center gap-1.5">
               <Input
                 id="chapterCount"
@@ -513,7 +542,7 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
               ))}
             </div>
             <p className="text-xs text-stone-400">
-              按每章约 {chapterWords} 字与目标字数互相换算：改章节数会同步更新字数，改字数也会同步更新章节数
+              改章节数或每章字数，总字数都会自动重算（当前约 {(chapterCount * chapterWords).toLocaleString()} 字）
             </p>
           </div>
 
@@ -547,10 +576,46 @@ export function ProjectForm({ prefill }: { prefill?: ProjectFormPrefill }) {
               ))}
             </div>
             <p className="text-xs text-stone-400">
-              档位参考主流平台热门作品：{PLATFORM_CHAPTER_STANDARDS.find((p) => p.value === chapterWords)?.hint ?? '自定义字数'}；调整后自动重算章节数与分卷，AI 正文也按该字数控制每章篇幅
+              档位参考主流平台热门作品：{PLATFORM_CHAPTER_STANDARDS.find((p) => p.value === chapterWords)?.hint ?? '自定义字数'}；调整后自动重算总字数、章节数与分卷，AI 正文也按该字数控制每章篇幅
             </p>
             {errors.chapterWords && (
               <p className="text-xs text-accent-600">{errors.chapterWords.message}</p>
+            )}
+          </div>
+
+          {/* 目标字数（自动换算，也可直接改：改字数会反推章节数） */}
+          <div className="space-y-1.5">
+            <Label htmlFor="targetWords">目标字数（自动换算 · 可微调）</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Input
+                id="targetWords"
+                type="number"
+                step={10000}
+                min={10000}
+                max={5000000}
+                className="max-w-48"
+                {...register('targetWords', { valueAsNumber: true })}
+              />
+              {TARGET_WORD_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setValue('targetWords', p.value)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    targetWords === p.value
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-stone-300 bg-white text-stone-600 hover:border-brand-400 hover:text-brand-700'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-stone-400">
+              直接改字数会按每章 {chapterWords} 字反推章节数；支持 1 万-500 万字，将自动规划分卷与章节
+            </p>
+            {errors.targetWords && (
+              <p className="text-xs text-accent-600">{errors.targetWords.message}</p>
             )}
           </div>
 

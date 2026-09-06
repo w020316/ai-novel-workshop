@@ -253,6 +253,96 @@ const GENRE_TEMPLATES: GenreTemplateSeed[] = [
     typicalArcs: ['权臣之女', '太后之路', '皇权更迭', '盛世后宫'],
   },
 
+  // ---------- 武侠 ----------
+  {
+    genre: '武侠',
+    variant: '经典江湖',
+    pacingRule: '前30章立江湖恩怨与武学根基，中期门派斗争与武学精进，后期武林大局收束',
+    highlightDesign: '秘籍得获、比武夺魁、仇怨了结、退隐江湖',
+    readerPreference: '快意恩仇，武学体系扎实，江湖气浓',
+    typicalArcs: ['秘籍奇缘', '门派恩怨', '武林大会', '快意恩仇'],
+  },
+
+  // ---------- 奇幻 ----------
+  {
+    genre: '奇幻',
+    variant: '剑与魔法',
+    pacingRule: '设定铺陈后进入冒险主线，每个秘境/战争构成一卷，等级体系清晰',
+    highlightDesign: '等级突破、魔法觉醒、种族战争、神祇干预',
+    readerPreference: '异大陆沉浸感，冒险与成长并重',
+    typicalArcs: ['魔法觉醒', '秘境探险', '龙骑士传承', '种族大战'],
+  },
+
+  // ---------- 体育 ----------
+  {
+    genre: '体育',
+    variant: '竞技逆袭',
+    pacingRule: '赛季制推进，每项大赛一个小高潮，伤病/转会构成卷间转折',
+    highlightDesign: '绝杀逆转、天赋爆发、伤病归来、夺冠时刻',
+    readerPreference: '热血燃向，专业细节扎实，逆风翻盘',
+    typicalArcs: ['青训出道', '绝杀成名', '伤病低谷', '巅峰夺冠'],
+  },
+
+  // ---------- 轻小说 ----------
+  {
+    genre: '轻小说',
+    variant: '反套路日常',
+    pacingRule: '每章独立名场面+梗，轻节奏推进主线，主线暗埋随日常浮现',
+    highlightDesign: '吐槽反转、社团日常、异世界打工、名场面',
+    readerPreference: '轻松解压，梗密度高，人物讨喜',
+    typicalArcs: ['反套路开局', '社团日常', '异世界打工', '文化祭'],
+  },
+
+  // ---------- 灵异 ----------
+  {
+    genre: '灵异',
+    variant: '民俗怪谈',
+    pacingRule: '单元怪谈推进，每案一个民俗规矩，主角阴阳身世主线暗埋',
+    highlightDesign: '规矩破解、邪祟升级、身世揭露、因果了结',
+    readerPreference: '氛围压迫，民俗猎奇，单元案+主线',
+    typicalArcs: ['凶宅初探', '阴婚迷局', '赶尸传承', '因果终局'],
+  },
+
+  // ---------- 玄幻言情 ----------
+  {
+    genre: '玄幻言情',
+    variant: '上古神女',
+    pacingRule: '情感与身世双线，前期身份铺陈，中期虐点密集，后期并肩作战',
+    highlightDesign: '身世揭露、双强联手、误会虐心、天命对决',
+    readerPreference: '双强人设，情感拉扯，东方幻美',
+    typicalArcs: ['神女觉醒', '师徒羁绊', '三生虐恋', '天命之战'],
+  },
+
+  // ---------- 纯爱 ----------
+  {
+    genre: '纯爱',
+    variant: '双向奔赴',
+    pacingRule: '情感线细腻慢热，误会与和解交替，中后期甜虐交织走向HE',
+    highlightDesign: '久别重逢、双向暗恋揭露、救赎时刻、HE兑现',
+    readerPreference: '情感细腻，人设出众，糖刀平衡',
+    typicalArcs: ['久别重逢', '双向暗恋', '误会危机', '圆满HE'],
+  },
+
+  // ---------- 同人衍生 ----------
+  {
+    genre: '同人衍生',
+    variant: 'IF线改写',
+    pacingRule: '尊重原著人设，沿IF线分叉推进，关键节点与原著对照呼应',
+    highlightDesign: '意难平弥补、剧情偏移、OC融入、原著角色联动',
+    readerPreference: '原著情怀，弥补遗憾，人物还原',
+    typicalArcs: ['穿成炮灰', 'IF分叉', '意难平改写', '平行结局'],
+  },
+
+  // ---------- 现实 ----------
+  {
+    genre: '现实',
+    variant: '行业奋斗',
+    pacingRule: '以行业项目/年份推进，职场事件接地气，感情线为辅',
+    highlightDesign: '职场突围、行业风口、中年翻身、时代机遇',
+    readerPreference: '代入感强，行业干货，小人物奋斗',
+    typicalArcs: ['职场新人', '行业风口', '中年危机', '事业翻盘'],
+  },
+
   // ---------- 其他 ----------
   {
     genre: '其他',
@@ -412,6 +502,73 @@ const STYLE_PRESETS: Omit<StylePreset, 'id'>[] = [
     vocabularyProfile: {
       avgSentenceLength: 17,
       commonPhrases: ['阳光落在窗台', '温热的茶', '风穿过树梢', '日子慢慢亮起来'],
+    },
+  },
+  // ---- 热门补充预设（对齐短剧/番茄/晋江当红口味） ----
+  {
+    name: '短剧钩子风',
+    narrativePerspective: 'third-limited',
+    pacing: 'fast',
+    descriptionDensity: 'sparse',
+    dialogueRatio: 0.5,
+    vocabularyProfile: {
+      avgSentenceLength: 12,
+      commonPhrases: ['反转来得猝不及防', '下一秒', '全场哗然', '他冷笑出声'],
+    },
+  },
+  {
+    name: '电影镜头感',
+    narrativePerspective: 'third-limited',
+    pacing: 'medium',
+    descriptionDensity: 'detailed',
+    dialogueRatio: 0.3,
+    vocabularyProfile: {
+      avgSentenceLength: 16,
+      commonPhrases: ['光落在', '一声闷响', '画面定格', '风声骤停'],
+    },
+  },
+  {
+    name: '市井烟火',
+    narrativePerspective: 'first',
+    pacing: 'slow',
+    descriptionDensity: 'detailed',
+    dialogueRatio: 0.45,
+    vocabularyProfile: {
+      avgSentenceLength: 17,
+      commonPhrases: ['巷口的灯', '热气腾腾', '吆喝声', '油盐酱醋'],
+    },
+  },
+  {
+    name: '霸总苏爽',
+    narrativePerspective: 'third-limited',
+    pacing: 'fast',
+    descriptionDensity: 'medium',
+    dialogueRatio: 0.45,
+    vocabularyProfile: {
+      avgSentenceLength: 14,
+      commonPhrases: ['气场全开', '众人噤声', '他俯身靠近', '全场倒吸凉气'],
+    },
+  },
+  {
+    name: '少年漫热血',
+    narrativePerspective: 'third-limited',
+    pacing: 'fast',
+    descriptionDensity: 'medium',
+    dialogueRatio: 0.4,
+    vocabularyProfile: {
+      avgSentenceLength: 13,
+      commonPhrases: ['燃烧吧', '羁绊', '不会认输', '这一拳'],
+    },
+  },
+  {
+    name: '网感吐槽体',
+    narrativePerspective: 'first',
+    pacing: 'fast',
+    descriptionDensity: 'sparse',
+    dialogueRatio: 0.55,
+    vocabularyProfile: {
+      avgSentenceLength: 12,
+      commonPhrases: ['好家伙', '这波操作', '离大谱', '弹幕护体'],
     },
   },
 ];

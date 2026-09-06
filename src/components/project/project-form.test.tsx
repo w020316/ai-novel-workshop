@@ -39,7 +39,7 @@ async function goStep2() {
     target: { value: '一个关于星辰的故事' },
   });
   fireEvent.click(screen.getByRole('button', { name: '下一步' }));
-  await screen.findByLabelText('目标字数 *');
+  await screen.findByLabelText('目标章节数 *');
 }
 
 /** 走到第 3 步（AI 配置）：内部含完整 1→2→3 前进，调用方勿先调 goStep2 */
@@ -65,7 +65,7 @@ describe('ProjectForm（三步向导）', () => {
     render(<ProjectForm />);
     expect(screen.getByLabelText('小说标题 *')).toBeInTheDocument();
     // 第 2 步字段尚未渲染
-    expect(screen.queryByLabelText('目标字数 *')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('目标章节数 *')).not.toBeInTheDocument();
 
     await goStep2();
     const preset = await screen.findByText('硬核爽文');
@@ -79,7 +79,7 @@ describe('ProjectForm（三步向导）', () => {
     fireEvent.click(screen.getByRole('button', { name: '下一步' }));
     expect(await screen.findByText('请输入小说标题')).toBeInTheDocument();
     // 仍停留在第 1 步（未出现第 2 步字段）
-    expect(screen.queryByLabelText('目标字数 *')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('目标章节数 *')).not.toBeInTheDocument();
     expect(createProjectMock).not.toHaveBeenCalled();
   });
 
@@ -143,9 +143,9 @@ describe('ProjectForm（三步向导）', () => {
   it('第 2 步点百万长篇快选 → 预估更新为 7 卷 / 400 章，提交带入 100 万', async () => {
     render(<ProjectForm />);
     await goStep2();
-    expect(screen.getByText(/预估：4 卷 \/ 120 章/)).toBeInTheDocument();
+    expect(screen.getByText(/预估 4 卷 \/ 120 章/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '100 万（百万长篇）' }));
-    expect(screen.getByText(/预估：7 卷 \/ 400 章/)).toBeInTheDocument();
+    expect(screen.getByText(/预估 7 卷 \/ 400 章/)).toBeInTheDocument();
     // 前进到第 3 步（此时已在第 2 步，只点一次下一步）
     fireEvent.click(screen.getByRole('button', { name: '下一步' }));
     await screen.findByText('AI 模型配置');

@@ -7,6 +7,7 @@ import { Input, Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { generateNamesWithLLM } from '@/lib/llm/generators/name-generator';
 import { generateNameTemplate, NAME_CATEGORY_LABEL } from '@/lib/name/template';
+import { GENRE_VALUES } from '@/lib/validators';
 import { saveInspirationCards } from '@/lib/db/queries';
 import { generateId } from '@/lib/utils';
 import type { Genre, InspirationCard, NameCategory, NameIdea } from '@/types';
@@ -27,16 +28,7 @@ export const NAME_CATEGORY_OPTIONS: Array<{ value: NameCategory; label: string }
 
 const GENRE_OPTIONS: Array<{ value: '' | Genre; label: string }> = [
   { value: '', label: '不限题材' },
-  { value: '玄幻', label: '玄幻' },
-  { value: '言情', label: '言情' },
-  { value: '悬疑', label: '悬疑' },
-  { value: '科幻', label: '科幻' },
-  { value: '都市', label: '都市' },
-  { value: '历史', label: '历史' },
-  { value: '末世', label: '末世' },
-  { value: '游戏', label: '游戏' },
-  { value: '宫斗', label: '宫斗' },
-  { value: '其他', label: '其他' },
+  ...GENRE_VALUES.map((g) => ({ value: g as Genre, label: g })),
 ];
 
 export function NameGenerator({ projectId }: NameGeneratorProps) {

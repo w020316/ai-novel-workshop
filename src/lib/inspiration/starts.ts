@@ -5,6 +5,7 @@
 // ============================================================================
 import { chat } from '@/lib/llm/client';
 import { safeParseJSON } from '@/lib/utils';
+import { GENRE_VALUES } from '@/lib/validators';
 
 /** 单个选题起点：点击后填入向导的标题与题材 */
 export interface InspirationStart {
@@ -13,7 +14,7 @@ export interface InspirationStart {
 }
 
 /** 合法题材白名单（与向导 GENRE_OPTIONS 对齐，LLM 越界题材回退「其他」） */
-const GENRES = ['玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他'] as const;
+const GENRES: readonly string[] = GENRE_VALUES;
 
 /** 内置精选池：LLM 不可用时的兜底选题（覆盖各题材、可多轮换出不重复批次） */
 export const FALLBACK_STARTS: InspirationStart[] = [
@@ -31,7 +32,25 @@ export const FALLBACK_STARTS: InspirationStart[] = [
   { title: '星际农场', genre: '科幻' },
   { title: '离婚快乐', genre: '都市' },
   { title: '冷宫签到', genre: '宫斗' },
-  { title: '规则怪谈', genre: '悬疑' },
+  { title: '规则怪谈', genre: '灵异' },
+  // —— 扩充池：支持多轮「换一批」低重复 ——
+  { title: '凡人苟道', genre: '仙侠' },
+  { title: '剑葬江湖', genre: '武侠' },
+  { title: '魔龙学院', genre: '奇幻' },
+  { title: '铁血番号', genre: '军事' },
+  { title: '绝杀时刻', genre: '体育' },
+  { title: '全民转职', genre: '脑洞' },
+  { title: '名场面制造', genre: '轻小说' },
+  { title: '神女无恙', genre: '玄幻言情' },
+  { title: '暗恋十年', genre: '纯爱' },
+  { title: '位面攻略中', genre: '快穿' },
+  { title: '灵泉小农家', genre: '种田' },
+  { title: '穿成炮灰后', genre: '同人衍生' },
+  { title: '纸人抬轿', genre: '灵异' },
+  { title: '深漂十年', genre: '现实' },
+  { title: '重生宠妻', genre: '甜宠' },
+  { title: '隐世神医', genre: '都市' },
+  { title: '我在古代点科技', genre: '历史' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -84,7 +103,7 @@ export async function generateInspirationStarts(
         {
           role: 'system',
           content:
-            '你是网文选题策划。输出 JSON：{"starts":[{"title":"书名","genre":"题材"}]}。要求：1) 5 条；2) 书名 2-6 个字、有画面感与钩子，像热门网文书名；3) genre 从「玄幻/言情/悬疑/科幻/都市/历史/末世/游戏/宫斗/其他」中选，尽量彼此不同；4) 每条书名须暗含一类脑洞内核，且本批覆盖尽量多的脑洞类型——金手指类（独特外挂/系统/体质）、剧情类（反转/身份错位/绝境开局）、设定类（新奇的世界规则/力量体系）、角色类（反差人设/非常规主角）；5) 不要输出 JSON 以外的解释。',
+            '你是网文选题策划。输出 JSON：{"starts":[{"title":"书名","genre":"题材"}]}。要求：1) 5 条；2) 书名 2-6 个字、有画面感与钩子，像热门网文书名；3) genre 从「' + GENRES.join('/') + '」中选，尽量彼此不同；4) 每条书名须暗含一类脑洞内核，且本批覆盖尽量多的脑洞类型——金手指类（独特外挂/系统/体质）、剧情类（反转/身份错位/绝境开局）、设定类（新奇的世界规则/力量体系）、角色类（反差人设/非常规主角）；5) 不要输出 JSON 以外的解释。',
         },
         {
           role: 'user',
@@ -101,4 +120,13 @@ export async function generateInspirationStarts(
   const pool = shuffle(FALLBACK_STARTS.filter((s) => !excludeTitles.includes(s.title)));
   const starts = (pool.length >= 5 ? pool : shuffle(FALLBACK_STARTS)).slice(0, 5);
   return { starts, usedFallback: true };
+}
+
+/**
+ * 从内置精选池随机取一批不重复的选题起点（首屏用）：
+ * 排除已收藏/已看过（excludeTitles）与已有批次，保证每次进入都是新面孔。
+ */
+export function pickFreshStarts(excludeTitles: string[] = [], count = 5): InspirationStart[] {
+  const pool = shuffle(FALLBACK_STARTS.filter((s) => !excludeTitles.includes(s.title)));
+  return pool.slice(0, count);
 }

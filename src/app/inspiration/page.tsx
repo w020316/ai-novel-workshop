@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, TrendingUp, Loader2, Sparkles, Lightbulb, Copy, Check, Plus, Library as LibraryIcon } from 'lucide-react';
+import { ChevronLeft, TrendingUp, Loader2, Sparkles, Lightbulb, Copy, Check, Plus, Library as LibraryIcon, Heart } from 'lucide-react';
 import { RANK_SOURCES, getTrend, generateTrendInspiration, INSPIRATION_CHANNELS, listGenresByChannel } from '@/lib/trend/trends';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/input';
@@ -21,6 +21,10 @@ export default function InspirationPage() {
   const [generating, setGenerating] = useState(false);
   const [cards, setCards] = useState<InspirationCard[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  // 换一批去重：记录本会话已出过的所有灵感标题（含历史生成），LLM 生成时避开
+  const seenTitlesRef = useRef<string[]>([]);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   // 按频道过滤题材；当前题材不在该频道时自动回落到频道首个题材
   const genreOptions = listGenresByChannel(channel);
@@ -31,14 +35,15 @@ export default function InspirationPage() {
     if (!trend) return;
     setGenerating(true);
     try {
-      // 生成后自动收藏到全局灵感库（projectId='global'），跨项目可复用
-      const { cards: generated } = await generateTrendInspiration('', sourceId, effectiveGenre);
-      const withGlobal = generated.map((c) => ({ ...c, projectId: GLOBAL_PROJECT_ID }));
-      setCards(withGlobal);
-      if (withGlobal.length > 0) {
-        await saveInspirationCards(withGlobal);
-        toast.success(`已收藏 ${withGlobal.length} 条到全局灵感库`);
+      // 换一批时携带已出过的标题，尽量不重复；不再自动收藏，由用户手动收藏喜欢的
+      const { cards: generated } = await generateTrendInspiration('', sourceId, effectiveGenre, seenTitlesRef.current);
+      if (generated.length === 0) {
+        toast.warning('这一批没有新灵感，再点一次试试');
+        return;
       }
+      seenTitlesRef.current = [...seenTitlesRef.current, ...generated.map((c) => c.title)];
+      setCards(generated);
+      toast.info('已换一批新灵感，喜欢的点 ♥ 收藏');
     } catch (e) {
       toast.error('生成失败', { description: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -53,6 +58,21 @@ export default function InspirationPage() {
       setTimeout(() => setCopiedId(null), 1200);
     } catch {
       toast.error('复制失败，请手动选择复制');
+    }
+  };
+
+  /** 手动收藏：把喜欢的灵感卡存入全局灵感库（跨项目可复用） */
+  const handleFavorite = async (c: InspirationCard) => {
+    if (savedIds.has(c.id)) return;
+    setSavingId(c.id);
+    try {
+      await saveInspirationCards([{ ...c, projectId: GLOBAL_PROJECT_ID }]);
+      setSavedIds((prev) => new Set(prev).add(c.id));
+      toast.success('已收藏到全局灵感库');
+    } catch (e) {
+      toast.error('收藏失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -214,6 +234,21 @@ export default function InspirationPage() {
                   <p className="text-xs font-medium text-stone-800">{c.title}</p>
                   <p className="mt-1 text-xs text-stone-600">{c.content}</p>
                   <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleFavorite(c)}
+                      disabled={savedIds.has(c.id) || savingId === c.id}
+                      className={cn(
+                        'inline-flex items-center gap-1 text-xs transition-colors',
+                        savedIds.has(c.id)
+                          ? 'text-red-500'
+                          : 'text-stone-500 hover:text-red-500'
+                      )}
+                      title={savedIds.has(c.id) ? '已收藏到全局灵感库' : '收藏到全局灵感库'}
+                    >
+                      <Heart className={cn('h-3 w-3', savedIds.has(c.id) && 'fill-current')} />
+                      {savedIds.has(c.id) ? '已收藏' : '收藏'}
+                    </button>
                     <button
                       type="button"
                       onClick={() => void handleCopy(c)}

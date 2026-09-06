@@ -165,10 +165,15 @@ describe('validators/characterFormSchema', () => {
 });
 
 describe('validators/options', () => {
-  it('题材选项应包含全部 genre', () => {
+  it('题材选项应包含全部 genre（对齐主流平台分类）', () => {
     expect(GENRE_OPTIONS.map((g) => g.value)).toEqual([
-      '玄幻', '言情', '悬疑', '科幻', '都市', '历史', '末世', '游戏', '宫斗', '其他',
+      '玄幻', '仙侠', '武侠', '奇幻', '都市', '历史', '军事', '游戏', '科幻', '末世', '脑洞', '体育',
+      '轻小说', '悬疑', '灵异', '同人衍生', '现实',
+      '言情', '甜宠', '快穿', '种田', '宫斗', '玄幻言情', '纯爱',
+      '其他',
     ]);
+    // 与 types 中的 Genre 联合保持一致（抽样校验新增题材）
+    expect(GENRE_OPTIONS.length).toBe(25);
   });
 
   it('Provider 选项应包含五家厂商（gemini 为主，含本地 Ollama）', () => {

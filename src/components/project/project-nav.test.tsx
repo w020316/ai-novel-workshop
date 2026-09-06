@@ -82,7 +82,15 @@ describe('ProjectNav 移动端抽屉', () => {
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByRole('link', { name: '健康体检' })).toBeInTheDocument();
     expect(within(dialog).getByRole('link', { name: '多平台审稿' })).toBeInTheDocument();
-    expect(within(dialog).getAllByRole('link')).toHaveLength(8);
+    expect(within(dialog).getAllByRole('link')).toHaveLength(9); // 8 导航项 + 返回主页
+  });
+
+  it('返回主页链接指向根路径（侧边栏与抽屉均有）', () => {
+    render(<ProjectNav projectId="p1" />);
+    expect(screen.getByRole('link', { name: '返回主页' })).toHaveAttribute('href', '/');
+    fireEvent.click(screen.getByRole('button', { name: '打开导航' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('link', { name: '返回主页' })).toHaveAttribute('href', '/');
   });
 
   it('点击遮罩关闭抽屉', () => {

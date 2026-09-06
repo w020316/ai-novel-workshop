@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Menu,
   X,
+  Home,
 } from 'lucide-react';
 
 interface ProjectNavProps {
@@ -91,11 +92,25 @@ export function ProjectNav({ projectId, title }: ProjectNavProps) {
     );
   });
 
+  const homeLink = (
+    <Link
+      href="/"
+      className="flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm text-ink-400 transition-colors hover:bg-paper-100 hover:text-brand-700"
+    >
+      <Home className="h-4 w-4" />
+      返回主页
+    </Link>
+  );
+
   return (
     <>
       {/* 桌面端侧边栏（保持不变） */}
       <aside className="hidden shrink-0 border-b border-paper-200 bg-paper-100/60 p-2 md:block md:w-56 md:border-b-0 md:border-r md:p-4">
-        <nav className="flex flex-col items-stretch space-y-1">{links}</nav>
+        <nav className="flex flex-col items-stretch space-y-1">
+          {homeLink}
+          <div className="my-1 border-t border-paper-200" aria-hidden="true" />
+          {links}
+        </nav>
       </aside>
 
       {/* 移动端吸顶栏 + 抽屉 */}
@@ -142,7 +157,11 @@ export function ProjectNav({ projectId, title }: ProjectNavProps) {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="flex flex-col items-stretch space-y-1">{links}</div>
+            <div className="flex flex-col items-stretch space-y-1">
+              {homeLink}
+              <div className="my-1 border-t border-paper-200" aria-hidden="true" />
+              {links}
+            </div>
           </nav>
         </div>
       )}

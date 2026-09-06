@@ -21,6 +21,7 @@ import {
   Search,
   Upload,
   Download,
+  ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -117,6 +118,7 @@ export default function SkillsPage() {
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<WritingSkill['category'] | 'all'>('all');
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   // 链接导入
   const [importUrl, setImportUrl] = useState('');
@@ -363,9 +365,27 @@ export default function SkillsPage() {
         </CardContent>
       </Card>
 
-      {/* 导入入口 */}
+      {/* 导入入口（默认折叠，技能列表前置） */}
       <Card>
-        <CardContent className="space-y-4 py-4">
+        <CardContent className="py-3">
+          <button
+            type="button"
+            onClick={() => setShowImport((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 text-left"
+            aria-expanded={showImport}
+          >
+            <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-stone-700">
+              <Link2 className="h-4 w-4 text-brand-500" />
+              导入技能 · 链接 / 剪贴板 / 技能发现目录
+              {skills.length === 0 && (
+                <span className="text-xs font-normal text-amber-600">← 技能库为空，点这里先导入第一批技能</span>
+              )}
+            </span>
+            <ChevronDown className={cn('h-4 w-4 shrink-0 text-stone-400 transition-transform', showImport && 'rotate-180')} />
+          </button>
+
+          {showImport && (
+            <div className="space-y-4 pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700">
               <Link2 className="h-3.5 w-3.5" /> 从链接导入
@@ -438,6 +458,8 @@ export default function SkillsPage() {
               ))}
             </div>
           </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

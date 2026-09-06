@@ -74,11 +74,13 @@ export async function POST(request: NextRequest) {
   try {
     // 4. 沿链调用，连接级错误（DNS/超时/拒连）自动切换下一个 Provider
     const { result, provider } = await callWithProviderFallback(chain, async (entry) => {
-      // Gemini 组合策略（B+C）：未显式指定 model 时按任务分级选主模型，并做模型级降级链
-      if (entry.provider === 'gemini' && !body.model) {
+      // Gemini 组合策略（B+C）：未显式指定 model 时按任务分级选主模型；
+      // 显式指定 model（如项目配置的 gemini-3.6-flash）也纳入模型级降级链（以其打头）——
+      // 模型名失效（下线 404）/限流 429/5xx 时自动落到链内下一个模型，避免整条 Gemini 路径硬失败
+      if (entry.provider === 'gemini') {
         let usedModel = '';
         const chat = await callWithModelFallback(
-          geminiModelChain(geminiPrimaryForTask(body.task)),
+          geminiModelChain(body.model ?? geminiPrimaryForTask(body.task)),
           (m) => {
             usedModel = m;
             return createAdapter('gemini', { model: m }).chat({

@@ -418,7 +418,27 @@ export interface Deconstruction {
   metrics: DeconstructionMetrics;
   suggestions: string[]; // LLM 综合改进建议（可降级为指标衍生）
   fromLLM: boolean; // suggestions 是否来自 LLM
+  /** 拆书·剧情骨架五件套（LLM 提取，LLM 不可用时缺省） */
+  skeleton?: DeconstructionSkeleton;
+  /** 拆书·因果链：按「因为→所以」逐步推进的事件链（3-6 步） */
+  causalChain?: string[];
+  /** 拆书·可复用公式：把具体名词抽象成角色位的一句话模板（借鉴不抄袭） */
+  formula?: string;
   createdAt: number;
+}
+
+/** 拆书·剧情骨架五件套（对齐技能库「单章五件套」：目标/钩子/冲突/爽点/悬念） */
+export interface DeconstructionSkeleton {
+  /** 核心目标：本段只完成的一件核心任务 */
+  goal: string;
+  /** 开篇钩子：开头如何抓人 */
+  openingHook: string;
+  /** 核心冲突：对抗双方与赌注 */
+  conflict: string;
+  /** 爽点/情绪点：读者的情绪回报 */
+  payoff: string;
+  /** 章末悬念：留钩手法 */
+  cliffhanger: string;
 }
 
 // ============ LLM 适配层（spec 6.4 节） ============

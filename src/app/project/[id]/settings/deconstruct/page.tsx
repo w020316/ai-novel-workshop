@@ -6,7 +6,8 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea, Label, Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { generateDeconstruction } from '@/lib/deconstruct/analyzer';
+import { generateDeconstruction, deconstructionToSkill } from '@/lib/deconstruct/analyzer';
+import { saveSkill } from '@/lib/skills/store';
 import {
   saveDeconstruction,
   saveInspirationCards,
@@ -29,9 +30,20 @@ import {
   Clock3,
   Lightbulb,
   FileText,
+  Bone,
+  Link2,
+  Sigma,
+  Wrench,
 } from 'lucide-react';
 
 const RHYTHM_LABEL: Record<string, string> = { fast: '快节奏', medium: '中等', slow: '慢节奏' };
+const SKELETON_LABEL: Record<keyof Deconstruction['skeleton'] & string, string> = {
+  goal: '核心目标',
+  openingHook: '开篇钩子',
+  conflict: '核心冲突',
+  payoff: '爽点/情绪点',
+  cliffhanger: '章末悬念',
+};
 const KIND_LABEL: Record<InspirationCard['kind'], string> = {
   'golden-three': '黄金三章',
   hook: '钩子',
@@ -129,6 +141,17 @@ export default function DeconstructPage() {
     await saveInspirationCards([card]);
     await loadData();
     toast.success('灵感卡已收藏');
+  };
+
+  // 拆解沉淀为自定义技能（plot 环节注入写作流程）
+  const handleSaveSkill = async (dec: Deconstruction) => {
+    try {
+      const sk = deconstructionToSkill(dec);
+      await saveSkill(sk);
+      toast.success('已存为技能', { description: '在「技能库」中启用后，会在情节编排环节自动注入' });
+    } catch (e) {
+      toast.error('存为技能失败', { description: e instanceof Error ? e.message : String(e) });
+    }
   };
 
   return (
@@ -247,6 +270,54 @@ export default function DeconstructPage() {
                 </p>
               </div>
             </div>
+
+            {/* 剧情骨架五件套 + 因果链 + 可复用公式 */}
+            {(deconstruction.skeleton || deconstruction.causalChain?.length || deconstruction.formula) && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="flex items-center gap-1 text-xs font-medium text-stone-700">
+                    <Bone className="h-3 w-3 text-brand-500" />
+                    剧情骨架（拆骨不拆皮 · 只学结构不抄情节）
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => void handleSaveSkill(deconstruction)}>
+                    <Wrench className="mr-1 h-3 w-3" />
+                    存为技能
+                  </Button>
+                </div>
+                {deconstruction.skeleton && (
+                  <div className="grid gap-2 text-[11px] md:grid-cols-5">
+                    {(Object.keys(SKELETON_LABEL) as Array<keyof typeof SKELETON_LABEL>).map((k) => (
+                      <div key={k} className="rounded border border-stone-200 p-2">
+                        <p className="text-stone-400">{SKELETON_LABEL[k]}</p>
+                        <p className="mt-0.5 leading-relaxed text-stone-700">{deconstruction.skeleton?.[k]}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {deconstruction.causalChain && deconstruction.causalChain.length > 0 && (
+                  <div className="rounded-md border border-stone-200 p-3">
+                    <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-stone-700">
+                      <Link2 className="h-3 w-3 text-brand-500" />
+                      因果链（逐步升级）
+                    </p>
+                    <ol className="list-decimal space-y-1 pl-4 text-xs text-stone-600">
+                      {deconstruction.causalChain.map((step, i) => (
+                        <li key={i}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                {deconstruction.formula && (
+                  <div className="rounded-md border border-brand-200 bg-brand-50/50 p-3">
+                    <p className="mb-1 flex items-center gap-1 text-xs font-medium text-brand-700">
+                      <Sigma className="h-3 w-3" />
+                      可复用公式（填入任意题材）
+                    </p>
+                    <p className="text-xs leading-relaxed text-stone-700">{deconstruction.formula}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 建议 */}
             <div className="rounded-md border border-stone-200 bg-stone-50 p-3">

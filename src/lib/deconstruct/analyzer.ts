@@ -11,7 +11,12 @@
 import { analyzeTextStyle } from '@/lib/style/profile';
 import { chat } from '@/lib/llm/client';
 import { generateId, safeParseJSON, countChineseWords } from '@/lib/utils';
-import type { Deconstruction, DeconstructionMetrics, InspirationCard } from '@/types';
+import type {
+  Deconstruction,
+  DeconstructionMetrics,
+  DeconstructionSkeleton,
+  InspirationCard,
+} from '@/types';
 
 /** 开篇/情节钩子关键词 */
 const HOOK_WORDS =
@@ -94,16 +99,28 @@ export function deriveSuggestions(m: DeconstructionMetrics): string[] {
   return s;
 }
 
-const SYSTEM_PROMPT = `你是一位网文拆书教练。用户会粘贴一本参考小说/片段的节选，请你从「可迁移」角度提炼灵感与建议，严格只输出 JSON（不要解释/前后缀/markdown），字段如下：
+const SYSTEM_PROMPT = `你是一位网文拆书教练。用户会粘贴一本参考小说/片段的节选，请你从「可迁移」角度拆解剧情骨架并提炼灵感，严格只输出 JSON（不要解释/前后缀/markdown），字段如下：
 {
+  "skeleton": {
+    "goal": "核心目标：这段文本只完成的一件核心任务（一句话）",
+    "openingHook": "开篇钩子：开头如何抓人（具体手法，一句话）",
+    "conflict": "核心冲突：对抗双方与赌注（一句话）",
+    "payoff": "爽点/情绪点：读者的情绪回报是什么（一句话）",
+    "cliffhanger": "章末悬念：结尾留钩的手法（一句话）"
+  },
+  "causalChain": ["因果链第 1 步：因为…", "第 2 步：所以…进而…", "…（3-6 步，逐步升级）"],
+  "formula": "可复用公式：把本段剧情抽象成角色位模板（如「弱者位被当众羞辱 → 隐藏底牌位亮出反差证据 → 旁观者位集体打脸」），具体名词全部换成角色位，照公式可填入任何题材",
   "suggestions": ["针对本章可直接借用的 2-4 条写作建议"],
   "cards": [
     { "kind": "golden-three|hook|coolpoint|pacing|character|structure|other", "title": "灵感卡标题", "content": "可复用的具体手法/设定灵感（1-3 句）" }
   ]
 }
-要求：cards 2-6 张，务求具体可执行（能给句式/结构/人物关系就直接给），不要空话。`;
+要求：因果链 3-6 步且逐步升级；公式必须抽象到角色位（严禁保留原文名词，拆骨不拆皮、借鉴不抄袭）；cards 2-6 张，务求具体可执行（能给句式/结构/人物关系就直接给），不要空话。`;
 
 interface RawResult {
+  skeleton?: Partial<Record<keyof DeconstructionSkeleton, string>>;
+  causalChain?: string[];
+  formula?: string;
   suggestions?: string[];
   cards?: Array<{ kind?: string; title?: string; content?: string }>;
 }
@@ -136,6 +153,9 @@ export async function generateDeconstruction(
   let fromLLM = false;
   let suggestions = baseSuggestions;
   let cards: InspirationCard[] = [];
+  let skeleton: DeconstructionSkeleton | undefined;
+  let causalChain: string[] = [];
+  let formula = '';
 
   if (minText) {
     const maxLen = 6000;
@@ -165,6 +185,24 @@ export async function generateDeconstruction(
           suggestions = llmSuggestions;
           fromLLM = true;
         }
+        // 剧情骨架五件套：五项齐全才采用，防止半残骨架误导复用
+        const sk = parsed.skeleton;
+        if (sk) {
+          const parts = [sk.goal, sk.openingHook, sk.conflict, sk.payoff, sk.cliffhanger]
+            .map((x) => (typeof x === 'string' ? x.trim() : ''));
+          if (parts.every((x) => x.length > 0)) {
+            skeleton = {
+              goal: parts[0].slice(0, 120),
+              openingHook: parts[1].slice(0, 120),
+              conflict: parts[2].slice(0, 120),
+              payoff: parts[3].slice(0, 120),
+              cliffhanger: parts[4].slice(0, 120),
+            };
+          }
+        }
+        causalChain = sanitizeStrArray(parsed.causalChain, 6).map((s) => s.slice(0, 120));
+        if (causalChain.length < 3) causalChain = [];
+        formula = typeof parsed.formula === 'string' ? parsed.formula.trim().slice(0, 200) : '';
         if (rawCards.length > 0) {
           cards = rawCards
             .map((c, i) => ({
@@ -194,8 +232,53 @@ export async function generateDeconstruction(
     metrics,
     suggestions,
     fromLLM,
+    ...(skeleton ? { skeleton } : {}),
+    ...(causalChain.length > 0 ? { causalChain } : {}),
+    ...(formula ? { formula } : {}),
     createdAt: Date.now(),
   };
 
   return { deconstruction, cards };
+}
+
+/** 拆解 → 自定义技能的入参（UI「存为技能」用；骨架/因果链/公式齐备才有沉淀价值） */
+export function deconstructionToSkill(dec: Deconstruction): {
+  name: string;
+  category: 'plot';
+  source: 'custom';
+  sourceName: string;
+  description: string;
+  instruction: string;
+} {
+  const sk = dec.skeleton;
+  const lines: string[] = ['【拆书沉淀·剧情骨架（借鉴结构，严禁照抄情节与语句）】'];
+  if (sk) {
+    lines.push(
+      `一、核心目标：${sk.goal}`,
+      `二、开篇钩子：${sk.openingHook}`,
+      `三、核心冲突：${sk.conflict}`,
+      `四、爽点/情绪点：${sk.payoff}`,
+      `五、章末悬念：${sk.cliffhanger}`
+    );
+  }
+  if (dec.causalChain && dec.causalChain.length > 0) {
+    lines.push('因果链（逐步升级）：');
+    dec.causalChain.forEach((step, i) => lines.push(`  ${i + 1}. ${step}`));
+  }
+  if (dec.formula) {
+    lines.push(`可复用公式：${dec.formula}`);
+  }
+  lines.push('写作时按此骨架编排本章节奏，但人物、设定与表达必须完全原创。');
+  if (dec.suggestions.length > 0) {
+    lines.push(`借鉴要点：${dec.suggestions.slice(0, 3).join('；')}`);
+  }
+
+  return {
+    name: `拆书·${dec.sourceTitle.slice(0, 24)}`,
+    category: 'plot',
+    source: 'custom',
+    sourceName: '拆书工坊沉淀',
+    description: `从「${dec.sourceTitle}」拆解的剧情骨架${sk ? '（五件套）' : ''}${dec.formula ? '与可复用公式' : ''}，适用于情节编排环节`,
+    instruction: lines.join('\n'),
+  };
 }

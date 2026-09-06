@@ -120,3 +120,84 @@ describe('generateWorldviewWithLLM', () => {
     expect(combined).toContain('灵气复苏');
   });
 });
+
+describe('refineWorldviewWithSummary（按简介完善世界观）', () => {
+  const current = {
+    worldStructure: '原有世界架构',
+    powerSystem: '原有力量体系',
+    geography: '原有地理',
+    era: '原有时代',
+    factions: '原有势力',
+    rules: ['规则一'],
+  };
+
+  it('返回完善后的字段；LLM 缺失字段用当前值补齐', async () => {
+    chatMock.mockResolvedValue(
+      chatResult(
+        JSON.stringify({
+          worldStructure: '扩写后的更丰富世界架构，包含三层天穹与星轨法则细节',
+          // 其余字段缺失 → 用当前值补齐
+          rules: ['规则一', '新增规则二'],
+        })
+      )
+    );
+    const result = await refineWorldviewWithSummary({
+      projectId: 'p1',
+      genre: '玄幻',
+      title: '星河黎明',
+      summary: '灵气复苏与星辰修道',
+      current,
+    });
+    expect(result.worldStructure).toContain('扩写后');
+    expect(result.powerSystem).toBe('原有力量体系');
+    expect(result.geography).toBe('原有地理');
+    expect(result.era).toBe('原有时代');
+    expect(result.factions).toBe('原有势力');
+    expect(result.rules).toEqual(['规则一', '新增规则二']);
+  });
+
+  it('system prompt 约束「扩写而非缩减、篇幅不少于原文」', async () => {
+    chatMock.mockResolvedValue(chatResult(JSON.stringify({ worldStructure: 'x' })));
+    await refineWorldviewWithSummary({
+      projectId: 'p1',
+      genre: '玄幻',
+      title: '星河黎明',
+      summary: '灵气复苏与星辰修道',
+      current,
+    });
+    const [messages] = chatMock.mock.calls[0] as [{ content?: string }[]];
+    const system = messages[0]?.content ?? '';
+    expect(system).toContain('扩写而非缩减');
+    expect(system).toContain('不得少于原文');
+    // user prompt 应携带当前各字段供 AI 在其基础上完善
+    const user = messages[1]?.content ?? '';
+    expect(user).toContain('原有世界架构');
+    expect(user).toContain('规则一');
+  });
+
+  it('返回空 / 无效文本时抛出错误', async () => {
+    chatMock.mockResolvedValue(chatResult('这不是 JSON'));
+    await expect(
+      refineWorldviewWithSummary({
+        projectId: 'p1',
+        genre: '玄幻',
+        title: '星河黎明',
+        summary: '灵气复苏与星辰修道',
+        current,
+      })
+    ).rejects.toBeInstanceOf(ErrorClass);
+  });
+
+  it('chat 调用失败时向上抛出', async () => {
+    chatMock.mockRejectedValue(new ErrorClass('LLM 不可用', 503, true));
+    await expect(
+      refineWorldviewWithSummary({
+        projectId: 'p1',
+        genre: '玄幻',
+        title: '星河黎明',
+        summary: '灵气复苏与星辰修道',
+        current,
+      })
+    ).rejects.toBeInstanceOf(ErrorClass);
+  });
+});

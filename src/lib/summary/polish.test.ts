@@ -47,6 +47,10 @@ describe('polishSummary', () => {
     expect(combined).toContain('都市');
     expect(combined).toContain('隐藏大佬');
     expect(combined).toContain('主角有个系统');
+    // 润色 prompt 必须约束「扩写完善而非缩减」
+    const system = messages[0]?.content ?? '';
+    expect(system).toContain('扩写');
+    expect(system).toContain('不得少于原简介');
   });
 
   it('LLM 失败：降级为本地清理文本且 fromLLM 为 false', async () => {

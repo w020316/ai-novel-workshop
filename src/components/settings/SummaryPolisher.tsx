@@ -7,7 +7,9 @@ import { Textarea, Label } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useProjectStore } from '@/lib/store/project-store';
 import { polishSummary } from '@/lib/summary/polish';
-import { Sparkles, Save, Loader2, PenLine } from 'lucide-react';
+import { useVersionHistory } from '@/lib/hooks/use-version-history';
+import { formatTime } from '@/lib/utils';
+import { Sparkles, Save, Loader2, PenLine, Undo2, History } from 'lucide-react';
 
 interface SummaryPolisherProps {
   projectId: string;
@@ -19,7 +21,8 @@ interface SummaryPolisherProps {
 
 /**
  * 一句话简介编辑区 + AI 润色（需求 6 前半）。
- * AI 结果仅填入输入框，由用户确认后手动保存（人工可控）。
+ * AI 结果仅填入输入框，由用户确认后手动保存（人工可控）；
+ * 每次润色前自动记录版本快照，可回退上一版或任意历史版本。
  */
 export function SummaryPolisher({
   projectId,
@@ -32,6 +35,7 @@ export function SummaryPolisher({
   const [polishing, setPolishing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const { history, record, undo, restoreAt } = useVersionHistory<string>();
 
   // 项目简介在其他入口被更新（保存后 store 刷新）时同步
   useEffect(() => {
@@ -48,11 +52,12 @@ export function SummaryPolisher({
     setPolishing(true);
     try {
       const { summary: polished, fromLLM } = await polishSummary({ genre, title, summary });
+      record(summary, 'AI 润色前'); // 应用结果前记录快照，支持回退
       setSummary(polished); // 仅填入输入框，不直接保存
       setDirty(true);
       if (fromLLM) {
         toast.success('AI 润色完成', {
-          description: '结果已填入输入框，确认无误后请点击「保存简介」',
+          description: '结果已填入输入框；不满意可点击「回退上一版」',
         });
       } else {
         toast.info('AI 暂不可用，已做本地清理', {
@@ -64,6 +69,24 @@ export function SummaryPolisher({
     } finally {
       setPolishing(false);
     }
+  };
+
+  /** 回退上一版润色 */
+  const handleUndo = () => {
+    const prev = undo();
+    if (prev === null) return;
+    setSummary(prev);
+    setDirty(true);
+    toast.success('已回退上一版');
+  };
+
+  /** 回退到历史中任意版本 */
+  const handleRestore = (index: number) => {
+    const snap = restoreAt(index);
+    if (snap === null) return;
+    setSummary(snap);
+    setDirty(true);
+    toast.success(`已回退到 ${formatTime(history[index].at)} 的版本`);
   };
 
   const handleSave = async () => {
@@ -103,7 +126,7 @@ export function SummaryPolisher({
             style={{ minHeight: 90 }}
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={handlePolish} disabled={polishing || saving}>
             {polishing ? (
               <>
@@ -120,6 +143,16 @@ export function SummaryPolisher({
           <Button
             size="sm"
             variant="outline"
+            onClick={handleUndo}
+            disabled={polishing || saving || history.length === 0}
+            title="回退到上一次润色前的版本"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            回退上一版
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             onClick={handleSave}
             disabled={saving || polishing || !dirty}
           >
@@ -131,8 +164,44 @@ export function SummaryPolisher({
             保存简介
           </Button>
         </div>
+
+        {/* 润色版本历史：可回退到任意一次润色前 */}
+        {history.length > 0 && (
+          <div className="space-y-1.5 rounded-md border border-stone-200 bg-stone-50 p-2.5">
+            <p className="flex items-center gap-1 text-xs font-medium text-stone-600">
+              <History className="h-3.5 w-3.5" />
+              润色版本（{history.length}）
+            </p>
+            <ul className="space-y-1">
+              {history
+                .map((snap, index) => ({ snap, index }))
+                .reverse()
+                .map(({ snap, index }) => (
+                  <li
+                    key={snap.at}
+                    className="flex items-center justify-between gap-2 text-xs text-stone-600"
+                  >
+                    <span className="truncate">
+                      {formatTime(snap.at)} · {snap.label}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => handleRestore(index)}
+                      disabled={saving}
+                    >
+                      恢复此版本
+                    </Button>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+
         <p className="text-[10px] text-stone-400">
-          AI 润色结果会先填入输入框，由你确认后再保存；LLM 不可用时自动降级为本地清理（压缩空白、截断 200 字）。
+          AI 润色会在原简介基础上扩写完善（不缩减）；每次润色前自动记录版本，可回退上一版或任意历史版本；确认后保存。LLM 不可用时自动降级为本地清理。
         </p>
       </CardContent>
     </Card>

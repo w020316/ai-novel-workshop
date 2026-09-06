@@ -12,6 +12,7 @@ import {
 } from '@/lib/db/queries';
 import { normalizeRules, parseRulesInput, generateWorldviewTemplate } from '@/lib/worldview/template';
 import { refineWorldviewWithSummary } from '@/lib/llm/generators/worldview';
+import { useVersionHistory } from '@/lib/hooks/use-version-history';
 import { countChineseWords, formatTime } from '@/lib/utils';
 import type { Worldview, Genre } from '@/types';
 import {
@@ -24,7 +25,15 @@ import {
   AlertCircle,
   CheckCircle2,
   Sparkles,
+  Undo2,
+  History,
 } from 'lucide-react';
+
+/** 完善前的快照：字段值 + 规则列表 */
+interface WorldviewSnapshot {
+  fields: Record<string, string>;
+  rules: string[];
+}
 
 interface WorldviewEditorProps {
   projectId: string;
@@ -93,6 +102,8 @@ export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewE
     factions: '',
   });
   const [rules, setRules] = useState<string[]>([]);
+  const { history: refineHistory, record: recordSnapshot, undo: undoSnapshot, restoreAt } =
+    useVersionHistory<WorldviewSnapshot>();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -191,7 +202,7 @@ export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewE
   };
 
   /** 按项目简介完善世界观：LLM 结果先填入表单，由用户确认后手动保存（人工可控）；
-   *  失败时仅提示错误，不改动表单数据。 */
+   *  应用结果前记录版本快照，可回退上一版或任意历史版本；失败时仅提示错误，不改动表单数据。 */
   const refineWithSummary = async () => {
     if (locked || refining || !genre || !summary?.trim()) return;
     setRefining(true);
@@ -210,6 +221,7 @@ export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewE
           rules,
         },
       });
+      recordSnapshot({ fields: { ...fields }, rules: [...rules] }, 'AI 完善前');
       setFields((prev) => ({
         ...prev,
         worldStructure: refined.worldStructure,
@@ -221,7 +233,7 @@ export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewE
       setRules(normalizeRules(refined.rules));
       setDirty(true);
       toast.success('已按简介完善世界观', {
-        description: '结果已填入表单，请检查后手动保存',
+        description: '结果已填入表单；不满意可点击「回退上一版」',
       });
     } catch (e) {
       toast.error('按简介完善失败', {
@@ -230,6 +242,26 @@ export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewE
     } finally {
       setRefining(false);
     }
+  };
+
+  /** 回退上一版完善结果 */
+  const handleUndoRefine = () => {
+    const snap = undoSnapshot();
+    if (!snap) return;
+    setFields(snap.fields);
+    setRules(snap.rules);
+    setDirty(true);
+    toast.success('已回退上一版');
+  };
+
+  /** 回退到历史中任意版本 */
+  const handleRestoreRefine = (index: number) => {
+    const snap = restoreAt(index);
+    if (!snap) return;
+    setFields(snap.fields);
+    setRules(snap.rules);
+    setDirty(true);
+    toast.success(`已回退到 ${formatTime(refineHistory[index].at)} 的版本`);
   };
 
   const toggleLock = async () => {
@@ -400,7 +432,7 @@ export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewE
                 size="sm"
                 onClick={refineWithSummary}
                 disabled={locked || refining}
-                title="把当前世界观与项目简介交给 AI，产出与简介绑定的完善设定（结果填入表单，确认后再保存）"
+                title="把当前世界观与项目简介交给 AI，在现有基础上扩写完善（结果填入表单，确认后再保存）"
               >
                 {refining ? (
                   <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
@@ -408,6 +440,19 @@ export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewE
                   <Sparkles className="mr-1 h-3.5 w-3.5" />
                 )}
                 按简介完善世界观
+              </Button>
+            )}
+            {refineHistory.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleUndoRefine}
+                disabled={locked || refining}
+                title="回退到上一次完善前的版本"
+              >
+                <Undo2 className="mr-1 h-3.5 w-3.5" />
+                回退上一版
               </Button>
             )}
             {genre && (
@@ -430,6 +475,40 @@ export function WorldviewEditor({ projectId, genre, title, summary }: WorldviewE
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          {/* 完善版本历史：可回退到任意一次完善前 */}
+          {refineHistory.length > 0 && (
+            <div className="space-y-1.5 rounded-md border border-stone-200 bg-stone-50 p-2.5">
+              <p className="flex items-center gap-1 text-xs font-medium text-stone-600">
+                <History className="h-3.5 w-3.5" />
+                完善版本（{refineHistory.length}）
+              </p>
+              <ul className="space-y-1">
+                {refineHistory
+                  .map((snap, index) => ({ snap, index }))
+                  .reverse()
+                  .map(({ snap, index }) => (
+                    <li
+                      key={snap.at}
+                      className="flex items-center justify-between gap-2 text-xs text-stone-600"
+                    >
+                      <span>
+                        {formatTime(snap.at)} · {snap.label}（{snap.value.rules.length} 条规则）
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => handleRestoreRefine(index)}
+                        disabled={locked || saving}
+                      >
+                        恢复此版本
+                      </Button>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
           {FIELD_CONFIG.map((f) => (
             <div key={f.key} className="space-y-1.5">
               <Label className="flex items-center gap-1">

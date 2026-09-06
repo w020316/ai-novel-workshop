@@ -7,10 +7,13 @@
 // ============================================================================
 import { exportTxt, type ExportTxtOptions } from './txt';
 import { exportMarkdown, type ExportMarkdownOptions } from './markdown';
+import { exportSubmission, type ExportSubmissionOptions } from './submission';
 
 export interface ExportPackOptions {
   txt: ExportTxtOptions;
   markdown: ExportMarkdownOptions;
+  /** 可选：投稿格式排版（提供时产出「投稿版.txt」条目） */
+  submission?: ExportSubmissionOptions | null;
   /** 可选：EPUB Blob 文件名（含 .epub）与 Blob */
   epub?: { filename: string; blob: Blob } | null;
   /** 可选：JSON 备份 Blob 文件名与 Blob */
@@ -35,6 +38,9 @@ export function compileExportPackManifest(options: ExportPackOptions): {
     { path: '正文.txt', content: exportTxt(options.txt) },
     { path: '正文.md', content: exportMarkdown(options.markdown) },
   ];
+  if (options.submission) {
+    textEntries.push({ path: '投稿版.txt', content: exportSubmission(options.submission) });
+  }
   const blobEntries: { path: string; blob: Blob }[] = [];
   if (options.epub) blobEntries.push({ path: options.epub.filename, blob: options.epub.blob });
   if (options.backup) blobEntries.push({ path: options.backup.filename, blob: options.backup.blob });

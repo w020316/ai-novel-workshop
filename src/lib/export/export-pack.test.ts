@@ -44,6 +44,16 @@ describe('compileExportPackManifest', () => {
     expect(textEntries.length).toBe(2);
     expect(blobEntries).toEqual([]);
   });
+
+  it('提供 submission 时追加投稿版.txt 条目（含缩进排版）', () => {
+    const { textEntries } = compileExportPackManifest({
+      txt,
+      markdown,
+      submission: { project, chapters },
+    });
+    expect(textEntries.map((e) => e.path)).toEqual(['正文.txt', '正文.md', '投稿版.txt']);
+    expect(textEntries[2].content).toContain('　　正文一');
+  });
 });
 
 describe('safeEntryName（zip 路径安全校验）', () => {

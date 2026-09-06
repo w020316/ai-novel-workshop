@@ -277,6 +277,7 @@ export default function ExportPage() {
       const manifest = compileExportPackManifest({
         txt: { project, chapters, appendix },
         markdown: { project, chapters, appendix },
+        submission: { project, chapters, volumes },
         epub: { filename: '封面.epub', blob: epubBlob },
       });
       const zip = await buildExportPackZip(manifest);
@@ -288,7 +289,7 @@ export default function ExportPage() {
       a.download = `${safeTitle}_全格式.zip`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('已打包全部格式（TXT / Markdown / EPUB / 避撞附录）');
+      toast.success('已打包全部格式（TXT / Markdown / 投稿版 / EPUB / 避撞附录）');
     } catch {
       toast.error('打包失败，请确认已安装 jszip 依赖');
     }
